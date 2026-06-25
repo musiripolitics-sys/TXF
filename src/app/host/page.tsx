@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Section, SectionHeading } from "@/components/Section";
 import { hostSteps } from "@/lib/data";
+import { HostForm } from "@/components/HostForm";
 
 export const metadata: Metadata = {
   title: "Host an Event",
@@ -122,54 +123,5 @@ export default function HostPage() {
         </div>
       </Section>
     </>
-  );
-}
-
-function HostForm() {
-  return (
-    <form className="mt-10 space-y-5 rounded-3xl border border-line bg-surface p-6 sm:p-8">
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Event title" placeholder="AI Meetup Chennai" />
-        <Field label="Category" placeholder="Meetup / Workshop / Hackathon" />
-        <Field label="Date" type="date" />
-        <Field label="City" placeholder="Chennai" />
-      </div>
-      <Field label="Venue" placeholder="IIT Madras Research Park" />
-      <Field label="Organizer email" type="email" placeholder="you@org.com" />
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-fg">
-          Event description
-        </label>
-        <textarea
-          rows={4}
-          placeholder="What's the event about, who's it for, and what should attendees expect?"
-          className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-        />
-      </div>
-      <Button href="/host" variant="host" size="lg" className="w-full">
-        Submit for review
-      </Button>
-    </form>
-  );
-}
-
-function Field({
-  label,
-  type = "text",
-  placeholder,
-}: {
-  label: string;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-fg">{label}</label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-      />
-    </div>
   );
 }

@@ -1,42 +1,62 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/Button";
-import { events, getEvent, eventAgenda } from "@/lib/data";
-import { DynamicEventDetail } from "@/components/DynamicEventDetail";
+import { eventAgenda, type TXFEvent } from "@/lib/data";
 
-export function generateStaticParams() {
-  return events.map((e) => ({ slug: e.slug }));
-}
+export function DynamicEventDetail({ slug }: { slug: string }) {
+  const [event, setEvent] = useState<TXFEvent | null>(null);
+  const [loading, setLoading] = useState(true);
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-  const event = getEvent(slug);
-  if (!event) return { title: "Event not found" };
-  return {
-    title: event.title,
-    description: event.blurb,
-  };
-}
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("txf_custom_events");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as TXFEvent[];
+          const found = parsed.find((e) => e.slug === slug);
+          if (found) {
+            setEvent(found);
+          }
+        } catch (e) {
+          console.error("Failed to parse custom events", e);
+        }
+      }
+      setLoading(false);
+    }
+  }, [slug]);
 
-export default async function EventDetailPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const event = getEvent(slug);
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl px-5 py-24 sm:px-8 text-center text-muted">
+        Loading event details...
+      </div>
+    );
+  }
+
   if (!event) {
-    return <DynamicEventDetail slug={slug} />;
+    return (
+      <div className="mx-auto max-w-5xl px-5 py-24 sm:px-8 text-center">
+        <h1 className="font-display text-3xl font-bold text-fg">Event Not Found</h1>
+        <p className="mt-3 text-muted text-sm max-w-md mx-auto">
+          The event you are looking for might have been removed, or the link is incorrect.
+        </p>
+        <div className="mt-8">
+          <Link
+            href="/events"
+            className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white hover:bg-brand-soft"
+          >
+            ← Back to Events
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const isFree = event.price === "Free";
   const agenda = eventAgenda(event);
-  const filled = event.capacity - event.spotsLeft;
+  const filled = event.capacity - (event.spotsLeft ?? event.capacity);
   const pct = Math.round((filled / event.capacity) * 100);
 
   return (
@@ -92,7 +112,7 @@ export default async function EventDetailPage({
             <h2 className="font-display text-xl font-semibold text-fg">
               About this event
             </h2>
-            <p className="mt-3 leading-relaxed text-muted">{event.about}</p>
+            <p className="mt-3 leading-relaxed text-muted whitespace-pre-wrap">{event.about}</p>
           </section>
 
           <section>
@@ -112,25 +132,27 @@ export default async function EventDetailPage({
             </ol>
           </section>
 
-          <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {event.speakers.map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
-                    {s.initials}
-                  </span>
-                  <div>
-                    <p className="font-medium text-fg">{s.name}</p>
-                    <p className="text-xs text-faint">{s.role}</p>
+          {event.speakers && event.speakers.length > 0 && (
+            <section>
+              <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {event.speakers.map((s) => (
+                  <div
+                    key={s.name}
+                    className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
+                      {s.initials}
+                    </span>
+                    <div>
+                      <p className="font-medium text-fg">{s.name}</p>
+                      <p className="text-xs text-faint">{s.role}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Sticky registration card */}
@@ -144,7 +166,7 @@ export default async function EventDetailPage({
 
             <div className="mt-5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted">{event.spotsLeft} spots left</span>
+                <span className="text-muted">{event.spotsLeft ?? event.capacity} spots left</span>
                 <span className="text-faint">
                   {filled}/{event.capacity}
                 </span>

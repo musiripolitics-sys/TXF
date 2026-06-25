@@ -11,6 +11,7 @@ const columns = [
       { label: "Membership", href: "/membership" },
       { label: "Host an Event", href: "/host" },
       { label: "Activities", href: "/#activities" },
+      { label: "Admin Console", href: "/admin" },
     ],
   },
   {
