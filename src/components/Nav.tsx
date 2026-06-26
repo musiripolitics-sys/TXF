@@ -17,7 +17,15 @@ const links = [
   { label: "About", href: "/about" },
 ];
 
-export function Nav() {
+type AppRole = "admin" | "host" | "member";
+
+const roleMeta: Record<AppRole, { label: string; dash?: { href: string; label: string } }> = {
+  admin: { label: "Admin", dash: { href: "/admin", label: "Console" } },
+  host: { label: "Host", dash: { href: "/host/dashboard", label: "My Events" } },
+  member: { label: "Member" },
+};
+
+export function Nav({ role = "member" }: { role?: AppRole }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -81,12 +89,17 @@ export function Nav() {
         <div className="hidden items-center gap-3 md:flex">
           {user ? (
             <>
+              <span className="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand-soft">
+                {roleMeta[role].label}
+              </span>
               <Button href="/profile" variant="ghost" size="sm">
                 Profile
               </Button>
-              <Button href="/admin" variant="ghost" size="sm">
-                Console
-              </Button>
+              {roleMeta[role].dash && (
+                <Button href={roleMeta[role].dash!.href} variant="ghost" size="sm">
+                  {roleMeta[role].dash!.label}
+                </Button>
+              )}
               <button
                 onClick={handleSignOut}
                 className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-muted hover:text-fg hover:border-fg transition-all duration-200 cursor-pointer"
@@ -151,9 +164,16 @@ export function Nav() {
                 <Button href="/profile" variant="outline" size="md" className="w-full">
                   Profile
                 </Button>
-                <Button href="/admin" variant="brand" size="md" className="w-full">
-                  Console
-                </Button>
+                {roleMeta[role].dash && (
+                  <Button
+                    href={roleMeta[role].dash!.href}
+                    variant="brand"
+                    size="md"
+                    className="w-full"
+                  >
+                    {roleMeta[role].dash!.label}
+                  </Button>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="w-full rounded-full border border-line bg-surface py-2.5 text-center text-sm font-medium text-muted hover:text-fg hover:border-fg transition-all duration-200 cursor-pointer"

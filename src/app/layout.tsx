@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
+import { getUserRole } from "@/lib/auth";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -47,18 +48,40 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+// Per-role brand accent. Applied as inline CSS variables on <body> so the
+// whole UI recolours (orange = member/default, green = host, blue = admin).
+const roleTheme: Record<string, React.CSSProperties> = {
+  host: {
+    "--color-brand": "#16a34a",
+    "--color-brand-soft": "#15803d",
+    "--color-brand-ink": "#052e16",
+  } as React.CSSProperties,
+  admin: {
+    "--color-brand": "#2563eb",
+    "--color-brand-soft": "#1d4ed8",
+    "--color-brand-ink": "#0a1f4d",
+  } as React.CSSProperties,
+  member: {},
+};
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const role = await getUserRole();
+
   return (
     <html
       lang="en"
       className={`${display.variable} ${sans.variable} ${serif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-ink text-fg">
-        <Nav />
+      <body
+        data-role={role}
+        style={roleTheme[role]}
+        className="min-h-full flex flex-col bg-ink text-fg"
+      >
+        <Nav role={role} />
         <main className="flex-1">{children}</main>
         <Footer />
       </body>

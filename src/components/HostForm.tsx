@@ -24,6 +24,10 @@ export function HostForm() {
     setError(null);
 
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     const { error: insertError } = await supabase.from("host_submissions").insert({
       title: formData.title,
       category: formData.category,
@@ -32,6 +36,7 @@ export function HostForm() {
       venue: formData.venue,
       organizer_email: formData.email,
       description: formData.description,
+      organizer_id: user?.id ?? null,
     });
 
     setSubmitting(false);

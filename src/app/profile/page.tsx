@@ -16,9 +16,16 @@ export default async function ProfilePage() {
   // Fetch Profile details
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, email, city, bio, points")
+    .select("full_name, email, city, bio, points, primary_role, host_status")
     .eq("id", user.id)
     .single();
+
+  const roleLabels: Record<string, string> = {
+    admin: "Admin",
+    event_host: "Host",
+    community_member: "Community Member",
+  };
+  const roleLabel = roleLabels[profile?.primary_role ?? "community_member"] ?? "Community Member";
 
   // Fetch Memberships & Plans
   const { data: membershipData } = await supabase
@@ -86,7 +93,10 @@ export default async function ProfilePage() {
             {profile?.full_name || "Community Member"}
           </h1>
           <p className="mt-1 text-lg text-muted">{profile?.email || user.email}</p>
-          <div className="mt-3 flex gap-3 text-sm font-medium text-fg">
+          <div className="mt-3 flex flex-wrap gap-3 text-sm font-medium text-fg">
+            <span className="flex items-center gap-1.5 rounded-full bg-brand text-white px-3 py-1">
+              {roleLabel}
+            </span>
             {profile?.city && (
               <span className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 border border-line">
                 <Icon name="map-pin" className="h-4 w-4 text-muted" /> {profile.city}
@@ -97,7 +107,36 @@ export default async function ProfilePage() {
             </span>
           </div>
         </div>
+        <a
+          href="/profile/edit"
+          className="rounded-full border border-line bg-surface px-5 py-2.5 text-sm font-medium text-fg hover:border-brand/40 hover:text-brand-soft transition-colors sm:ml-auto"
+        >
+          Edit Profile
+        </a>
       </section>
+
+      {profile?.host_status === "pending" && (
+        <div className="mb-8 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+          <p className="font-semibold text-amber-700">Host access pending</p>
+          <p className="mt-1 text-sm text-amber-700/80">
+            Your request to become a Host is awaiting admin approval. Until then
+            you have Community Member access. We&apos;ll switch you over once
+            it&apos;s approved.
+          </p>
+        </div>
+      )}
+      {profile?.host_status === "rejected" && (
+        <div className="mb-8 rounded-2xl border border-line bg-surface p-5">
+          <p className="font-semibold text-fg">Host request not approved</p>
+          <p className="mt-1 text-sm text-muted">
+            Your Host access request wasn&apos;t approved. Reach out via the{" "}
+            <a href="/contact" className="text-brand-soft underline">
+              contact page
+            </a>{" "}
+            if you think this was a mistake.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Left Column (Events) */}

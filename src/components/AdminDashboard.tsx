@@ -13,6 +13,7 @@ type Submission = {
   city: string;
   venue: string;
   organizer_email: string;
+  organizer_id: string | null;
   description: string;
   status: "pending" | "approved" | "declined";
   submitted_at: string;
@@ -37,6 +38,7 @@ type AppUser = {
   full_name: string | null;
   city: string | null;
   primary_role: AppRole;
+  host_status: "none" | "pending" | "approved" | "rejected";
   points: number;
   created_at: string;
 };
@@ -135,7 +137,7 @@ export function AdminDashboard({
       await Promise.all([
         supabase
           .from("host_submissions")
-          .select("id,title,category,date,city,venue,organizer_email,description,status,submitted_at")
+          .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at")
           .order("submitted_at", { ascending: false }),
         supabase
           .from("events")
@@ -143,7 +145,7 @@ export function AdminDashboard({
           .order("date", { ascending: true }),
         supabase
           .from("users")
-          .select("id,email,full_name,city,primary_role,points,created_at")
+          .select("id,email,full_name,city,primary_role,host_status,points,created_at")
           .order("created_at", { ascending: false }),
         supabase.from("user_roles").select("user_id,role"),
       ]);
@@ -193,6 +195,7 @@ export function AdminDashboard({
         status: "published",
         source: "host_submission",
         submission_id: s.id,
+        host_id: s.organizer_id,
         published_at: new Date().toISOString(),
       })
       .select("id")
@@ -256,6 +259,28 @@ export function AdminDashboard({
     setBusyId(null);
     await refresh();
   };
+
+  const approveHost = async (userId: string) => {
+    setBusyId(userId + "host");
+    await supabase
+      .from("users")
+      .update({ primary_role: "event_host", host_status: "approved" })
+      .eq("id", userId);
+    setBusyId(null);
+    await refresh();
+  };
+
+  const rejectHost = async (userId: string) => {
+    setBusyId(userId + "host");
+    await supabase
+      .from("users")
+      .update({ host_status: "rejected" })
+      .eq("id", userId);
+    setBusyId(null);
+    await refresh();
+  };
+
+  const pendingHostCount = users.filter((u) => u.host_status === "pending").length;
 
   const addSpeaker = () => setSpeakers([...speakers, { name: "", role: "" }]);
   const removeSpeaker = (i: number) =>
@@ -881,9 +906,16 @@ export function AdminDashboard({
         {/* Users */}
         {!loading && activeTab === "users" && (
           <div className="space-y-6">
-            <h2 className="font-display text-2xl font-bold text-fg">
-              Community Members
-            </h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="font-display text-2xl font-bold text-fg">
+                Community Members
+              </h2>
+              {pendingHostCount > 0 && (
+                <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-600">
+                  {pendingHostCount} host request{pendingHostCount > 1 ? "s" : ""} pending
+                </span>
+              )}
+            </div>
             {users.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-line bg-surface p-12 text-center">
                 <p className="text-sm text-muted">No users yet.</p>
@@ -899,6 +931,7 @@ export function AdminDashboard({
                       <th className="p-4">User</th>
                       <th className="hidden p-4 lg:table-cell">Joined</th>
                       <th className="p-4">Primary role</th>
+                      <th className="p-4">Host request</th>
                       <th className="p-4">Roles (click to toggle)</th>
                     </tr>
                   </thead>
@@ -939,6 +972,46 @@ export function AdminDashboard({
                                 </option>
                               ))}
                             </select>
+                          </td>
+                          <td className="p-4">
+                            {u.host_status === "pending" ? (
+                              <div className="flex flex-col gap-1.5">
+                                <span className="w-fit rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+                                  Pending
+                                </span>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => approveHost(u.id)}
+                                    disabled={busyId === u.id + "host"}
+                                    className="rounded-full bg-host px-3 py-1 text-xs font-medium text-white hover:bg-host-soft disabled:opacity-60"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => rejectHost(u.id)}
+                                    disabled={busyId === u.id + "host"}
+                                    className="rounded-full border border-line px-3 py-1 text-xs font-medium text-muted hover:text-fg disabled:opacity-60"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
+                            ) : u.host_status === "approved" ? (
+                              <span className="rounded-full bg-host/15 px-2.5 py-0.5 text-xs font-semibold text-host-soft">
+                                Approved
+                              </span>
+                            ) : u.host_status === "rejected" ? (
+                              <button
+                                onClick={() => approveHost(u.id)}
+                                disabled={busyId === u.id + "host"}
+                                className="rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-600 hover:bg-host/15 hover:text-host-soft disabled:opacity-60"
+                                title="Rejected — click to approve instead"
+                              >
+                                Rejected
+                              </button>
+                            ) : (
+                              <span className="text-xs text-faint">—</span>
+                            )}
                           </td>
                           <td className="p-4">
                             <div className="flex flex-wrap gap-1.5">
