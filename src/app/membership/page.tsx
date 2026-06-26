@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Icon } from "@/components/Icon";
 import { Section, SectionHeading } from "@/components/Section";
-import { memberBenefits } from "@/lib/data";
+import { getMemberBenefits, getTiers } from "@/lib/content";
 import { MembershipTiers } from "@/components/MembershipTiers";
 
 export const metadata: Metadata = {
@@ -10,7 +10,12 @@ export const metadata: Metadata = {
     "Free, Pro and Elite Techxfluence membership tiers. Free event access, priority registration, workshops, mentorship and recognition.",
 };
 
-export default function MembershipPage() {
+export default async function MembershipPage() {
+  const [memberBenefits, tiers] = await Promise.all([
+    getMemberBenefits(),
+    getTiers(),
+  ]);
+
   return (
     <>
       <header className="border-b border-line bg-ink-2">
@@ -29,7 +34,7 @@ export default function MembershipPage() {
       </header>
 
       <Section>
-        <MembershipTiers />
+        <MembershipTiers tiers={tiers} />
         <p className="mt-6 text-center text-xs text-faint">
           Volunteer &amp; Community Ambassador roles are also open — apply from
           within any tier.

@@ -1,5 +1,6 @@
 import { Section, SectionHeading } from "@/components/Section";
-import { activities, impactSteps } from "@/lib/data";
+import { impactSteps } from "@/lib/data";
+import { getActivities } from "@/lib/content";
 
 const accentMap: Record<string, string> = {
   brand: "border-brand/40 bg-brand/5 text-brand-soft",
@@ -7,7 +8,8 @@ const accentMap: Record<string, string> = {
   host: "border-host/40 bg-host/5 text-host-soft",
 };
 
-export function Activities() {
+export async function Activities() {
+  const activities = await getActivities();
   return (
     <div className="relative overflow-hidden border-y border-line bg-ink-2">
       <Section id="activities" className="relative z-10">

@@ -3,7 +3,7 @@ import { Button } from "@/components/Button";
 import { Section, SectionHeading } from "@/components/Section";
 import { LeaderTeamCard } from "@/components/LeaderTeamCard";
 import { OrgTree, type Org } from "@/components/OrgTree";
-import { leaders } from "@/lib/data";
+import { getLeaders } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Leaders",
@@ -11,48 +11,50 @@ export const metadata: Metadata = {
     "Meet the Techxfluence leaders — founder, directors, coordinators, ambassadors and mentors — and see how the community is structured.",
 };
 
-const ranked = leaders
-  .filter((l) => !l.isHiring)
-  .sort((a, b) => b.points - a.points);
-const byName = Object.fromEntries(leaders.map((l) => [l.name, l]));
+export default async function LeadersPage() {
+  const leaders = await getLeaders();
 
-// Reporting hierarchy: Founder → Directors (Community Leads) → teams.
-const org: Org = {
-  leader: byName["Kumaresan"],
-  directors: [
+  const ranked = leaders
+    .filter((l) => !l.isHiring)
+    .sort((a, b) => b.points - a.points);
+  const byName = Object.fromEntries(leaders.map((l) => [l.name, l]));
+
+  // Reporting hierarchy: Founder → Directors (Community Leads) → teams.
+  const org: Org = {
+    leader: byName["Kumaresan"],
+    directors: [
+      {
+        leader: byName["Mahalakshmi"],
+        reports: [
+          byName["Open Coordinator (Chennai)"],
+          byName["Open Ambassador (Chennai)"],
+          byName["Open Mentor (Chennai)"],
+        ],
+      },
+      {
+        leader: byName["Abishek"],
+        reports: [
+          byName["Open Coordinator (Bengaluru)"],
+          byName["Open Ambassador (Bengaluru)"],
+          byName["Open Mentor (Bengaluru)"],
+        ],
+      },
+    ],
+  };
+
+  const summary = [
+    { value: `${leaders.length}`, label: "Community Leaders" },
     {
-      leader: byName["Mahalakshmi"],
-      reports: [
-        byName["Open Coordinator (Chennai)"],
-        byName["Open Ambassador (Chennai)"],
-        byName["Open Mentor (Chennai)"],
-      ],
+      value: `${new Set(leaders.map((l) => l.city)).size}`,
+      label: "Cities Represented",
     },
+    { value: `${leaders.reduce((s, l) => s + l.events, 0)}+`, label: "Events Led" },
     {
-      leader: byName["Abishek"],
-      reports: [
-        byName["Open Coordinator (Bengaluru)"],
-        byName["Open Ambassador (Bengaluru)"],
-        byName["Open Mentor (Bengaluru)"],
-      ],
+      value: `${Math.round(leaders.reduce((s, l) => s + l.points, 0) / 1000)}K+`,
+      label: "Contribution Points",
     },
-  ],
-};
+  ];
 
-const summary = [
-  { value: `${leaders.length}`, label: "Community Leaders" },
-  {
-    value: `${new Set(leaders.map((l) => l.city)).size}`,
-    label: "Cities Represented",
-  },
-  { value: `${leaders.reduce((s, l) => s + l.events, 0)}+`, label: "Events Led" },
-  {
-    value: `${Math.round(leaders.reduce((s, l) => s + l.points, 0) / 1000)}K+`,
-    label: "Contribution Points",
-  },
-];
-
-export default function LeadersPage() {
   return (
     <>
       <header className="relative overflow-hidden border-b border-line bg-ink-2">

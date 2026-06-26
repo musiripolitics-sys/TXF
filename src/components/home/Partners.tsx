@@ -1,7 +1,9 @@
 import { Section, SectionHeading } from "@/components/Section";
-import { partners, partnerTypes } from "@/lib/data";
+import { partnerTypes } from "@/lib/data";
+import { getPartners } from "@/lib/content";
 
-export function Partners() {
+export async function Partners() {
+  const partners = await getPartners();
   // Duplicate the list so the marquee loops seamlessly.
   const row = [...partners, ...partners];
 

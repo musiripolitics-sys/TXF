@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
-import { tiers } from "@/lib/data";
+import { type Tier } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-export function MembershipTiers() {
+export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
   const router = useRouter();
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);

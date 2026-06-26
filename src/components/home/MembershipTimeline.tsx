@@ -1,13 +1,15 @@
 import { Icon } from "@/components/Icon";
-import { memberBenefits, tiers, type MemberBenefit } from "@/lib/data";
+import { type MemberBenefit, type Tier } from "@/lib/data";
+import { getMemberBenefits, getTiers } from "@/lib/content";
 
-const featured = memberBenefits[0];
-const rest = memberBenefits.slice(1);
+export async function MembershipTimeline() {
+  const [benefits, tiers] = await Promise.all([getMemberBenefits(), getTiers()]);
+  const featured = benefits[0];
+  const rest = benefits.slice(1);
 
-export function MembershipTimeline() {
   return (
     <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:auto-rows-fr lg:grid-cols-3">
-      <FeaturedCard perk={featured} />
+      {featured && <FeaturedCard perk={featured} tiers={tiers} />}
       {rest.map((perk) => (
         <PerkCard key={perk.title} perk={perk} />
       ))}
@@ -15,7 +17,7 @@ export function MembershipTimeline() {
   );
 }
 
-function FeaturedCard({ perk }: { perk: MemberBenefit }) {
+function FeaturedCard({ perk, tiers }: { perk: MemberBenefit; tiers: Tier[] }) {
   return (
     <article className="relative flex flex-col overflow-hidden rounded-3xl border border-brand/30 bg-surface p-7 shadow-soft sm:col-span-2 lg:col-span-1 lg:row-span-2">
       {/* tasteful brand accent — soft corner glow, not a full gradient bg */}

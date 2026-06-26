@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { Section } from "@/components/Section";
 import { LeaderTeamCard } from "@/components/LeaderTeamCard";
-import { leaders, type Leader } from "@/lib/data";
+import { type Leader } from "@/lib/data";
+import { getLeaders } from "@/lib/content";
 
-const activeLeaders: Leader[] = [
-  leaders.find((l) => l.name === "Mahalakshmi"),
-  leaders.find((l) => l.name === "Kumaresan"),
-  leaders.find((l) => l.name === "Abishek"),
-].filter((l): l is Leader => !!l);
+export async function Leadership() {
+  const leaders = await getLeaders();
+  const order = ["Mahalakshmi", "Kumaresan", "Abishek"];
+  const activeLeaders: Leader[] = order
+    .map((n) => leaders.find((l) => l.name === n))
+    .filter((l): l is Leader => !!l);
 
-export function Leadership() {
   return (
     <div className="border-y border-line bg-ink-2">
       <Section id="leadership">
