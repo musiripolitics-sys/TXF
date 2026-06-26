@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
-import { events, getEvent, eventAgenda } from "@/lib/data";
-import { DynamicEventDetail } from "@/components/DynamicEventDetail";
-
-export function generateStaticParams() {
-  return events.map((e) => ({ slug: e.slug }));
-}
+import { eventAgenda } from "@/lib/data";
+import { getEventBySlug } from "@/lib/events";
 
 export async function generateMetadata({
   params,
@@ -15,7 +11,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const event = getEvent(slug);
+  const event = await getEventBySlug(slug);
   if (!event) return { title: "Event not found" };
   return {
     title: event.title,
@@ -29,9 +25,9 @@ export default async function EventDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = getEvent(slug);
+  const event = await getEventBySlug(slug);
   if (!event) {
-    return <DynamicEventDetail slug={slug} />;
+    notFound();
   }
 
   const isFree = event.price === "Free";

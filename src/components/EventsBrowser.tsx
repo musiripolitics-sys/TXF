@@ -1,29 +1,14 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import { events, eventCategories, type EventCategory, type TXFEvent } from "@/lib/data";
+import { useMemo, useState } from "react";
+import { eventCategories, type EventCategory, type TXFEvent } from "@/lib/data";
 import { EventRow } from "./EventRow";
 
-export function EventsBrowser() {
-  const [allEvents, setAllEvents] = useState<TXFEvent[]>(events);
+export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) {
+  const [allEvents] = useState<TXFEvent[]>(initialEvents);
   const [cats, setCats] = useState<EventCategory[]>([]);
   const [city, setCity] = useState<string>("All");
   const [price, setPrice] = useState<string>("All");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("txf_custom_events");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          // Combine custom events first, then default events
-          setAllEvents([...parsed, ...events]);
-        } catch (e) {
-          console.error("Failed to load custom events", e);
-        }
-      }
-    }
-  }, []);
 
   const cities = useMemo(() => Array.from(new Set(allEvents.map((e) => e.city))), [allEvents]);
 

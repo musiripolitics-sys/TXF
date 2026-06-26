@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { eventCategories } from "@/lib/data";
+import { createClient } from "@/lib/supabase/client";
 
 export function HostForm() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     category: "Meetup",
@@ -15,21 +18,27 @@ export function HostForm() {
     description: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
+    setError(null);
 
-    const newMessage = {
-      id: Math.random().toString(36).substring(2, 9),
-      ...formData,
-      submittedAt: new Date().toISOString(),
-      status: "pending" as const,
-    };
+    const supabase = createClient();
+    const { error: insertError } = await supabase.from("host_submissions").insert({
+      title: formData.title,
+      category: formData.category,
+      date: formData.date,
+      city: formData.city,
+      venue: formData.venue,
+      organizer_email: formData.email,
+      description: formData.description,
+    });
 
-    if (typeof window !== "undefined") {
-      const existing = localStorage.getItem("txf_host_messages");
-      const messages = existing ? JSON.parse(existing) : [];
-      messages.unshift(newMessage);
-      localStorage.setItem("txf_host_messages", JSON.stringify(messages));
+    setSubmitting(false);
+
+    if (insertError) {
+      setError("Something went wrong submitting your event. Please try again.");
+      return;
     }
 
     setSubmitted(true);
@@ -191,11 +200,18 @@ export function HostForm() {
         />
       </div>
 
+      {error && (
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        className="w-full cursor-pointer rounded-full bg-host px-7 py-3.5 text-base font-medium text-white hover:bg-host-soft hover:-translate-y-0.5 transition-all duration-200 shadow-[0_8px_30px_-8px_rgba(22,163,74,0.4)]"
+        disabled={submitting}
+        className="w-full cursor-pointer rounded-full bg-host px-7 py-3.5 text-base font-medium text-white hover:bg-host-soft hover:-translate-y-0.5 transition-all duration-200 shadow-[0_8px_30px_-8px_rgba(22,163,74,0.4)] disabled:opacity-60 disabled:hover:translate-y-0"
       >
-        Submit for review
+        {submitting ? "Submitting…" : "Submit for review"}
       </button>
     </form>
   );

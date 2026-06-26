@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 const topics = [
   "General enquiry",
@@ -8,14 +9,44 @@ const topics = [
   "Partnership / Sponsorship",
   "Membership",
   "Press / Media",
-];
+] as const;
 
 /**
- * Contact form — front-end only. On submit it shows a confirmation.
- * Wire to an API route / email service when the backend exists.
+ * Contact form — writes to Supabase `contact_messages` (anon insert allowed by RLS).
  */
 export function ContactForm() {
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    topic: "",
+    message: "",
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error: insertError } = await supabase.from("contact_messages").insert({
+      name: form.name,
+      email: form.email,
+      topic: form.topic,
+      message: form.message,
+    });
+
+    setSubmitting(false);
+
+    if (insertError) {
+      setError("Couldn't send your message. Please try again.");
+      return;
+    }
+
+    setSent(true);
+  };
 
   if (sent) {
     return (
@@ -32,15 +63,23 @@ export function ContactForm() {
 
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setSent(true);
-      }}
+      onSubmit={handleSubmit}
       className="space-y-5 rounded-2xl border border-line bg-surface p-6 shadow-soft sm:p-8"
     >
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name" placeholder="Your name" />
-        <Field label="Email" type="email" placeholder="you@email.com" />
+        <Field
+          label="Name"
+          placeholder="Your name"
+          value={form.name}
+          onChange={(v) => setForm({ ...form, name: v })}
+        />
+        <Field
+          label="Email"
+          type="email"
+          placeholder="you@email.com"
+          value={form.email}
+          onChange={(v) => setForm({ ...form, email: v })}
+        />
       </div>
 
       <div>
@@ -49,7 +88,8 @@ export function ContactForm() {
         </label>
         <select
           required
-          defaultValue=""
+          value={form.topic}
+          onChange={(e) => setForm({ ...form, topic: e.target.value })}
           className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         >
           <option value="" disabled>
@@ -70,16 +110,25 @@ export function ContactForm() {
         <textarea
           required
           rows={5}
+          value={form.message}
+          onChange={(e) => setForm({ ...form, message: e.target.value })}
           placeholder="Tell us how we can help…"
           className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
       </div>
 
+      {error && (
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        className="w-full rounded-full bg-brand px-6 py-3.5 text-base font-medium text-white transition-colors hover:bg-brand-soft"
+        disabled={submitting}
+        className="w-full rounded-full bg-brand px-6 py-3.5 text-base font-medium text-white transition-colors hover:bg-brand-soft disabled:opacity-60"
       >
-        Send message
+        {submitting ? "Sending…" : "Send message"}
       </button>
     </form>
   );
@@ -89,10 +138,14 @@ function Field({
   label,
   type = "text",
   placeholder,
+  value,
+  onChange,
 }: {
   label: string;
   type?: string;
   placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
     <div>
@@ -101,6 +154,8 @@ function Field({
         type={type}
         required
         placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
     </div>

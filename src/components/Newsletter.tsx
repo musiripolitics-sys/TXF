@@ -1,18 +1,37 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 /**
- * Newsletter signup. Front-end only — on submit it shows a confirmation.
- * Wire `onSubmit` to an API route / email provider when the backend exists.
+ * Newsletter signup — writes to Supabase `newsletter_subscribers`.
+ * Duplicate emails are treated as success (already subscribed).
  */
 export function Newsletter({ compact = false }: { compact?: boolean }) {
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
+    setSubmitting(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error: insertError } = await supabase
+      .from("newsletter_subscribers")
+      .insert({ email, source: compact ? "footer" : "page" });
+
+    setSubmitting(false);
+
+    // 23505 = unique violation → already subscribed, treat as success.
+    if (insertError && insertError.code !== "23505") {
+      setError("Couldn't subscribe. Please try again.");
+      return;
+    }
+
     setDone(true);
   };
 
@@ -44,10 +63,12 @@ export function Newsletter({ compact = false }: { compact?: boolean }) {
       />
       <button
         type="submit"
-        className="shrink-0 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-soft"
+        disabled={submitting}
+        className="shrink-0 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-soft disabled:opacity-60"
       >
-        Subscribe
+        {submitting ? "…" : "Subscribe"}
       </button>
+      {error && <span className="text-xs text-red-500 sm:hidden">{error}</span>}
     </form>
   );
 }
