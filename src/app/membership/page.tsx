@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
 import { Section, SectionHeading } from "@/components/Section";
-import { tiers, memberBenefits } from "@/lib/data";
+import { memberBenefits } from "@/lib/data";
+import { MembershipTiers } from "@/components/MembershipTiers";
 
 export const metadata: Metadata = {
   title: "Membership",
@@ -29,61 +29,7 @@ export default function MembershipPage() {
       </header>
 
       <Section>
-        <div className="grid gap-6 lg:grid-cols-3">
-          {tiers.map((tier) => (
-            <div
-              key={tier.name}
-              className={`relative flex flex-col rounded-3xl border p-7 ${
-                tier.highlight
-                  ? "border-brand bg-surface shadow-[0_20px_60px_-20px_rgba(255,106,26,0.45)]"
-                  : "border-line bg-surface"
-              }`}
-            >
-              {tier.highlight && (
-                <span className="absolute -top-3 left-7 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
-                  Most popular
-                </span>
-              )}
-              <h2 className="font-display text-lg font-semibold text-fg">
-                {tier.name}
-              </h2>
-              <p className="mt-1 text-sm text-muted">{tier.tagline}</p>
-              <div className="mt-5 flex items-baseline gap-1">
-                <span className="font-display text-4xl font-bold text-fg">
-                  {tier.price}
-                </span>
-                <span className="text-sm text-faint">/ {tier.cadence}</span>
-              </div>
-
-              <ul className="mt-6 flex-1 space-y-3">
-                {tier.perks.map((perk) => (
-                  <li
-                    key={perk}
-                    className="flex items-start gap-2.5 text-sm text-muted"
-                  >
-                    <Icon
-                      name="check"
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${
-                        tier.highlight ? "text-brand" : "text-host"
-                      }`}
-                      strokeWidth={2.2}
-                    />
-                    {perk}
-                  </li>
-                ))}
-              </ul>
-
-              <Button
-                href="/events"
-                variant={tier.highlight ? "brand" : "outline"}
-                size="lg"
-                className="mt-7 w-full"
-              >
-                {tier.cta}
-              </Button>
-            </div>
-          ))}
-        </div>
+        <MembershipTiers />
         <p className="mt-6 text-center text-xs text-faint">
           Volunteer &amp; Community Ambassador roles are also open — apply from
           within any tier.

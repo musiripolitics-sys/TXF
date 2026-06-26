@@ -38,6 +38,7 @@ export type EventCategory =
 export type Speaker = { name: string; role: string; initials: string };
 
 export type TXFEvent = {
+  id?: string;
   slug: string;
   title: string;
   category: EventCategory;
@@ -54,179 +55,11 @@ export type TXFEvent = {
   spotsLeft: number;
   capacity: number;
   speakers: Speaker[];
+  agenda?: { when: string; what: string }[];
   image?: string;
 };
 
-export const events: TXFEvent[] = [
-  {
-    slug: "ai-meetup-chennai",
-    title: "AI Meetup Chennai",
-    category: "Meetup",
-    date: "2026-07-12",
-    dateLabel: "Jul 12, 2026",
-    time: "10:00 AM – 1:00 PM IST",
-    city: "Chennai",
-    venue: "IIT Madras Research Park",
-    address: "Kanagam Road, Taramani, Chennai 600113",
-    price: "Free",
-    priceLabel: "Free",
-    blurb:
-      "Builders shipping with LLMs swap notes on agents, RAG and evals over coffee.",
-    about:
-      "A morning for practitioners building with large language models. Expect lightning talks on agents, retrieval and evaluation, followed by open Q&A and plenty of hallway conversation. Bring your hardest problem — someone in the room has probably solved it.",
-    spotsLeft: 18,
-    capacity: 80,
-    speakers: [
-      { name: "Nikhil Varma", role: "ML Engineer, Freshworks", initials: "NV" },
-      { name: "Sneha Pillai", role: "Founder, RetrievaAI", initials: "SP" },
-    ],
-    image: "/events/meetup.jpg",
-  },
-  {
-    slug: "startup-networking-night",
-    title: "Startup Networking Night",
-    category: "Networking",
-    date: "2026-07-19",
-    dateLabel: "Jul 19, 2026",
-    time: "6:30 PM – 9:30 PM IST",
-    city: "Bengaluru",
-    venue: "WeWork Galaxy, Residency Road",
-    address: "43 Residency Road, Bengaluru 560025",
-    price: "Paid",
-    priceLabel: "₹299",
-    blurb:
-      "Founders, operators and angels in one room. Curated intros, no pitch-deck spam.",
-    about:
-      "An evening of intentional networking. We curate introductions based on what you're building and what you need, so you leave with three conversations worth following up — not a pocket full of forgotten business cards.",
-    spotsLeft: 7,
-    capacity: 60,
-    speakers: [
-      { name: "Arjun Reddy", role: "Partner, Seedstage Capital", initials: "AR" },
-      { name: "Lakshmi Iyer", role: "Founder, two exits", initials: "LI" },
-    ],
-    image: "/events/networking.jpg",
-  },
-  {
-    slug: "cybersecurity-workshop",
-    title: "Cybersecurity Workshop",
-    category: "Workshop",
-    date: "2026-07-26",
-    dateLabel: "Jul 26, 2026",
-    time: "9:00 AM – 4:00 PM IST",
-    city: "Hyderabad",
-    venue: "T-Hub, Madhapur",
-    address: "T-Hub 2.0, Inorbit Mall Road, Madhapur, Hyderabad 500081",
-    price: "Paid",
-    priceLabel: "₹499",
-    blurb:
-      "Hands-on red-team / blue-team lab. Walk out with a hardened threat model.",
-    about:
-      "A full-day, laptop-required workshop. You'll attack a deliberately vulnerable app, then defend it — learning practical threat modelling, common exploit classes and the fixes that actually hold up. Beginner-friendly but not beginner-paced.",
-    spotsLeft: 24,
-    capacity: 40,
-    speakers: [
-      { name: "Imran Sheikh", role: "Security Lead, PayStack", initials: "IS" },
-      { name: "Divya Menon", role: "Pentester & CTF organizer", initials: "DM" },
-    ],
-    image: "/events/workshop.jpg",
-  },
-  {
-    slug: "product-launch-summit",
-    title: "Product Launch Summit",
-    category: "Product Launch",
-    date: "2026-08-02",
-    dateLabel: "Aug 02, 2026",
-    time: "5:00 PM – 9:00 PM IST",
-    city: "Chennai",
-    venue: "Taj Coromandel",
-    address: "37 Mahatma Gandhi Road, Nungambakkam, Chennai 600034",
-    price: "Paid",
-    priceLabel: "₹999",
-    blurb:
-      "Watch 8 startups unveil to press, investors and the TXF community on one stage.",
-    about:
-      "Eight teams. Eight launches. One stage. The Product Launch Summit gives early-stage startups a moment in front of press, investors and the community — with live demos, a fireside chat and an after-party for the conversations that matter.",
-    spotsLeft: 40,
-    capacity: 200,
-    speakers: [
-      { name: "Kavya Rao", role: "Editor, TechCircle", initials: "KR" },
-      { name: "Sandeep Nair", role: "GP, Equinox Ventures", initials: "SN" },
-    ],
-    image: "/events/launch.jpg",
-  },
-  {
-    slug: "hackathon-2026",
-    title: "Hackathon 2026",
-    category: "Hackathon",
-    date: "2026-08-15",
-    dateLabel: "Aug 15–16, 2026",
-    time: "Starts 9:00 AM, 36 hours",
-    city: "Coimbatore",
-    venue: "PSG College of Technology",
-    address: "Avinashi Road, Peelamedu, Coimbatore 641004",
-    price: "Free",
-    priceLabel: "Free",
-    blurb:
-      "36 hours, ₹3L in prizes, mentors from top product teams. Build something real.",
-    about:
-      "Our flagship build sprint. Form a team, pick a track and ship a working prototype in 36 hours with mentors on call the whole way. ₹3,00,000 in prizes, recruiter access and bragging rights for the winning crew. Solo hackers welcome — we'll help you find a team.",
-    spotsLeft: 56,
-    capacity: 300,
-    speakers: [
-      { name: "Rahul Krishnan", role: "Staff Engineer, Razorpay", initials: "RK" },
-      { name: "Aisha Khan", role: "Design Lead, Zoho", initials: "AK" },
-    ],
-    image: "/events/hackathon.jpg",
-  },
-  {
-    slug: "scaling-systems-webinar",
-    title: "Scaling Systems Webinar",
-    category: "Webinar",
-    date: "2026-07-30",
-    dateLabel: "Jul 30, 2026",
-    time: "7:00 PM – 8:30 PM IST",
-    city: "Online",
-    venue: "Live on Zoom",
-    address: "Online — link emailed on registration",
-    price: "Free",
-    priceLabel: "Free",
-    blurb:
-      "How real teams scale from 10K to 10M users — architecture, caching and on-call.",
-    about:
-      "A live, online deep-dive into scaling backends. We'll walk through real architecture decisions — databases, caching layers, queues and observability — with time for your questions. Recording shared with everyone who registers.",
-    spotsLeft: 220,
-    capacity: 500,
-    speakers: [
-      { name: "Vivek Anand", role: "Principal Engineer, Swiggy", initials: "VA" },
-      { name: "Pooja Shetty", role: "SRE Lead, CRED", initials: "PS" },
-    ],
-    image: "/events/webinar.jpg",
-  },
-  {
-    slug: "designops-meetup",
-    title: "DesignOps Meetup",
-    category: "Meetup",
-    date: "2026-08-23",
-    dateLabel: "Aug 23, 2026",
-    time: "11:00 AM – 2:00 PM IST",
-    city: "Chennai",
-    venue: "Anna Nagar Tower Park Hall",
-    address: "Anna Nagar Tower Park, 2nd Avenue, Chennai 600040",
-    price: "Free",
-    priceLabel: "Free",
-    blurb:
-      "Designers and PMs on systems, handoff and shipping faster without breaking craft.",
-    about:
-      "Where design meets delivery. Talks and a panel on design systems, smoother handoff and scaling craft as teams grow — plus space to compare notes with designers and PMs who care about both speed and quality.",
-    spotsLeft: 30,
-    capacity: 70,
-    speakers: [
-      { name: "Meera Joseph", role: "Design Systems Lead, Freshworks", initials: "MJ" },
-      { name: "Tarun Gupta", role: "Group PM, Chargebee", initials: "TG" },
-    ],
-    image: "/events/meetup.jpg",
-  },
-];
+export const events: TXFEvent[] = [];
 
 export function getEvent(slug: string): TXFEvent | undefined {
   return events.find((e) => e.slug === slug);

@@ -4,6 +4,10 @@ import Link from "next/link";
 import { Button } from "@/components/Button";
 import { eventAgenda } from "@/lib/data";
 import { getEventBySlug } from "@/lib/events";
+import { getCurrentUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { RegistrationForm } from "@/components/RegistrationForm";
+import { DownloadTicketBtn } from "@/components/DownloadTicketBtn";
 
 export async function generateMetadata({
   params,
@@ -31,9 +35,31 @@ export default async function EventDetailPage({
   }
 
   const isFree = event.price === "Free";
-  const agenda = eventAgenda(event);
+  const agenda = event.agenda ?? eventAgenda(event);
   const filled = event.capacity - event.spotsLeft;
   const pct = Math.round((filled / event.capacity) * 100);
+
+  const user = await getCurrentUser();
+  let userProfile = null;
+  let userRegistrations: { ticket_code: string; attendee_name: string }[] = [];
+  if (user) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("users")
+      .select("full_name, email, phone")
+      .eq("id", user.id)
+      .single();
+    if (data) userProfile = data;
+
+    if (event.id) {
+      const { data: regs } = await supabase
+        .from("registrations")
+        .select("ticket_code, attendee_name")
+        .eq("user_id", user.id)
+        .eq("event_id", event.id);
+      if (regs) userRegistrations = regs;
+    }
+  }
 
   return (
     <>
@@ -127,6 +153,7 @@ export default async function EventDetailPage({
               ))}
             </div>
           </section>
+
         </div>
 
         {/* Sticky registration card */}
@@ -153,14 +180,27 @@ export default async function EventDetailPage({
               </div>
             </div>
 
-            <Button
-              href={`/events/${event.slug}#register`}
-              variant="brand"
-              size="lg"
-              className="mt-6 w-full"
-            >
-              {isFree ? "Register free" : `Buy ticket · ${event.priceLabel}`}
-            </Button>
+            <div className="mt-6 border-t border-line pt-6">
+              {userRegistrations.length > 0 && (
+                <div className="mb-6 space-y-3">
+                  <h3 className="font-semibold text-fg mb-3 text-center text-sm">Your Tickets</h3>
+                  {userRegistrations.map((reg, i) => (
+                    <div key={i} className="flex flex-col items-center justify-center rounded-xl bg-ink-2 p-4 border border-brand/20 relative">
+                      <span className="text-xs font-medium text-brand-soft mb-1">TICKET CODE</span>
+                      <span className="font-mono text-2xl font-bold text-fg tracking-wider">{reg.ticket_code.toUpperCase()}</span>
+                      <span className="text-xs text-muted mt-2 mb-4">{reg.attendee_name}</span>
+                      <DownloadTicketBtn event={event} ticketCode={reg.ticket_code} attendeeName={reg.attendee_name} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <RegistrationForm 
+                eventId={event.id || ""} 
+                isFull={event.spotsLeft <= 0} 
+                userProfile={userProfile} 
+              />
+            </div>
             <p className="mt-3 text-center text-xs text-faint">
               Members get priority registration & discounts.{" "}
               <Link href="/membership" className="text-brand-soft underline">

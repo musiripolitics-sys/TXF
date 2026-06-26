@@ -8,7 +8,7 @@ import {
 import { dbEventToTXF, type DBEvent } from "./events-map";
 
 const COLS =
-  "slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url";
+  "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url";
 
 /**
  * Published events from Supabase, newest date first.
@@ -37,7 +37,7 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("events")
-      .select(`${COLS}, event_speakers(sort_order, speakers(name, role, initials))`)
+      .select(`${COLS}, event_speakers(sort_order, speakers(name, role, initials)), event_agenda(sort_order, when_label, what)`)
       .eq("slug", slug)
       .eq("status", "published")
       .maybeSingle();

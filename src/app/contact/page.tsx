@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ContactForm } from "@/components/ContactForm";
 import { Newsletter } from "@/components/Newsletter";
 import { brand } from "@/lib/data";
@@ -67,7 +68,9 @@ export default function ContactPage() {
         </div>
 
         {/* Form */}
-        <ContactForm />
+        <Suspense fallback={<div className="rounded-2xl border border-line bg-surface p-6 sm:p-8 animate-pulse h-96"></div>}>
+          <ContactForm />
+        </Suspense>
       </div>
     </>
   );

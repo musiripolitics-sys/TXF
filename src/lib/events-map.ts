@@ -2,6 +2,7 @@ import type { TXFEvent, EventCategory, Speaker } from "@/lib/data";
 
 /** Shape of an `events` row (plus optional joined speakers) from Supabase. */
 export type DBEvent = {
+  id: string;
   slug: string;
   title: string;
   category: string;
@@ -22,6 +23,21 @@ export type DBEvent = {
     sort_order: number;
     speakers: { name: string; role: string | null; initials: string | null } | null;
   }[];
+  event_agenda?: {
+    sort_order: number;
+    when_label: string;
+    what: string;
+  }[];
+};
+
+const categoryImages: Record<string, string> = {
+  Meetup: "/events/meetup.jpg",
+  Workshop: "/events/workshop.jpg",
+  Webinar: "/events/webinar.jpg",
+  Hackathon: "/events/hackathon.jpg",
+  Conference: "/events/conference.jpg",
+  Networking: "/events/networking.jpg",
+  "Product Launch": "/events/launch.jpg",
 };
 
 function initialsFor(name: string): string {
@@ -54,7 +70,15 @@ export function dbEventToTXF(row: DBEvent): TXFEvent {
       initials: es.speakers!.initials ?? initialsFor(es.speakers!.name),
     }));
 
+  const agenda = (row.event_agenda ?? [])
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((ea) => ({
+      when: ea.when_label,
+      what: ea.what,
+    }));
+
   return {
+    id: row.id,
     slug: row.slug,
     title: row.title,
     category: row.category as EventCategory,
@@ -71,6 +95,7 @@ export function dbEventToTXF(row: DBEvent): TXFEvent {
     spotsLeft: row.spots_left,
     capacity: row.capacity,
     speakers,
-    image: row.image_url ?? undefined,
+    agenda: agenda.length > 0 ? agenda : undefined,
+    image: row.image_url ?? categoryImages[row.category] ?? undefined,
   };
 }

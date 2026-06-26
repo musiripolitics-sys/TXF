@@ -121,6 +121,13 @@ export function AdminDashboard({
   const [speakers, setSpeakers] = useState<{ name: string; role: string }[]>([
     { name: "", role: "" },
   ]);
+  const [agenda, setAgenda] = useState<{ when: string; what: string }[]>([
+    { when: "Doors open", what: "Registration & check-in" },
+    { when: "Kickoff", what: "Welcome & intro" },
+    { when: "Main session", what: "Talks & deep-dive sessions" },
+    { when: "Break", what: "Networking & refreshments" },
+    { when: "Wrap-up", what: "Panel, Q&A and closing" },
+  ]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -259,6 +266,15 @@ export function AdminDashboard({
     setSpeakers(next);
   };
 
+  const addAgendaItem = () => setAgenda([...agenda, { when: "", what: "" }]);
+  const removeAgendaItem = (i: number) =>
+    setAgenda(agenda.filter((_, idx) => idx !== i));
+  const changeAgendaItem = (i: number, field: "when" | "what", value: string) => {
+    const next = [...agenda];
+    next[i][field] = value;
+    setAgenda(next);
+  };
+
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusyId("create");
@@ -311,6 +327,18 @@ export function AdminDashboard({
           );
         }
       }
+
+      const validAgenda = agenda.filter((a) => a.when.trim() && a.what.trim());
+      if (validAgenda.length) {
+        await supabase.from("event_agenda").insert(
+          validAgenda.map((row, idx) => ({
+            event_id: inserted.id,
+            when_label: row.when,
+            what: row.what,
+            sort_order: idx,
+          })),
+        );
+      }
     }
 
     setBusyId(null);
@@ -329,6 +357,13 @@ export function AdminDashboard({
       capacity: 100,
     });
     setSpeakers([{ name: "", role: "" }]);
+    setAgenda([
+      { when: "Doors open", what: "Registration & check-in" },
+      { when: "Kickoff", what: "Welcome & intro" },
+      { when: "Main session", what: "Talks & deep-dive sessions" },
+      { when: "Break", what: "Networking & refreshments" },
+      { when: "Wrap-up", what: "Panel, Q&A and closing" },
+    ]);
     await refresh();
     setActiveTab("manage");
   };
@@ -698,6 +733,58 @@ export function AdminDashboard({
                         <button
                           type="button"
                           onClick={() => removeSpeaker(i)}
+                          className="pb-3 text-xs text-red-500 hover:text-red-700"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-line pt-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-fg">Agenda</h3>
+                  <button
+                    type="button"
+                    onClick={addAgendaItem}
+                    className="text-xs font-semibold text-brand-soft hover:text-brand"
+                  >
+                    + Add Agenda Item
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {agenda.map((a, i) => (
+                    <div key={i} className="flex items-end gap-4">
+                      <div className="flex-[0.5]">
+                        <label className="mb-1 block text-xs font-medium text-muted">
+                          When
+                        </label>
+                        <input
+                          type="text"
+                          value={a.when}
+                          onChange={(e) => changeAgendaItem(i, "when", e.target.value)}
+                          className={`${inputCls} py-2.5 text-xs`}
+                          placeholder="Doors open"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="mb-1 block text-xs font-medium text-muted">
+                          What
+                        </label>
+                        <input
+                          type="text"
+                          value={a.what}
+                          onChange={(e) => changeAgendaItem(i, "what", e.target.value)}
+                          className={`${inputCls} py-2.5 text-xs`}
+                          placeholder="Registration & check-in"
+                        />
+                      </div>
+                      {agenda.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeAgendaItem(i)}
                           className="pb-3 text-xs text-red-500 hover:text-red-700"
                         >
                           Delete

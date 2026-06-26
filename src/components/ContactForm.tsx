@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const topics = [
@@ -9,12 +10,16 @@ const topics = [
   "Partnership / Sponsorship",
   "Membership",
   "Press / Media",
+  "Careers / Job Application",
 ] as const;
 
 /**
  * Contact form — writes to Supabase `contact_messages` (anon insert allowed by RLS).
  */
 export function ContactForm() {
+  const searchParams = useSearchParams();
+  const role = searchParams?.get("role");
+
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +29,16 @@ export function ContactForm() {
     topic: "",
     message: "",
   });
+
+  useEffect(() => {
+    if (role) {
+      setForm((prev) => ({
+        ...prev,
+        topic: "Careers / Job Application",
+        message: `I am interested in applying for the ${role} position.`,
+      }));
+    }
+  }, [role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

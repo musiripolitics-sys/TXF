@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "./Logo";
 import { Button } from "./Button";
+import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 
 const links = [
   { label: "Events", href: "/events" },
@@ -18,7 +20,10 @@ const links = [
 export function Nav() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -26,6 +31,26 @@ export function Nav() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+    };
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  };
 
   // Close the mobile menu whenever the route changes.
   useEffect(() => setOpen(false), [pathname]);
@@ -54,12 +79,31 @@ export function Nav() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Button href="/membership" variant="ghost" size="sm">
-            Sign in
-          </Button>
-          <Button href="/events" variant="brand" size="sm">
-            Join Events
-          </Button>
+          {user ? (
+            <>
+              <Button href="/profile" variant="ghost" size="sm">
+                Profile
+              </Button>
+              <Button href="/admin" variant="ghost" size="sm">
+                Console
+              </Button>
+              <button
+                onClick={handleSignOut}
+                className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-muted hover:text-fg hover:border-fg transition-all duration-200 cursor-pointer"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <Button href="/login" variant="ghost" size="sm">
+                Sign in
+              </Button>
+              <Button href="/events" variant="brand" size="sm">
+                Join Events
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -102,12 +146,31 @@ export function Nav() {
             ))}
           </div>
           <div className="mt-4 flex flex-col gap-2">
-            <Button href="/events" variant="brand" size="md" className="w-full">
-              Join Events
-            </Button>
-            <Button href="/host" variant="outline" size="md" className="w-full">
-              Host an Event
-            </Button>
+            {user ? (
+              <>
+                <Button href="/profile" variant="outline" size="md" className="w-full">
+                  Profile
+                </Button>
+                <Button href="/admin" variant="brand" size="md" className="w-full">
+                  Console
+                </Button>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full rounded-full border border-line bg-surface py-2.5 text-center text-sm font-medium text-muted hover:text-fg hover:border-fg transition-all duration-200 cursor-pointer"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Button href="/events" variant="brand" size="md" className="w-full">
+                  Join Events
+                </Button>
+                <Button href="/login" variant="outline" size="md" className="w-full">
+                  Sign in
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}
