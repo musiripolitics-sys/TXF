@@ -42,6 +42,10 @@ export const membershipVerifySchema = z.object({
   tier: z.enum(["Pro", "Elite"]),
 });
 
+export const postSchema = z.object({
+  body: z.string().trim().min(1, "Write something first").max(1000, "Keep it under 1000 characters"),
+});
+
 export const hostDecisionSchema = z.object({
   userId: uuid,
   approve: z.boolean(),
