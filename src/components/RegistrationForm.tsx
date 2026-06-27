@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { registerForEvent } from "@/app/events/[slug]/actions";
+import { registerForEvent, joinWaitlist } from "@/app/events/[slug]/actions";
 import { Icon } from "./Icon";
 
 interface RegistrationFormProps {
@@ -31,6 +31,11 @@ export function RegistrationForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [waitlisted, setWaitlisted] = useState(false);
+
+  // Waitlist applies to free events that are full. Paid-full shows "Sold out".
+  const waitlistMode = isFull && !isPaid;
+  const soldOut = isFull && isPaid;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,6 +48,15 @@ export function RegistrationForm({
       attendee_email: (formData.get("attendee_email") as string)?.trim(),
       attendee_phone: (formData.get("attendee_phone") as string)?.trim() || "",
     };
+
+    if (waitlistMode) {
+      setLoading(true);
+      const res = await joinWaitlist(eventId, formData);
+      if (res.error) setError(res.error);
+      else if (res.success) setWaitlisted(true);
+      setLoading(false);
+      return;
+    }
 
     if (isPaid) {
       await handlePaid(attendee);
@@ -150,17 +164,36 @@ export function RegistrationForm({
     );
   }
 
+  if (waitlisted) {
+    return (
+      <div className="mt-10 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-8 text-center">
+        <h3 className="font-display text-2xl font-bold text-fg">
+          You&apos;re on the waitlist
+        </h3>
+        <p className="mt-2 text-muted">
+          This event is full, but we&apos;ll email you the moment a spot opens up.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div id="register">
       {isPaid && (
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       )}
-      {isFull ? (
-        <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
-          This event has reached its maximum capacity.
+      {soldOut ? (
+        <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-center text-red-500">
+          Sold out — this event has reached capacity.
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {waitlistMode && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600">
+              This event is full. Join the waitlist and we&apos;ll email you if a
+              spot opens up.
+            </div>
+          )}
           {error && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
               {error}
@@ -214,12 +247,16 @@ export function RegistrationForm({
             disabled={loading}
           >
             {loading
-              ? isPaid
-                ? "Processing…"
-                : "Registering..."
-              : isPaid
-                ? `Buy ticket · ${priceLabel || "Pay"}`
-                : "Confirm Registration"}
+              ? waitlistMode
+                ? "Joining…"
+                : isPaid
+                  ? "Processing…"
+                  : "Registering..."
+              : waitlistMode
+                ? "Join the waitlist"
+                : isPaid
+                  ? `Buy ticket · ${priceLabel || "Pay"}`
+                  : "Confirm Registration"}
           </button>
 
           {isPaid && memberNote && (

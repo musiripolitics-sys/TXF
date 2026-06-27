@@ -109,12 +109,20 @@ export function HostDashboard({ hostId }: { hostId: string }) {
             Track your submissions, resubmit rejected ones, and manage attendees
             for your live events.
           </p>
-          <Link
-            href="/host"
-            className="mt-5 inline-block rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft"
-          >
-            + Propose a new event
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/host"
+              className="inline-block rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft"
+            >
+              + Propose a new event
+            </Link>
+            <Link
+              href="/host/checkin"
+              className="inline-block rounded-full border border-line bg-surface px-5 py-2.5 text-sm font-medium text-fg hover:border-brand hover:text-brand"
+            >
+              Door check-in →
+            </Link>
+          </div>
         </div>
       </header>
 

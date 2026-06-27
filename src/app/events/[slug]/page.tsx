@@ -14,6 +14,7 @@ import {
   type PaidTier,
 } from "@/lib/membership";
 import { DownloadTicketBtn } from "@/components/DownloadTicketBtn";
+import { CancelRegistrationBtn } from "@/components/CancelRegistrationBtn";
 
 export async function generateMetadata({
   params,
@@ -47,7 +48,12 @@ export default async function EventDetailPage({
 
   const user = await getCurrentUser();
   let userProfile = null;
-  let userRegistrations: { ticket_code: string; attendee_name: string }[] = [];
+  let userRegistrations: {
+    id: string;
+    ticket_code: string;
+    attendee_name: string;
+    status: string;
+  }[] = [];
   let memberTier: PaidTier | null = null;
   let memberPriceLabel: string | null = null;
   if (user) {
@@ -62,7 +68,7 @@ export default async function EventDetailPage({
     if (event.id) {
       const { data: regs } = await supabase
         .from("registrations")
-        .select("ticket_code, attendee_name")
+        .select("id, ticket_code, attendee_name, status")
         .eq("user_id", user.id)
         .eq("event_id", event.id);
       if (regs) userRegistrations = regs;
@@ -221,14 +227,36 @@ export default async function EventDetailPage({
               {userRegistrations.length > 0 && (
                 <div className="mb-6 space-y-3">
                   <h3 className="font-semibold text-fg mb-3 text-center text-sm">Your Tickets</h3>
-                  {userRegistrations.map((reg, i) => (
-                    <div key={i} className="flex flex-col items-center justify-center rounded-xl bg-ink-2 p-4 border border-brand/20 relative">
-                      <span className="text-xs font-medium text-brand-soft mb-1">TICKET CODE</span>
-                      <span className="font-mono text-2xl font-bold text-fg tracking-wider">{reg.ticket_code.toUpperCase()}</span>
-                      <span className="text-xs text-muted mt-2 mb-4">{reg.attendee_name}</span>
-                      <DownloadTicketBtn event={event} ticketCode={reg.ticket_code} attendeeName={reg.attendee_name} />
-                    </div>
-                  ))}
+                  {userRegistrations.map((reg) => {
+                    const isWaitlisted = reg.status === "waitlisted";
+                    return (
+                      <div
+                        key={reg.id}
+                        className={`flex flex-col items-center justify-center rounded-xl bg-ink-2 p-4 border ${isWaitlisted ? "border-amber-500/30" : "border-brand/20"}`}
+                      >
+                        {isWaitlisted ? (
+                          <>
+                            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+                              Waitlisted
+                            </span>
+                            <span className="mt-2 text-xs text-muted">
+                              {reg.attendee_name} — we&apos;ll email you if a spot opens.
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-xs font-medium text-brand-soft mb-1">TICKET CODE</span>
+                            <span className="font-mono text-2xl font-bold text-fg tracking-wider">{reg.ticket_code.toUpperCase()}</span>
+                            <span className="text-xs text-muted mt-2 mb-4">{reg.attendee_name}</span>
+                            <DownloadTicketBtn event={event} ticketCode={reg.ticket_code} attendeeName={reg.attendee_name} />
+                          </>
+                        )}
+                        <div className="mt-3">
+                          <CancelRegistrationBtn registrationId={reg.id} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               
