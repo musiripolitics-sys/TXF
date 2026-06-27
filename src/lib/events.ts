@@ -43,7 +43,22 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
       .maybeSingle();
 
     if (error || !data) return getStaticEvent(slug) ?? null;
-    return dbEventToTXF(data as unknown as DBEvent);
+    const txf = dbEventToTXF(data as unknown as DBEvent);
+
+    // Host name is fetched separately and tolerantly so a DB that hasn't run
+    // the host_name migration yet still renders the event normally.
+    try {
+      const { data: h } = await supabase
+        .from("events")
+        .select("host_name")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (h?.host_name) txf.hostName = h.host_name;
+    } catch {
+      /* column not present yet — ignore */
+    }
+
+    return txf;
   } catch {
     return getStaticEvent(slug) ?? null;
   }

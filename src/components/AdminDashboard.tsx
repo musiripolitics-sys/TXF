@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { eventCategories, categoryTheme, type EventCategory } from "@/lib/data";
+import { decideHostRequest } from "@/app/admin/actions";
+import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 
 type Submission = {
@@ -97,13 +99,17 @@ export function AdminDashboard({
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<
-    "submissions" | "create" | "manage" | "users"
-  >("submissions");
+    "overview" | "submissions" | "create" | "manage" | "users"
+  >("overview");
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [rolesByUser, setRolesByUser] = useState<Record<string, AppRole[]>>({});
+  const [regCount, setRegCount] = useState(0);
+  const [payments, setPayments] = useState<
+    { amount: number; stream: string; status: string }[]
+  >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [eventForm, setEventForm] = useState({
@@ -133,26 +139,40 @@ export function AdminDashboard({
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [{ data: subs }, { data: evs }, { data: usrs }, { data: roleRows }] =
-      await Promise.all([
-        supabase
-          .from("host_submissions")
-          .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at")
-          .order("submitted_at", { ascending: false }),
-        supabase
-          .from("events")
-          .select("id,slug,title,category,date,date_label,time,city,price_label,source")
-          .order("date", { ascending: true }),
-        supabase
-          .from("users")
-          .select("id,email,full_name,city,primary_role,host_status,points,created_at")
-          .order("created_at", { ascending: false }),
-        supabase.from("user_roles").select("user_id,role"),
-      ]);
+    const [
+      { data: subs },
+      { data: evs },
+      { data: usrs },
+      { data: roleRows },
+      { count: regs },
+      { data: pays },
+    ] = await Promise.all([
+      supabase
+        .from("host_submissions")
+        .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at")
+        .order("submitted_at", { ascending: false }),
+      supabase
+        .from("events")
+        .select("id,slug,title,category,date,date_label,time,city,price_label,source")
+        .order("date", { ascending: true }),
+      supabase
+        .from("users")
+        .select("id,email,full_name,city,primary_role,host_status,points,created_at")
+        .order("created_at", { ascending: false }),
+      supabase.from("user_roles").select("user_id,role"),
+      supabase
+        .from("registrations")
+        .select("id", { count: "exact", head: true }),
+      supabase.from("payments").select("amount,stream,status"),
+    ]);
 
     setSubmissions((subs as Submission[]) ?? []);
     setEvents((evs as EventRow[]) ?? []);
     setUsers((usrs as AppUser[]) ?? []);
+    setRegCount(regs ?? 0);
+    setPayments(
+      (pays as { amount: number; stream: string; status: string }[]) ?? [],
+    );
 
     const map: Record<string, AppRole[]> = {};
     for (const r of (roleRows as { user_id: string; role: AppRole }[]) ?? []) {
@@ -202,6 +222,16 @@ export function AdminDashboard({
       .single();
 
     if (!error && inserted) {
+      // Denormalise the host's name onto the event (tolerant: silently no-ops
+      // if the host_name column migration hasn't been run yet).
+      const hostName = users.find((u) => u.id === s.organizer_id)?.full_name;
+      if (hostName) {
+        await supabase
+          .from("events")
+          .update({ host_name: hostName })
+          .eq("id", inserted.id);
+      }
+
       await supabase
         .from("host_submissions")
         .update({
@@ -236,7 +266,7 @@ export function AdminDashboard({
   const toggleRole = async (userId: string, role: AppRole, has: boolean) => {
     // Prevent an admin from removing their own admin role (avoids lockout).
     if (role === "admin" && userId === adminId && has) {
-      alert("You can't remove your own admin role.");
+      toast("You can't remove your own admin role.", "error");
       return;
     }
     setBusyId(userId + role);
@@ -262,20 +292,14 @@ export function AdminDashboard({
 
   const approveHost = async (userId: string) => {
     setBusyId(userId + "host");
-    await supabase
-      .from("users")
-      .update({ primary_role: "event_host", host_status: "approved" })
-      .eq("id", userId);
+    await decideHostRequest(userId, true);
     setBusyId(null);
     await refresh();
   };
 
   const rejectHost = async (userId: string) => {
     setBusyId(userId + "host");
-    await supabase
-      .from("users")
-      .update({ host_status: "rejected" })
-      .eq("id", userId);
+    await decideHostRequest(userId, false);
     setBusyId(null);
     await refresh();
   };
@@ -424,7 +448,7 @@ export function AdminDashboard({
 
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
         <div className="mb-8 flex gap-8 overflow-x-auto border-b border-line">
-          {(["submissions", "create", "manage", "users"] as const).map((tab) => (
+          {(["overview", "submissions", "create", "manage", "users"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -434,6 +458,7 @@ export function AdminDashboard({
                   : "border-transparent text-muted hover:text-fg"
               }`}
             >
+              {tab === "overview" && "Overview"}
               {tab === "submissions" && `Host Submissions (${pendingCount})`}
               {tab === "create" && "Create Event"}
               {tab === "manage" && `Manage Events (${events.length})`}
@@ -445,6 +470,95 @@ export function AdminDashboard({
         {loading && (
           <p className="py-12 text-center text-sm text-muted">Loading…</p>
         )}
+
+        {/* Overview */}
+        {!loading &&
+          activeTab === "overview" &&
+          (() => {
+            const paid = payments.filter((p) => p.status === "paid");
+            const sum = (stream?: string) =>
+              paid
+                .filter((p) => !stream || p.stream === stream)
+                .reduce((a, p) => a + (p.amount || 0), 0);
+            const inr = (paise: number) =>
+              `₹${(paise / 100).toLocaleString("en-IN")}`;
+            const byRole = (r: AppRole) =>
+              users.filter((u) => u.primary_role === r).length;
+
+            const cards = [
+              {
+                label: "Community Members",
+                value: String(users.length),
+                sub: `${byRole("event_host")} hosts · ${byRole("admin")} admins`,
+              },
+              {
+                label: "Published Events",
+                value: String(events.length),
+                sub: "live on the site",
+              },
+              {
+                label: "Registrations",
+                value: regCount.toLocaleString("en-IN"),
+                sub: "tickets issued",
+              },
+              {
+                label: "Total Revenue",
+                value: inr(sum()),
+                sub: `${inr(sum("ticket_sales"))} tickets · ${inr(sum("membership"))} memberships`,
+              },
+            ];
+
+            return (
+              <div className="space-y-8">
+                <h2 className="font-display text-2xl font-bold text-fg">
+                  Overview
+                </h2>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {cards.map((c) => (
+                    <div
+                      key={c.label}
+                      className="rounded-2xl border border-line bg-surface p-5 shadow-soft"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wider text-faint">
+                        {c.label}
+                      </p>
+                      <p className="mt-3 font-display text-3xl font-bold text-fg">
+                        {c.value}
+                      </p>
+                      <p className="mt-1 text-xs text-muted">{c.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action items */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <button
+                    onClick={() => setActiveTab("submissions")}
+                    className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5 text-left shadow-soft transition-colors hover:border-brand/40"
+                  >
+                    <span className="text-sm font-medium text-fg">
+                      Pending event submissions
+                    </span>
+                    <span className="rounded-full bg-brand/10 px-3 py-1 text-sm font-bold text-brand-soft">
+                      {pendingCount}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("users")}
+                    className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5 text-left shadow-soft transition-colors hover:border-brand/40"
+                  >
+                    <span className="text-sm font-medium text-fg">
+                      Pending host requests
+                    </span>
+                    <span className="rounded-full bg-amber-500/15 px-3 py-1 text-sm font-bold text-amber-600">
+                      {pendingHostCount}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
         {/* Submissions */}
         {!loading && activeTab === "submissions" && (

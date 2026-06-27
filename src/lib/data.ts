@@ -57,6 +57,7 @@ export type TXFEvent = {
   speakers: Speaker[];
   agenda?: { when: string; what: string }[];
   image?: string;
+  hostName?: string;
 };
 
 export const events: TXFEvent[] = [];

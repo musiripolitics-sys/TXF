@@ -5,6 +5,7 @@ import { toPng } from "html-to-image";
 import QRCode from "react-qr-code";
 import { type TXFEvent } from "@/lib/data";
 import { Icon } from "./Icon";
+import { toast } from "./Toast";
 
 interface Props {
   event: TXFEvent;
@@ -33,7 +34,7 @@ export function DownloadTicketBtn({ event, ticketCode, attendeeName, className =
       link.click();
     } catch (err) {
       console.error("Failed to download ticket", err);
-      alert("Failed to download ticket. Please try again.");
+      toast("Failed to download ticket. Please try again.", "error");
     } finally {
       setDownloading(false);
     }

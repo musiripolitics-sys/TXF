@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
+import { Toaster } from "@/components/Toast";
 import { getUserRole } from "@/lib/auth";
 
 const display = Space_Grotesk({
@@ -84,6 +85,7 @@ export default async function RootLayout({
         <Nav role={role} />
         <main className="flex-1">{children}</main>
         <Footer />
+        <Toaster />
       </body>
     </html>
   );

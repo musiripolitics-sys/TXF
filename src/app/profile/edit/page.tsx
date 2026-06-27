@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm, type ProfileData } from "@/components/ProfileForm";
+import { AccountSettings } from "@/components/AccountSettings";
 
 export const metadata = { title: "Edit Profile" };
 
@@ -38,6 +39,11 @@ export default async function EditProfilePage() {
         events and people.
       </p>
       <ProfileForm userId={user.id} initial={initial} />
+
+      <h2 className="mt-12 font-display text-2xl font-bold tracking-tight text-fg">
+        Account settings
+      </h2>
+      <AccountSettings currentEmail={initial.email} />
     </div>
   );
 }

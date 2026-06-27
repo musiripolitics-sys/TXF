@@ -70,7 +70,7 @@ export function ProfileForm({
           className="w-full cursor-not-allowed rounded-xl border border-line bg-ink-2 px-4 py-3 text-sm text-faint"
         />
         <p className="mt-1 text-xs text-faint">
-          Email is managed by your login and can&apos;t be changed here.
+          To change your email, use Account settings below.
         </p>
       </div>
 

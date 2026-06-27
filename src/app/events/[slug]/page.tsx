@@ -2,11 +2,17 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
-import { eventAgenda } from "@/lib/data";
 import { getEventBySlug } from "@/lib/events";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { RegistrationForm } from "@/components/RegistrationForm";
+import { EventActions } from "@/components/EventActions";
+import {
+  getActiveTier,
+  applyMemberDiscount,
+  discountPct,
+  type PaidTier,
+} from "@/lib/membership";
 import { DownloadTicketBtn } from "@/components/DownloadTicketBtn";
 
 export async function generateMetadata({
@@ -35,13 +41,15 @@ export default async function EventDetailPage({
   }
 
   const isFree = event.price === "Free";
-  const agenda = event.agenda ?? eventAgenda(event);
+  const agenda = event.agenda ?? [];
   const filled = event.capacity - event.spotsLeft;
   const pct = Math.round((filled / event.capacity) * 100);
 
   const user = await getCurrentUser();
   let userProfile = null;
   let userRegistrations: { ticket_code: string; attendee_name: string }[] = [];
+  let memberTier: PaidTier | null = null;
+  let memberPriceLabel: string | null = null;
   if (user) {
     const supabase = await createClient();
     const { data } = await supabase
@@ -58,6 +66,20 @@ export default async function EventDetailPage({
         .eq("user_id", user.id)
         .eq("event_id", event.id);
       if (regs) userRegistrations = regs;
+    }
+
+    // Member ticket discount preview (the charge is enforced server-side).
+    memberTier = await getActiveTier(supabase, user.id);
+    if (memberTier && !isFree && event.id) {
+      const { data: ev } = await supabase
+        .from("events")
+        .select("price_amount")
+        .eq("id", event.id)
+        .maybeSingle();
+      if (ev?.price_amount) {
+        const discounted = applyMemberDiscount(ev.price_amount, memberTier);
+        memberPriceLabel = `₹${(discounted / 100).toLocaleString("en-IN")}`;
+      }
     }
   }
 
@@ -107,7 +129,7 @@ export default async function EventDetailPage({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-10 px-5 py-12 sm:px-8 lg:grid-cols-[1.6fr_1fr]">
+      <div className="mx-auto grid max-w-5xl gap-10 px-5 py-12 pb-28 sm:px-8 lg:grid-cols-[1.6fr_1fr] lg:pb-12">
         {/* Main column */}
         <div className="space-y-10">
           <section>
@@ -117,6 +139,7 @@ export default async function EventDetailPage({
             <p className="mt-3 leading-relaxed text-muted">{event.about}</p>
           </section>
 
+          {agenda.length > 0 && (
           <section>
             <h2 className="font-display text-xl font-semibold text-fg">Agenda</h2>
             <ol className="mt-4 space-y-3">
@@ -133,7 +156,9 @@ export default async function EventDetailPage({
               ))}
             </ol>
           </section>
+          )}
 
+          {event.speakers.length > 0 && (
           <section>
             <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -153,6 +178,7 @@ export default async function EventDetailPage({
               ))}
             </div>
           </section>
+          )}
 
         </div>
 
@@ -163,7 +189,18 @@ export default async function EventDetailPage({
               <Detail label="When" value={`${event.dateLabel} · ${event.time}`} />
               <Detail label="Where" value={event.venue} sub={event.address} />
               <Detail label="Price" value={isFree ? "Free entry" : event.priceLabel} />
+              {event.hostName && <Detail label="Host" value={event.hostName} />}
             </dl>
+
+            <div className="mt-5">
+              <EventActions
+                title={event.title}
+                dateISO={event.date}
+                time={event.time}
+                location={`${event.venue}, ${event.address}`}
+                details={event.blurb}
+              />
+            </div>
 
             <div className="mt-5">
               <div className="flex items-center justify-between text-xs">
@@ -195,10 +232,17 @@ export default async function EventDetailPage({
                 </div>
               )}
               
-              <RegistrationForm 
-                eventId={event.id || ""} 
-                isFull={event.spotsLeft <= 0} 
-                userProfile={userProfile} 
+              <RegistrationForm
+                eventId={event.id || ""}
+                isFull={event.spotsLeft <= 0}
+                isPaid={event.price === "Paid"}
+                priceLabel={memberPriceLabel ?? event.priceLabel}
+                memberNote={
+                  memberTier
+                    ? `${discountPct(memberTier)}% ${memberTier} member discount applied`
+                    : undefined
+                }
+                userProfile={userProfile}
               />
             </div>
             <p className="mt-3 text-center text-xs text-faint">
@@ -209,6 +253,24 @@ export default async function EventDetailPage({
             </p>
           </div>
         </aside>
+      </div>
+
+      {/* Mobile sticky register bar */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur lg:hidden">
+        {event.spotsLeft <= 0 ? (
+          <span className="block rounded-full bg-ink-2 py-3 text-center text-sm font-semibold text-muted">
+            Sold out
+          </span>
+        ) : (
+          <a
+            href="#register"
+            className="block rounded-full bg-brand py-3 text-center text-sm font-semibold text-white"
+          >
+            {isFree
+              ? "Register free"
+              : `Buy ticket · ${memberPriceLabel ?? event.priceLabel}`}
+          </a>
+        )}
       </div>
     </>
   );

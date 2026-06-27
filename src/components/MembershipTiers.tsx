@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { Button } from "@/components/Button";
 import { Icon } from "@/components/Icon";
+import { toast } from "@/components/Toast";
 import { type Tier } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -49,7 +50,7 @@ export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
 
       const orderData = await res.json();
       if (!res.ok || orderData.error) {
-        alert(orderData.error || "Failed to initiate payment.");
+        toast(orderData.error || "Failed to initiate payment.", "error");
         setLoadingPlan(null);
         return;
       }
@@ -81,15 +82,15 @@ export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
 
             const verifyData = await verifyRes.json();
             if (verifyRes.ok && verifyData.success) {
-              alert(`🎉 Successfully subscribed to ${tierName}!`);
+              toast(`Subscribed to ${tierName} 🎉`, "success");
               router.push("/events");
               router.refresh();
             } else {
-              alert(verifyData.error || "Payment verification failed.");
+              toast(verifyData.error || "Payment verification failed.", "error");
             }
           } catch (err) {
             console.error("Verification request failed:", err);
-            alert("Connection error during verification.");
+            toast("Connection error during verification.", "error");
           } finally {
             setLoadingPlan(null);
           }
@@ -112,7 +113,7 @@ export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
       rzp.open();
     } catch (err) {
       console.error("Initiate checkout failed:", err);
-      alert("Failed to connect to the payment gateway.");
+      toast("Failed to connect to the payment gateway.", "error");
       setLoadingPlan(null);
     }
   };

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { getCurrentUser } from "@/lib/auth";
+import { membershipOrderSchema, firstError } from "@/lib/validation";
 
 export async function POST(request: Request) {
   try {
@@ -9,10 +10,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { tier } = await request.json();
-    if (tier !== "Pro" && tier !== "Elite") {
-      return NextResponse.json({ error: "Invalid membership tier" }, { status: 400 });
+    const parsed = membershipOrderSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstError(parsed.error) }, { status: 400 });
     }
+    const { tier } = parsed.data;
 
     // Pricing in paise: Pro = ₹499 (49900 paise), Elite = ₹1499 (149900 paise)
     const amount = tier === "Pro" ? 49900 : 149900;

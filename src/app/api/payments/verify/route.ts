@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { sendPaymentReceipt } from "@/lib/email";
+import { membershipVerifySchema, firstError } from "@/lib/validation";
 
 export async function POST(request: Request) {
   try {
@@ -10,24 +12,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const {
-      razorpay_payment_id,
-      razorpay_order_id,
-      razorpay_signature,
-      tier,
-    } = await request.json();
-
-    if (
-      !razorpay_payment_id ||
-      !razorpay_order_id ||
-      !razorpay_signature ||
-      (tier !== "Pro" && tier !== "Elite")
-    ) {
-      return NextResponse.json(
-        { error: "Missing required verification fields" },
-        { status: 400 }
-      );
+    const parsed = membershipVerifySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstError(parsed.error) }, { status: 400 });
     }
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature, tier } =
+      parsed.data;
 
     const key_secret = process.env.RAZORPAY_KEY_SECRET;
     if (!key_secret) {
@@ -132,6 +122,18 @@ export async function POST(request: Request) {
         { error: "Payment logged, but failed to activate membership role in database" },
         { status: 500 }
       );
+    }
+
+    // Best-effort receipt (never blocks the success response).
+    if (user.email) {
+      await sendPaymentReceipt({
+        to: user.email,
+        name: (user.user_metadata?.full_name as string) || "there",
+        description: `${tier} membership`,
+        amount,
+        currency: "INR",
+        paymentRef: razorpay_payment_id,
+      });
     }
 
     return NextResponse.json({ success: true, tier });

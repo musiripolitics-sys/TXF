@@ -19,6 +19,7 @@ export type DBEvent = {
   spots_left: number;
   capacity: number;
   image_url: string | null;
+  host_name?: string | null;
   event_speakers?: {
     sort_order: number;
     speakers: { name: string; role: string | null; initials: string | null } | null;
@@ -97,5 +98,6 @@ export function dbEventToTXF(row: DBEvent): TXFEvent {
     speakers,
     agenda: agenda.length > 0 ? agenda : undefined,
     image: row.image_url ?? categoryImages[row.category] ?? undefined,
+    hostName: row.host_name ?? undefined,
   };
 }

@@ -9,6 +9,8 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
   const [cats, setCats] = useState<EventCategory[]>([]);
   const [city, setCity] = useState<string>("All");
   const [price, setPrice] = useState<string>("All");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"soon" | "later" | "free">("soon");
 
   const cities = useMemo(() => Array.from(new Set(allEvents.map((e) => e.city))), [allEvents]);
 
@@ -17,23 +19,35 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
       prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
     );
 
-  const filtered = useMemo(
-    () =>
-      allEvents.filter(
-        (e) =>
-          (cats.length === 0 || cats.includes(e.category)) &&
-          (city === "All" || e.city === city) &&
-          (price === "All" || e.price === price),
-      ),
-    [allEvents, cats, city, price],
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = allEvents.filter(
+      (e) =>
+        (cats.length === 0 || cats.includes(e.category)) &&
+        (city === "All" || e.city === city) &&
+        (price === "All" || e.price === price) &&
+        (q === "" ||
+          `${e.title} ${e.city} ${e.venue}`.toLowerCase().includes(q)),
+    );
+    return [...list].sort((a, b) => {
+      if (sort === "free") {
+        if (a.price === b.price) return 0;
+        return a.price === "Free" ? -1 : 1;
+      }
+      const da = new Date(a.date).getTime();
+      const db = new Date(b.date).getTime();
+      return sort === "soon" ? da - db : db - da;
+    });
+  }, [allEvents, cats, city, price, search, sort]);
 
-  const hasFilters = cats.length > 0 || city !== "All" || price !== "All";
+  const hasFilters =
+    cats.length > 0 || city !== "All" || price !== "All" || search.trim() !== "";
 
   const clearAll = () => {
     setCats([]);
     setCity("All");
     setPrice("All");
+    setSearch("");
   };
 
   return (
@@ -113,17 +127,26 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
             </span>
           </div>
 
-          {/* Quick category chips */}
-          <div className="mt-5 flex flex-wrap gap-2">
-            {eventCategories.map((c) => (
-              <Chip
-                key={c}
-                active={cats.includes(c)}
-                onClick={() => toggleCat(c)}
-              >
-                {c}
-              </Chip>
-            ))}
+          {/* Search + sort toolbar */}
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search events, city or venue…"
+              aria-label="Search events"
+              className="w-full flex-1 rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              aria-label="Sort events"
+              className="rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-fg focus:border-brand focus:outline-none"
+            >
+              <option value="soon">Soonest first</option>
+              <option value="later">Latest first</option>
+              <option value="free">Free first</option>
+            </select>
           </div>
 
           {filtered.length > 0 ? (
@@ -134,16 +157,22 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
             </div>
           ) : (
             <div className="mt-8 rounded-2xl border border-dashed border-line bg-surface p-12 text-center">
-              <p className="font-display text-lg text-fg">No events match.</p>
-              <p className="mt-1 text-sm text-muted">
-                Try clearing a filter — new events drop every week.
+              <p className="font-display text-lg text-fg">
+                {hasFilters ? "No events match your filters." : "No events yet."}
               </p>
-              <button
-                onClick={clearAll}
-                className="mt-4 rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-soft"
-              >
-                Clear filters
-              </button>
+              <p className="mt-1 text-sm text-muted">
+                {hasFilters
+                  ? "Try adjusting or clearing them — new events drop every week."
+                  : "Check back soon — new events drop every week."}
+              </p>
+              {hasFilters && (
+                <button
+                  onClick={clearAll}
+                  className="mt-4 rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-soft"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           )}
         </div>
