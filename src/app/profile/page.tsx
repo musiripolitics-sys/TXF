@@ -81,6 +81,12 @@ export default async function ProfilePage() {
   const membershipPlan = membershipData?.membership_plans as any;
   const perks = membershipPlan?.plan_benefits || [];
 
+  // Directory eligibility: 100 points, or Elite (always).
+  const points = profile?.points ?? 0;
+  const isElite = membershipData?.tier === "Elite";
+  const directoryEligible = isElite || points >= 100;
+  const sessionsToGo = Math.max(0, Math.ceil((100 - points) / 10));
+
   return (
     <main className="mx-auto max-w-4xl px-5 py-12 sm:px-8 sm:py-24">
       {/* Profile Header */}
@@ -215,6 +221,51 @@ export default async function ProfilePage() {
                 </a>
               </div>
             )}
+
+            {/* Directory progress */}
+            <div className="mt-6 rounded-2xl border border-line bg-surface p-6 shadow-soft">
+              <h3 className="font-display text-lg font-bold text-fg">
+                Member directory
+              </h3>
+              {directoryEligible ? (
+                <>
+                  <p className="mt-1 text-sm font-medium text-host-soft">
+                    ✓ You&apos;re eligible to be listed
+                    {isElite ? " (Elite)" : ""}.
+                  </p>
+                  <a
+                    href="/directory"
+                    className="mt-4 inline-block text-sm font-medium text-brand-soft hover:underline"
+                  >
+                    Open the directory →
+                  </a>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-muted">
+                    Reach 100 points to unlock the networking directory.
+                  </p>
+                  <div className="mt-3 flex items-center justify-between text-xs text-faint">
+                    <span>{points} / 100 points</span>
+                    <span>
+                      {sessionsToGo} more session{sessionsToGo === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink-2">
+                    <div
+                      className="h-full rounded-full bg-brand"
+                      style={{ width: `${Math.min(100, points)}%` }}
+                    />
+                  </div>
+                  <a
+                    href="/membership"
+                    className="mt-4 inline-block text-xs font-medium text-brand-soft hover:underline"
+                  >
+                    Or go Elite to skip the wait →
+                  </a>
+                </>
+              )}
+            </div>
           </section>
         </div>
       </div>

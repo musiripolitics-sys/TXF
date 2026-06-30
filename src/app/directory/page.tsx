@@ -29,7 +29,9 @@ export default async function DirectoryPage() {
         {members.length > 0
           ? `${members.length} member${members.length === 1 ? "" : "s"} you can connect with. `
           : ""}
-        Want to appear here? Turn on the directory toggle in your{" "}
+        Members appear here once they reach <strong>100 points</strong> (earn
+        +10 for each session you attend) — Elite members are listed
+        automatically. Manage your listing in your{" "}
         <a href="/profile/edit" className="text-brand-soft underline">
           profile settings
         </a>

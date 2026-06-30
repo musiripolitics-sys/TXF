@@ -190,7 +190,7 @@ export default async function EventDetailPage({
 
         {/* Sticky registration card */}
         <aside className="lg:pt-2">
-          <div className="sticky top-24 rounded-2xl border border-line bg-surface p-6 shadow-soft">
+          <div className="lg:sticky lg:top-24 rounded-2xl border border-line bg-surface p-6 shadow-soft">
             <dl className="space-y-4 text-sm">
               <Detail label="When" value={`${event.dateLabel} · ${event.time}`} />
               <Detail label="Where" value={event.venue} sub={event.address} />

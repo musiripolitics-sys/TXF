@@ -124,6 +124,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // Elite members are listed in the member directory by default (they can
+    // still opt out later from profile settings).
+    if (tier === "Elite") {
+      await supabase.from("users").update({ discoverable: true }).eq("id", user.id);
+    }
+
     // Best-effort receipt (never blocks the success response).
     if (user.email) {
       await sendPaymentReceipt({

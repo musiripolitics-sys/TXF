@@ -54,7 +54,7 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
       <div className="grid gap-8 lg:grid-cols-[250px_1fr]">
         {/* ── Filter sidebar ── */}
-        <aside className="lg:sticky lg:top-20 lg:h-fit">
+        <aside className="min-w-0 lg:sticky lg:top-20 lg:h-fit">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-2xl font-bold text-fg">Filters</h2>
             {hasFilters && (
@@ -117,7 +117,7 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
         </aside>
 
         {/* ── Results ── */}
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <h1 className="font-display text-3xl font-bold tracking-tight text-fg">
               Events {city !== "All" ? `in ${city}` : "across India"}

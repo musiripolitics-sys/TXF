@@ -10,12 +10,21 @@ const roleLabel: Record<string, string> = {
   admin: "Admin",
 };
 
-export async function createPost(body: string) {
+const TOPIC_CHANNELS = ["all", "meetups", "tech"];
+
+export async function createPost(
+  body: string,
+  channel: string,
+  eventId?: string | null,
+) {
   const parsed = postSchema.safeParse({ body });
   if (!parsed.success) return { error: firstError(parsed.error) };
 
   const user = await getCurrentUser();
   if (!user) return { error: "You must be signed in to post." };
+
+  // Session-group posts carry an eventId; topic posts carry a topic channel.
+  const ch = eventId ? "event" : TOPIC_CHANNELS.includes(channel) ? channel : "all";
 
   const supabase = await createClient();
 
@@ -27,16 +36,19 @@ export async function createPost(body: string) {
     .eq("id", user.id)
     .maybeSingle();
 
+  // RLS rejects the insert if this is a session group the user didn't attend.
   const { error } = await supabase.from("posts").insert({
     author_id: user.id,
     author_name: profile?.full_name || "Member",
     author_role: roleLabel[profile?.primary_role ?? "community_member"] ?? "Member",
     body: parsed.data.body,
+    channel: ch,
+    event_id: eventId ?? null,
   });
 
   if (error) {
     console.error("Create post error:", error);
-    return { error: "Couldn't post. Please try again." };
+    return { error: "Couldn't post here. You may not have access to this group." };
   }
   return { success: true };
 }

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { CommunityFeed } from "@/components/CommunityFeed";
 
 export const metadata = {
@@ -11,6 +12,24 @@ export default async function CommunityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/community");
   const admin = await isAdmin();
+
+  // Session groups = events this member has attended (checked in to).
+  const supabase = await createClient();
+  const { data: attendedRegs } = await supabase
+    .from("registrations")
+    .select("event_id, events(id, title)")
+    .eq("user_id", user.id)
+    .eq("status", "attended");
+
+  const seen = new Set<string>();
+  const eventGroups: { id: string; title: string }[] = [];
+  for (const r of attendedRegs ?? []) {
+    const ev = r.events as unknown as { id: string; title: string } | null;
+    if (ev && !seen.has(ev.id)) {
+      seen.add(ev.id);
+      eventGroups.push({ id: ev.id, title: ev.title });
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-12 sm:px-8">
@@ -29,10 +48,15 @@ export default async function CommunityPage() {
         </a>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Share wins, ask questions, and see what the community is up to.
+        Pick a channel, share wins, ask questions. Session groups are private to
+        attendees of that event.
       </p>
 
-      <CommunityFeed currentUserId={user.id} isAdmin={admin} />
+      <CommunityFeed
+        currentUserId={user.id}
+        isAdmin={admin}
+        eventGroups={eventGroups}
+      />
     </div>
   );
 }
