@@ -18,10 +18,12 @@ const COLS =
 export async function getEvents(): Promise<TXFEvent[]> {
   try {
     const supabase = await createClient();
+    const today = new Date().toISOString().slice(0, 10);
     const { data, error } = await supabase
       .from("events")
       .select(COLS)
       .eq("status", "published")
+      .gte("date", today) // past events drop off the listing
       .order("date", { ascending: true });
 
     if (error || !data || data.length === 0) return staticEvents;

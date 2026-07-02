@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     // 1. Fetch the plan ID of the tier
     const { data: plan, error: planError } = await supabase
       .from("membership_plans")
-      .select("id")
+      .select("id, price_amount")
       .eq("tier", tier)
       .maybeSingle();
 
@@ -55,7 +55,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const amount = tier === "Pro" ? 49900 : 149900;
+    // Same source of truth as create-order: the DB price.
+    const amount = plan.price_amount;
 
     // 2. Insert into payments table
     const { error: paymentError } = await supabase.from("payments").insert({

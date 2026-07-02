@@ -25,7 +25,7 @@ export function AccountSettings({ currentEmail }: { currentEmail: string }) {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser(
       { email },
-      { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/profile` },
+      { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/confirm?next=/profile` },
     );
     setEmailSaving(false);
     if (error) return setEmailErr(error.message);

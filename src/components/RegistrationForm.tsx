@@ -32,10 +32,11 @@ export function RegistrationForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [waitlisted, setWaitlisted] = useState(false);
+  const [promo, setPromo] = useState("");
 
-  // Waitlist applies to free events that are full. Paid-full shows "Sold out".
-  const waitlistMode = isFull && !isPaid;
-  const soldOut = isFull && isPaid;
+  // Full events take waitlist joins. Free: auto-promoted when a seat frees.
+  // Paid: first in line gets notified to buy the freed seat.
+  const waitlistMode = isFull;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -88,7 +89,11 @@ export function RegistrationForm({
       const res = await fetch("/api/payments/ticket-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId }),
+        body: JSON.stringify({
+          eventId,
+          promoCode: promo.trim() || undefined,
+          ...attendee,
+        }),
       });
       const order = await res.json();
       if (!res.ok || order.error) {
@@ -121,6 +126,7 @@ export function RegistrationForm({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
                 eventId,
+                promoCode: promo.trim() || undefined,
                 ...attendee,
               }),
             });
@@ -160,6 +166,18 @@ export function RegistrationForm({
           {success}
         </div>
         <p className="mt-2 text-xs text-faint">Your ticket code</p>
+        {!userProfile?.email && (
+          <p className="mx-auto mt-5 max-w-xs rounded-xl border border-line bg-surface p-3 text-xs text-muted">
+            <a
+              href="/login?mode=signup"
+              className="font-medium text-brand-soft underline"
+            >
+              Create a free account
+            </a>{" "}
+            with this email to keep your ticket, earn points at check-in and
+            join the attendee group after the event.
+          </p>
+        )}
       </div>
     );
   }
@@ -182,16 +200,12 @@ export function RegistrationForm({
       {isPaid && (
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       )}
-      {soldOut ? (
-        <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-center text-red-500">
-          Sold out — this event has reached capacity.
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
           {waitlistMode && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600">
-              This event is full. Join the waitlist and we&apos;ll email you if a
-              spot opens up.
+              {isPaid
+                ? "Sold out. Join the waitlist — if a seat frees up, you're first in line to buy it."
+                : "This event is full. Join the waitlist and we'll email you if a spot opens up."}
             </div>
           )}
           {error && (
@@ -241,6 +255,22 @@ export function RegistrationForm({
             />
           </div>
 
+          {isPaid && !waitlistMode && (
+            <div>
+              <label htmlFor="promo_code" className="block text-sm font-medium text-muted mb-1">
+                Promo code <span className="text-faint">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                id="promo_code"
+                value={promo}
+                onChange={(e) => setPromo(e.target.value)}
+                placeholder="e.g. LAUNCH20"
+                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm uppercase tracking-wide text-fg outline-none transition-colors focus:border-brand"
+              />
+            </div>
+          )}
+
           <button
             type="submit"
             className="inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-50 px-7 py-3.5 text-base bg-brand text-white shadow-[0_8px_30px_-8px_rgba(255,106,26,0.7)] hover:bg-brand-soft hover:-translate-y-0.5 focus-visible:ring-brand w-full"
@@ -265,11 +295,22 @@ export function RegistrationForm({
             </p>
           )}
 
+          {/* Membership upsell — the checkout is the moment the discount is
+              most tangible. Shown only to non-members buying a ticket. */}
+          {isPaid && !waitlistMode && !memberNote && (
+            <p className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-center text-xs text-muted">
+              💡 Members save <strong className="text-fg">up to 50%</strong> on
+              every ticket.{" "}
+              <a href="/membership" className="font-medium text-brand-soft underline">
+                See plans
+              </a>
+            </p>
+          )}
+
           <p className="text-center text-xs text-faint mt-3">
             By registering, you agree to our Code of Conduct and Terms of Service.
           </p>
         </form>
-      )}
     </div>
   );
 }

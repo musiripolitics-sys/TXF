@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { eventCategories, categoryTheme, type EventCategory } from "@/lib/data";
 import { decideHostRequest } from "@/app/admin/actions";
 import { toast } from "@/components/Toast";
@@ -19,6 +18,9 @@ type Submission = {
   description: string;
   status: "pending" | "approved" | "declined";
   submitted_at: string;
+  price_type: "Free" | "Paid";
+  price_amount: number;
+  capacity: number;
 };
 
 type EventRow = {
@@ -95,7 +97,6 @@ export function AdminDashboard({
   adminEmail: string;
   adminId: string;
 }) {
-  const router = useRouter();
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<
@@ -149,7 +150,7 @@ export function AdminDashboard({
     ] = await Promise.all([
       supabase
         .from("host_submissions")
-        .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at")
+        .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity")
         .order("submitted_at", { ascending: false }),
       supabase
         .from("events")
@@ -186,12 +187,6 @@ export function AdminDashboard({
     refresh();
   }, [refresh]);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
   const approve = async (s: Submission) => {
     setBusyId(s.id);
     const { data: inserted, error } = await supabase
@@ -206,12 +201,16 @@ export function AdminDashboard({
         city: s.city,
         venue: s.venue,
         address: `${s.venue}, ${s.city}`,
-        price_type: "Free",
-        price_label: "Free",
+        price_type: s.price_type ?? "Free",
+        price_label:
+          s.price_type === "Paid" && s.price_amount > 0
+            ? `₹${(s.price_amount / 100).toLocaleString("en-IN")}`
+            : "Free",
+        price_amount: s.price_amount ?? 0,
         blurb: s.description.slice(0, 100) + (s.description.length > 100 ? "…" : ""),
         about: s.description,
-        capacity: 100,
-        spots_left: 100,
+        capacity: s.capacity ?? 100,
+        spots_left: s.capacity ?? 100,
         status: "published",
         source: "host_submission",
         submission_id: s.id,
@@ -422,27 +421,16 @@ export function AdminDashboard({
   return (
     <>
       <header className="border-b border-line bg-ink-2">
-        <div className="mx-auto flex max-w-7xl items-start justify-between gap-4 px-5 py-12 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-baseline justify-between gap-4 px-5 py-8 sm:px-8">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-brand-soft">
-              Admin Portal
-            </span>
-            <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-fg">
-              TXF Console
+            <h1 className="font-display text-3xl font-bold tracking-tight text-fg">
+              Console
             </h1>
-            <p className="mt-2 text-sm text-muted">
+            <p className="mt-1 text-sm text-muted">
               Manage event requests, approve submissions, and publish events.
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-faint">{adminEmail}</p>
-            <button
-              onClick={signOut}
-              className="mt-2 rounded-full border border-line bg-surface px-4 py-1.5 text-xs font-medium text-muted hover:text-fg"
-            >
-              Sign out
-            </button>
-          </div>
+          <p className="hidden text-xs text-faint sm:block">{adminEmail}</p>
         </div>
       </header>
 

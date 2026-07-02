@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
-import { Nav } from "@/components/Nav";
-import { Footer } from "@/components/Footer";
+import { Chrome } from "@/components/Chrome";
 import { Toaster } from "@/components/Toast";
-import { getUserRole } from "@/lib/auth";
+import { getUserRole, getCurrentUser } from "@/lib/auth";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -71,6 +70,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const role = await getUserRole();
+  const user = await getCurrentUser();
 
   return (
     <html
@@ -88,11 +88,9 @@ export default async function RootLayout({
         >
           Skip to content
         </a>
-        <Nav role={role} />
-        <main id="main" className="flex-1">
+        <Chrome role={role} authed={!!user}>
           {children}
-        </main>
-        <Footer />
+        </Chrome>
         <Toaster />
       </body>
     </html>

@@ -16,6 +16,9 @@ export function HostForm() {
     venue: "",
     email: "",
     description: "",
+    priceType: "Free" as "Free" | "Paid",
+    priceRupees: "",
+    capacity: "100",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,6 +31,16 @@ export function HostForm() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    const paise =
+      formData.priceType === "Paid"
+        ? Math.round(parseFloat(formData.priceRupees || "0") * 100)
+        : 0;
+    if (formData.priceType === "Paid" && paise <= 0) {
+      setSubmitting(false);
+      setError("Enter a ticket price for a paid event.");
+      return;
+    }
+
     const { error: insertError } = await supabase.from("host_submissions").insert({
       title: formData.title,
       category: formData.category,
@@ -37,6 +50,9 @@ export function HostForm() {
       organizer_email: formData.email,
       description: formData.description,
       organizer_id: user?.id ?? null,
+      price_type: formData.priceType,
+      price_amount: paise,
+      capacity: Math.max(1, parseInt(formData.capacity || "100", 10)),
     });
 
     setSubmitting(false);
@@ -80,6 +96,9 @@ export function HostForm() {
                 venue: "",
                 email: "",
                 description: "",
+                priceType: "Free",
+                priceRupees: "",
+                capacity: "100",
               });
               setSubmitted(false);
             }}
@@ -175,6 +194,53 @@ export function HostForm() {
           onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
           className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-3">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-fg">
+            Ticketing
+          </label>
+          <select
+            value={formData.priceType}
+            onChange={(e) =>
+              setFormData({ ...formData, priceType: e.target.value as "Free" | "Paid" })
+            }
+            className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+          >
+            <option value="Free">Free entry</option>
+            <option value="Paid">Paid tickets</option>
+          </select>
+        </div>
+        {formData.priceType === "Paid" && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-fg">
+              Ticket price (₹)
+            </label>
+            <input
+              type="number"
+              min="1"
+              required
+              placeholder="499"
+              value={formData.priceRupees}
+              onChange={(e) => setFormData({ ...formData, priceRupees: e.target.value })}
+              className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+          </div>
+        )}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-fg">
+            Capacity
+          </label>
+          <input
+            type="number"
+            min="1"
+            required
+            value={formData.capacity}
+            onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+            className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+          />
+        </div>
       </div>
 
       <div>

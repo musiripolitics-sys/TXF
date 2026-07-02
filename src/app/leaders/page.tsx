@@ -4,6 +4,7 @@ import { Section, SectionHeading } from "@/components/Section";
 import { LeaderTeamCard } from "@/components/LeaderTeamCard";
 import { OrgTree, type Org } from "@/components/OrgTree";
 import { getLeaders } from "@/lib/content";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Leaders",
@@ -13,6 +14,16 @@ export const metadata: Metadata = {
 
 export default async function LeadersPage() {
   const leaders = await getLeaders();
+
+  // Live member leaderboard — real attendance points, opt-in members only.
+  let topMembers: { full_name: string | null; city: string | null; points: number }[] = [];
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.rpc("get_top_members", { p_limit: 10 });
+    topMembers = data ?? [];
+  } catch {
+    /* function not deployed yet — section simply hides */
+  }
 
   const ranked = leaders
     .filter((l) => !l.isHiring)
@@ -163,6 +174,39 @@ export default async function LeadersPage() {
           ))}
         </div>
       </Section>
+
+      {/* Live member leaderboard — powered by attendance points */}
+      {topMembers.length > 0 && (
+        <div className="border-y border-line bg-ink-2">
+          <Section>
+            <SectionHeading
+              align="left"
+              eyebrow="Community Leaderboard"
+              title="Most active members"
+              description="Earned by showing up — +10 points for every session attended. Reach 100 to unlock the member directory."
+            />
+            <div className="mt-10 overflow-hidden rounded-2xl border border-line shadow-soft">
+              {topMembers.map((m, i) => (
+                <div
+                  key={`${m.full_name}-${i}`}
+                  className="flex items-center gap-4 border-b border-line bg-surface px-6 py-4 last:border-0"
+                >
+                  <span className="w-6 font-display text-sm font-semibold text-faint">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1">
+                    <p className="font-medium text-fg">{m.full_name ?? "Member"}</p>
+                    {m.city && <p className="text-xs text-faint">{m.city}</p>}
+                  </div>
+                  <span className="text-sm font-semibold text-brand-soft">
+                    {m.points.toLocaleString()} pts
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+      )}
 
       {/* CTA */}
       <Section>

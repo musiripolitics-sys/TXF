@@ -1,10 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
 import {
   sendRegistrationConfirmation,
   sendWaitlistJoined,
   sendWaitlistPromoted,
+  sendSpotOpened,
 } from "@/lib/email";
 import { registerSchema, firstError } from "@/lib/validation";
 
@@ -48,7 +50,7 @@ export async function registerForEvent(eventId: string, formData: FormData) {
   // Best-effort confirmation email (never blocks registration).
   const { data: event } = await supabase
     .from("events")
-    .select("title, date_label, venue")
+    .select("title, slug, date_label, venue")
     .eq("id", eventId)
     .maybeSingle();
   await sendRegistrationConfirmation({
@@ -59,6 +61,18 @@ export async function registerForEvent(eventId: string, formData: FormData) {
     dateLabel: event?.date_label,
     venue: event?.venue,
   });
+
+  // In-app notification for signed-in registrants (RLS: own insert).
+  const user = await getCurrentUser();
+  if (user) {
+    await supabase.from("notifications").insert({
+      user_id: user.id,
+      type: "event",
+      title: `You're registered for ${event?.title ?? "an event"}`,
+      body: `Ticket ${ticketCode.toUpperCase()} — see you there!`,
+      link: event?.slug ? `/events/${event.slug}` : null,
+    });
+  }
 
   return { success: true, ticketCode };
 }
@@ -122,19 +136,28 @@ export async function cancelRegistration(registrationId: string) {
     return { error: "Couldn't cancel. Please try again." };
   }
 
-  // If a waitlisted attendee was promoted into the freed seat, let them know.
-  const promoted = (data as { promoted?: {
-    email: string;
-    name: string;
-    ticket: string;
-    event_title: string;
-  } | null })?.promoted;
-  if (promoted) {
+  const result = data as {
+    promoted?: { email: string; name: string; ticket: string; event_title: string } | null;
+    spot_opened?: { email: string; name: string; event_title: string; slug: string } | null;
+  };
+
+  // Free event: a waitlister was promoted into the freed seat.
+  if (result?.promoted) {
     await sendWaitlistPromoted({
-      to: promoted.email,
-      name: promoted.name,
-      eventTitle: promoted.event_title,
-      ticketCode: promoted.ticket,
+      to: result.promoted.email,
+      name: result.promoted.name,
+      eventTitle: result.promoted.event_title,
+      ticketCode: result.promoted.ticket,
+    });
+  }
+
+  // Paid event: the first waitlister gets a "buy it now" alert instead.
+  if (result?.spot_opened) {
+    await sendSpotOpened({
+      to: result.spot_opened.email,
+      name: result.spot_opened.name,
+      eventTitle: result.spot_opened.event_title,
+      slug: result.spot_opened.slug,
     });
   }
 

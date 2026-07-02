@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { getCurrentUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { membershipOrderSchema, firstError } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -16,8 +17,18 @@ export async function POST(request: Request) {
     }
     const { tier } = parsed.data;
 
-    // Pricing in paise: Pro = ₹499 (49900 paise), Elite = ₹1499 (149900 paise)
-    const amount = tier === "Pro" ? 49900 : 149900;
+    // Price always comes from the DB so pricing changes never need a deploy
+    // and the page and the charge can't diverge.
+    const supabase = await createClient();
+    const { data: plan } = await supabase
+      .from("membership_plans")
+      .select("price_amount")
+      .eq("tier", tier)
+      .maybeSingle();
+    if (!plan?.price_amount || plan.price_amount <= 0) {
+      return NextResponse.json({ error: "Membership plan not available" }, { status: 400 });
+    }
+    const amount = plan.price_amount;
 
     const key_id = process.env.RAZORPAY_KEY_ID;
     const key_secret = process.env.RAZORPAY_KEY_SECRET;
@@ -40,6 +51,7 @@ export async function POST(request: Request) {
       currency: "INR",
       receipt: `membership_${user.id}_${Date.now().toString().slice(-6)}`,
       notes: {
+        kind: "membership",
         userId: user.id,
         tier,
       },

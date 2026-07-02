@@ -14,11 +14,12 @@ export async function decideHostRequest(userId: string, approve: boolean) {
 
   const supabase = await createClient();
 
-  const update = approve
-    ? { primary_role: "event_host", host_status: "approved" }
-    : { host_status: "rejected" };
-
-  const { error } = await supabase.from("users").update(update).eq("id", userId);
+  // decide_host updates the profile (is_admin-gated) AND creates an in-app
+  // notification for the user in one call.
+  const { error } = await supabase.rpc("decide_host", {
+    p_user_id: userId,
+    p_approve: approve,
+  });
   if (error) return { error: error.message };
 
   const { data: u } = await supabase

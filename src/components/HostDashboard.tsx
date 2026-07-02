@@ -98,31 +98,22 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   return (
     <>
       <header className="border-b border-line bg-ink-2">
-        <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
-          <span className="text-xs font-semibold uppercase tracking-wider text-brand-soft">
-            Host Portal
-          </span>
-          <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-fg">
-            My Events
-          </h1>
-          <p className="mt-2 text-sm text-muted">
-            Track your submissions, resubmit rejected ones, and manage attendees
-            for your live events.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              href="/host"
-              className="inline-block rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft"
-            >
-              + Propose a new event
-            </Link>
-            <Link
-              href="/host/checkin"
-              className="inline-block rounded-full border border-line bg-surface px-5 py-2.5 text-sm font-medium text-fg hover:border-brand hover:text-brand"
-            >
-              Door check-in →
-            </Link>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-5 py-8 sm:px-8">
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-fg">
+              My Events
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              Track your submissions, resubmit rejected ones, and manage
+              attendees for your live events.
+            </p>
           </div>
+          <Link
+            href="/host"
+            className="inline-block rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft"
+          >
+            + Propose a new event
+          </Link>
         </div>
       </header>
 

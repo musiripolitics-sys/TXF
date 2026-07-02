@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       razorpay_order_id,
       razorpay_signature,
       eventId,
+      promoCode,
       attendee_name,
       attendee_email,
       attendee_phone,
@@ -58,9 +59,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    // Recompute the member-discounted amount the same way the order did.
+    // Recompute the discount the same way the order did (best of member/promo).
     const tier = await getActiveTier(supabase, user.id);
-    const finalAmount = applyMemberDiscount(event.price_amount, tier);
+    const memberAmount = applyMemberDiscount(event.price_amount, tier);
+    let promoPct = 0;
+    if (promoCode) {
+      const { data: pct } = await supabase.rpc("validate_promo", { p_code: promoCode });
+      promoPct = (pct as number) ?? 0;
+    }
+    const promoAmount = Math.round(event.price_amount * (100 - promoPct) / 100);
+    const finalAmount = Math.min(memberAmount, promoAmount);
+    const promoApplied = promoCode && promoAmount < memberAmount;
 
     // 1. Log the payment (idempotent on provider_ref).
     const { data: payment, error: paymentError } = await supabase
@@ -101,24 +110,57 @@ export async function POST(request: Request) {
 
     if (regError) {
       const msg = regError.message ?? "";
-      // Payment succeeded but registration didn't — surface clearly so it can be reconciled/refunded.
+
+      // Payment succeeded but no seat could be granted — refund automatically
+      // instead of stranding the buyer's money.
+      let refunded = false;
+      try {
+        const Razorpay = (await import("razorpay")).default;
+        const rzp = new Razorpay({
+          key_id: process.env.RAZORPAY_KEY_ID!,
+          key_secret,
+        });
+        await rzp.payments.refund(razorpay_payment_id, { amount: finalAmount });
+        await supabase
+          .from("payments")
+          .update({ status: "refunded" })
+          .eq("id", payment.id);
+        refunded = true;
+      } catch (refundErr) {
+        console.error("Auto-refund failed:", refundErr);
+      }
+
+      const tail = refunded
+        ? "Your payment has been refunded automatically."
+        : "Your payment was recorded — contact support for a refund.";
       if (msg.includes("ALREADY_REGISTERED")) {
         return NextResponse.json(
-          { error: "You're already registered. Your payment was recorded — contact support for a refund." },
+          { error: `You're already registered. ${tail}` },
           { status: 409 },
         );
       }
       if (msg.includes("EVENT_FULL")) {
         return NextResponse.json(
-          { error: "This event filled up. Your payment was recorded — contact support for a refund." },
+          { error: `This event filled up. ${tail}` },
+          { status: 409 },
+        );
+      }
+      if (msg.includes("EVENT_OVER")) {
+        return NextResponse.json(
+          { error: `This event has already taken place. ${tail}` },
           { status: 409 },
         );
       }
       console.error("Ticket registration after payment failed:", regError);
       return NextResponse.json(
-        { error: "Payment logged, but registration failed. Contact support." },
+        { error: `Registration failed. ${tail}` },
         { status: 500 },
       );
+    }
+
+    // Consume the promo only after a successful, paid registration.
+    if (promoApplied) {
+      await supabase.rpc("redeem_promo", { p_code: promoCode });
     }
 
     // Best-effort emails (never block the success response).

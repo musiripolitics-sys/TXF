@@ -17,8 +17,21 @@ export const registerSchema = z.object({
   attendee_phone: phone,
 });
 
+const promoCode = z
+  .string()
+  .trim()
+  .max(40)
+  .optional()
+  .transform((v) => (v ? v : null));
+
 export const ticketOrderSchema = z.object({
   eventId: uuid,
+  promoCode,
+  // Attendee details ride along so the Razorpay order notes carry everything
+  // the webhook needs to fulfil the ticket if the browser never comes back.
+  attendee_name: name,
+  attendee_email: email,
+  attendee_phone: phone,
 });
 
 export const ticketVerifySchema = z.object({
@@ -26,6 +39,7 @@ export const ticketVerifySchema = z.object({
   razorpay_order_id: z.string().min(1),
   razorpay_signature: z.string().min(1),
   eventId: uuid,
+  promoCode,
   attendee_name: name,
   attendee_email: email,
   attendee_phone: phone,

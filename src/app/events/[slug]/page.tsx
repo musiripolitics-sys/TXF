@@ -53,6 +53,7 @@ export default async function EventDetailPage({
     ticket_code: string;
     attendee_name: string;
     status: string;
+    payment_id: string | null;
   }[] = [];
   let memberTier: PaidTier | null = null;
   let memberPriceLabel: string | null = null;
@@ -68,7 +69,7 @@ export default async function EventDetailPage({
     if (event.id) {
       const { data: regs } = await supabase
         .from("registrations")
-        .select("id, ticket_code, attendee_name, status")
+        .select("id, ticket_code, attendee_name, status, payment_id")
         .eq("user_id", user.id)
         .eq("event_id", event.id);
       if (regs) userRegistrations = regs;
@@ -252,7 +253,18 @@ export default async function EventDetailPage({
                           </>
                         )}
                         <div className="mt-3">
-                          <CancelRegistrationBtn registrationId={reg.id} />
+                          {reg.payment_id ? (
+                            // Paid ticket: self-cancel would silently forfeit the
+                            // payment — route through support for a refund instead.
+                            <a
+                              href="/contact"
+                              className="text-xs text-faint underline hover:text-muted"
+                            >
+                              Need to cancel? Contact support for a refund
+                            </a>
+                          ) : (
+                            <CancelRegistrationBtn registrationId={reg.id} />
+                          )}
                         </div>
                       </div>
                     );

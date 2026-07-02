@@ -16,7 +16,8 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: firstError(parsed.error) }, { status: 400 });
     }
-    const { eventId } = parsed.data;
+    const { eventId, promoCode, attendee_name, attendee_email, attendee_phone } =
+      parsed.data;
 
     const supabase = await createClient();
     const { data: event, error } = await supabase
@@ -49,16 +50,37 @@ export async function POST(request: Request) {
       );
     }
 
-    // Member discount (Pro/Elite) — computed server-side from the DB.
+    // Discounts are computed server-side. Member discount and promo code
+    // don't stack — the better of the two applies.
     const tier = await getActiveTier(supabase, user.id);
-    const finalAmount = applyMemberDiscount(event.price_amount, tier);
+    const memberAmount = applyMemberDiscount(event.price_amount, tier);
+
+    let promoPct = 0;
+    if (promoCode) {
+      const { data: pct } = await supabase.rpc("validate_promo", { p_code: promoCode });
+      promoPct = (pct as number) ?? 0;
+      if (promoPct <= 0) {
+        return NextResponse.json({ error: "Invalid or expired promo code" }, { status: 400 });
+      }
+    }
+    const promoAmount = Math.round(event.price_amount * (100 - promoPct) / 100);
+    const finalAmount = Math.min(memberAmount, promoAmount);
 
     const razorpay = new Razorpay({ key_id, key_secret });
     const order = await razorpay.orders.create({
       amount: finalAmount,
       currency: event.currency || "INR",
       receipt: `ticket_${event.id.slice(0, 8)}_${Date.now().toString().slice(-6)}`,
-      notes: { userId: user.id, eventId: event.id },
+      // Everything the webhook needs to fulfil this ticket without the browser.
+      notes: {
+        kind: "ticket",
+        userId: user.id,
+        eventId: event.id,
+        attendee_name,
+        attendee_email,
+        attendee_phone: attendee_phone ?? "",
+        promoCode: promoCode ?? "",
+      },
     });
 
     return NextResponse.json({
