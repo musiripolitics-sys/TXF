@@ -59,34 +59,39 @@ export default async function EventDetailPage({
   let memberPriceLabel: string | null = null;
   if (user) {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("users")
-      .select("full_name, email, phone")
-      .eq("id", user.id)
-      .single();
-    if (data) userProfile = data;
+    // One parallel batch instead of four sequential round trips.
+    const [{ data: profile }, { data: regs }, tier, { data: priceRow }] =
+      await Promise.all([
+        supabase
+          .from("users")
+          .select("full_name, email, phone")
+          .eq("id", user.id)
+          .single(),
+        event.id
+          ? supabase
+              .from("registrations")
+              .select("id, ticket_code, attendee_name, status, payment_id")
+              .eq("user_id", user.id)
+              .eq("event_id", event.id)
+          : Promise.resolve({ data: null }),
+        getActiveTier(supabase, user.id),
+        !isFree && event.id
+          ? supabase
+              .from("events")
+              .select("price_amount")
+              .eq("id", event.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
 
-    if (event.id) {
-      const { data: regs } = await supabase
-        .from("registrations")
-        .select("id, ticket_code, attendee_name, status, payment_id")
-        .eq("user_id", user.id)
-        .eq("event_id", event.id);
-      if (regs) userRegistrations = regs;
-    }
+    if (profile) userProfile = profile;
+    if (regs) userRegistrations = regs;
+    memberTier = tier;
 
     // Member ticket discount preview (the charge is enforced server-side).
-    memberTier = await getActiveTier(supabase, user.id);
-    if (memberTier && !isFree && event.id) {
-      const { data: ev } = await supabase
-        .from("events")
-        .select("price_amount")
-        .eq("id", event.id)
-        .maybeSingle();
-      if (ev?.price_amount) {
-        const discounted = applyMemberDiscount(ev.price_amount, memberTier);
-        memberPriceLabel = `₹${(discounted / 100).toLocaleString("en-IN")}`;
-      }
+    if (memberTier && priceRow?.price_amount) {
+      const discounted = applyMemberDiscount(priceRow.price_amount, memberTier);
+      memberPriceLabel = `₹${(discounted / 100).toLocaleString("en-IN")}`;
     }
   }
 

@@ -11,15 +11,16 @@ export const metadata = {
 export default async function CommunityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/community");
-  const admin = await isAdmin();
-
-  // Session groups = events this member has attended (checked in to).
+  // Admin check and session groups in parallel.
   const supabase = await createClient();
-  const { data: attendedRegs } = await supabase
-    .from("registrations")
-    .select("event_id, events(id, title)")
-    .eq("user_id", user.id)
-    .eq("status", "attended");
+  const [admin, { data: attendedRegs }] = await Promise.all([
+    isAdmin(),
+    supabase
+      .from("registrations")
+      .select("event_id, events(id, title)")
+      .eq("user_id", user.id)
+      .eq("status", "attended"),
+  ]);
 
   const seen = new Set<string>();
   const eventGroups: { id: string; title: string }[] = [];
