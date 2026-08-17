@@ -6,7 +6,7 @@ import { getLeaders } from "@/lib/content";
 
 export async function Leadership() {
   const leaders = await getLeaders();
-  const order = ["Mahalakshmi", "Kumaresan", "Abishek"];
+  const order = ["Mahalakshmi", "Kumaresan", "Priyanka", "Abishek"];
   const activeLeaders: Leader[] = order
     .map((n) => leaders.find((l) => l.name === n))
     .filter((l): l is Leader => !!l);

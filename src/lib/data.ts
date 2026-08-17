@@ -258,6 +258,7 @@ export const memberBenefits: MemberBenefit[] = [
 
 export type LeaderRole =
   | "Founder"
+  | "Manager"
   | "Community Lead"
   | "Event Coordinator"
   | "Ambassador"
@@ -297,6 +298,17 @@ export const leaders: Leader[] = [
     focus: "Vision & Strategy",
     bio: "Leading Techxfluence to build India's strongest community for creators and innovators.",
     image: "/team/kumaresan.png",
+  },
+  {
+    name: "Priyanka",
+    role: "Manager",
+    initials: "P",
+    city: "Chennai",
+    events: 28,
+    points: 5200,
+    focus: "Operations & Programs",
+    bio: "Keeping Techxfluence running — coordinating events, partnerships and the team behind every gathering.",
+    image: "/team/priyanka.jpg",
   },
   {
     name: "Mahalakshmi",
@@ -390,6 +402,7 @@ export const leaders: Leader[] = [
 
 export const leaderRoles: LeaderRole[] = [
   "Founder",
+  "Manager",
   "Community Lead",
   "Event Coordinator",
   "Ambassador",
@@ -398,6 +411,7 @@ export const leaderRoles: LeaderRole[] = [
 
 export const roleBlurbs: Record<LeaderRole, string> = {
   Founder: "Sets the vision and holds the community together.",
+  Manager: "Runs day-to-day operations and keeps events and programs on track.",
   "Community Lead": "Owns member experience, partnerships and day-to-day momentum.",
   "Event Coordinator": "Plans and runs events end-to-end so they go off without a hitch.",
   Ambassador: "Grows local chapters and represents TXF in their city and campus.",
