@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { HeroSearch } from "./HeroSearch";
 
 export function Hero() {
   return (
@@ -28,7 +29,11 @@ export function Hero() {
             influence.
           </p>
 
-          <div className="animate-float-up mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="animate-float-up">
+            <HeroSearch />
+          </div>
+
+          <div className="animate-float-up mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button href="/events" variant="join" size="lg">
               Join Events
             </Button>

@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { EventActions } from "@/components/EventActions";
+import { EventJsonLd } from "@/components/EventJsonLd";
 import {
   getActiveTier,
   applyMemberDiscount,
@@ -24,9 +25,26 @@ export async function generateMetadata({
   const { slug } = await params;
   const event = await getEventBySlug(slug);
   if (!event) return { title: "Event not found" };
+
+  const url = `/events/${event.slug}`;
+  const image = event.image ?? "/logo.png";
   return {
     title: event.title,
     description: event.blurb,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      url,
+      title: event.title,
+      description: event.blurb,
+      images: [{ url: image, alt: event.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: event.title,
+      description: event.blurb,
+      images: [image],
+    },
   };
 }
 
@@ -97,6 +115,8 @@ export default async function EventDetailPage({
 
   return (
     <>
+      <EventJsonLd event={event} startsAt={event.startsAt} endsAt={event.endsAt} />
+
       {/* Hero */}
       <header className="relative overflow-hidden border-b border-line bg-ink-2">
         {event.image ? (

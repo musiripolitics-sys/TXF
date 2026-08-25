@@ -8,7 +8,7 @@ import {
 import { dbEventToTXF, type DBEvent } from "./events-map";
 
 const COLS =
-  "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url";
+  "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url,starts_at,ends_at";
 
 /**
  * Published events from Supabase, newest date first.

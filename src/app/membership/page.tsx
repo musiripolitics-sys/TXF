@@ -30,6 +30,23 @@ export default async function MembershipPage() {
             From getting plugged in to leading the community — every tier is
             built so showing up pays off.
           </p>
+
+          {/* Concrete member value — mirrors what the app actually enforces. */}
+          <ul className="mx-auto mt-7 flex max-w-2xl flex-wrap items-center justify-center gap-2">
+            {[
+              { icon: "tag", text: "Save 25–50% on every paid ticket" },
+              { icon: "clock", text: "Priority registration" },
+              { icon: "users", text: "Member directory & networking" },
+            ].map((v) => (
+              <li
+                key={v.text}
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-medium text-fg"
+              >
+                <Icon name={v.icon} className="h-3.5 w-3.5 text-brand-soft" />
+                {v.text}
+              </li>
+            ))}
+          </ul>
         </div>
       </header>
 

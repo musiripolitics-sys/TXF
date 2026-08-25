@@ -1,5 +1,5 @@
 import { Section, SectionHeading } from "@/components/Section";
-import { EventPosterCard } from "@/components/EventPosterCard";
+import { EventCard } from "@/components/EventCard";
 import { Button } from "@/components/Button";
 import { getEvents } from "@/lib/events";
 
@@ -21,9 +21,9 @@ export async function UpcomingEvents() {
       </div>
 
       {events.length > 0 ? (
-        <div className="mt-12 grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-          {events.slice(0, 4).map((event) => (
-            <EventPosterCard key={event.slug} event={event} />
+        <div className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {events.slice(0, 6).map((event) => (
+            <EventCard key={event.slug} event={event} />
           ))}
         </div>
       ) : (

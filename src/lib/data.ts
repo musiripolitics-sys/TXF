@@ -58,6 +58,8 @@ export type TXFEvent = {
   agenda?: { when: string; what: string }[];
   image?: string;
   hostName?: string;
+  startsAt?: string;
+  endsAt?: string;
   ticketTypes?: TicketType[];
   questions?: EventQuestion[];
 };

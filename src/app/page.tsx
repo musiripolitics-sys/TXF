@@ -1,4 +1,5 @@
 import { Hero } from "@/components/home/Hero";
+import { CategoryBrowse } from "@/components/home/CategoryBrowse";
 import { UpcomingEvents } from "@/components/home/UpcomingEvents";
 import { StatsBand } from "@/components/home/StatsBand";
 import { Membership } from "@/components/home/Membership";
@@ -11,6 +12,7 @@ export default function Home() {
   return (
     <>
       <Hero />
+      <CategoryBrowse />
       <UpcomingEvents />
       <StatsBand />
       <Membership />

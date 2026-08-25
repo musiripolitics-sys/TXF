@@ -2,14 +2,26 @@
 
 import { useMemo, useState } from "react";
 import { eventCategories, type EventCategory, type TXFEvent } from "@/lib/data";
-import { EventRow } from "./EventRow";
+import { EventCard } from "./EventCard";
 
-export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) {
+export function EventsBrowser({
+  initialEvents,
+  initialQuery = "",
+  initialCategory = "",
+}: {
+  initialEvents: TXFEvent[];
+  initialQuery?: string;
+  initialCategory?: string;
+}) {
   const [allEvents] = useState<TXFEvent[]>(initialEvents);
-  const [cats, setCats] = useState<EventCategory[]>([]);
+  const [cats, setCats] = useState<EventCategory[]>(
+    eventCategories.includes(initialCategory as EventCategory)
+      ? [initialCategory as EventCategory]
+      : [],
+  );
   const [city, setCity] = useState<string>("All");
   const [price, setPrice] = useState<string>("All");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQuery);
   const [sort, setSort] = useState<"soon" | "later" | "free">("soon");
 
   const cities = useMemo(() => Array.from(new Set(allEvents.map((e) => e.city))), [allEvents]);
@@ -150,9 +162,9 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
           </div>
 
           {filtered.length > 0 ? (
-            <div className="mt-8 flex flex-col gap-4">
+            <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((event) => (
-                <EventRow key={event.slug} event={event} />
+                <EventCard key={event.slug} event={event} />
               ))}
             </div>
           ) : (

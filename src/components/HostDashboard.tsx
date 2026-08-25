@@ -103,6 +103,117 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [editFor, setEditFor] = useState<string | null>(null);
   const [edits, setEdits] = useState<EventEdits | null>(null);
 
+  // ── Create a new event (approved hosts publish their own) ──
+  type NewTier = { name: string; price: number; capacity: number };
+  const blankNew = {
+    title: "",
+    category: "Meetup",
+    date: "",
+    time: "10:00 AM – 1:00 PM IST",
+    city: "",
+    venue: "",
+    address: "",
+    blurb: "",
+    about: "",
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ ...blankNew });
+  const [newTiers, setNewTiers] = useState<NewTier[]>([
+    { name: "General Admission", price: 0, capacity: 100 },
+  ]);
+
+  const slugify = (t: string) =>
+    `${t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+
+  const createEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const tiers = newTiers.filter((t) => t.name.trim() && t.capacity > 0);
+    const list = tiers.length ? tiers : [{ name: "General Admission", price: 0, capacity: 100 }];
+    const totalCapacity = list.reduce((s, t) => s + Number(t.capacity), 0);
+    const cheapest = Math.min(...list.map((t) => Math.round((t.price || 0) * 100)));
+    const isFree = cheapest === 0;
+
+    setBusyId("create");
+    const { data: ev, error } = await supabase
+      .from("events")
+      .insert({
+        slug: slugify(form.title),
+        title: form.title.trim(),
+        category: form.category,
+        date: form.date,
+        date_label: form.date
+          ? new Date(form.date).toLocaleDateString("en-US", {
+              month: "short",
+              day: "2-digit",
+              year: "numeric",
+            })
+          : null,
+        time: form.time,
+        city: form.city.trim(),
+        venue: form.venue.trim(),
+        address: form.address.trim() || `${form.venue}, ${form.city}`,
+        price_type: isFree ? "Free" : "Paid",
+        price_label: isFree ? "Free" : `₹${(cheapest / 100).toLocaleString("en-IN")}`,
+        price_amount: cheapest,
+        blurb: form.blurb.trim(),
+        about: form.about.trim(),
+        capacity: totalCapacity,
+        spots_left: totalCapacity,
+        // Created as a draft — the host publishes when they're ready.
+        status: "draft",
+        source: "host_submission",
+        host_id: hostId,
+      })
+      .select("id")
+      .single();
+
+    if (error || !ev) {
+      setBusyId(null);
+      return toast("Couldn't create the event. " + (error?.message ?? ""), "error");
+    }
+
+    await supabase.from("ticket_types").insert(
+      list.map((t, i) => ({
+        event_id: ev.id,
+        name: t.name.trim(),
+        price_amount: Math.round((t.price || 0) * 100),
+        capacity: Number(t.capacity),
+        sort_order: i,
+      })),
+    );
+
+    setBusyId(null);
+    toast("Event created as a draft — publish it when you're ready.", "success");
+    setForm({ ...blankNew });
+    setNewTiers([{ name: "General Admission", price: 0, capacity: 100 }]);
+    setShowCreate(false);
+    await refresh();
+  };
+
+  type EventStats = {
+    revenue: number;
+    tickets: number;
+    checked_in: number;
+    waitlisted: number;
+    last7: number;
+    tiers: { name: string; sold: number; capacity: number; price: number }[];
+  };
+  const [stats, setStats] = useState<Record<string, EventStats>>({});
+  const [statsFor, setStatsFor] = useState<string | null>(null);
+
+  const toggleStats = async (eventId: string) => {
+    if (statsFor === eventId) return setStatsFor(null);
+    setStatsFor(eventId);
+    if (stats[eventId]) return; // already loaded
+    const { data, error } = await supabase.rpc("get_event_stats", {
+      p_event_id: eventId,
+    });
+    if (error) return toast("Couldn't load stats. " + error.message, "error");
+    setStats((s) => ({ ...s, [eventId]: data as EventStats }));
+  };
+
   type Question = { id: string; label: string; type: string; required: boolean };
   const [questions, setQuestions] = useState<Question[]>([]);
   const [newQ, setNewQ] = useState({ label: "", type: "text", required: false });
@@ -266,14 +377,187 @@ export function HostDashboard({ hostId }: { hostId: string }) {
               attendees for your live events.
             </p>
           </div>
-          <Link
-            href="/host"
+          <button
+            onClick={() => setShowCreate((v) => !v)}
             className="inline-block rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft"
           >
-            + Propose a new event
-          </Link>
+            {showCreate ? "Close" : "+ Create an event"}
+          </button>
         </div>
       </header>
+
+      {showCreate && (
+        <div className="border-b border-line bg-ink-2">
+          <form
+            onSubmit={createEvent}
+            className="mx-auto max-w-6xl space-y-4 px-5 py-8 sm:px-8"
+          >
+            <div>
+              <h2 className="font-display text-xl font-bold text-fg">New event</h2>
+              <p className="mt-1 text-sm text-muted">
+                Saved as a draft — nothing goes live until you hit Publish.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Title" required>
+                <input
+                  required
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="AI Builders Meetup"
+                  className={fieldCls}
+                />
+              </Field>
+              <Field label="Category">
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className={fieldCls}
+                >
+                  {["Meetup","Workshop","Webinar","Hackathon","Conference","Networking","Product Launch"].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Date" required>
+                <input
+                  type="date"
+                  required
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  className={fieldCls}
+                />
+              </Field>
+              <Field label="Time (label)">
+                <input
+                  value={form.time}
+                  onChange={(e) => setForm({ ...form, time: e.target.value })}
+                  className={fieldCls}
+                />
+              </Field>
+              <Field label="City" required>
+                <input
+                  required
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  placeholder="Chennai (or Online)"
+                  className={fieldCls}
+                />
+              </Field>
+              <Field label="Venue" required>
+                <input
+                  required
+                  value={form.venue}
+                  onChange={(e) => setForm({ ...form, venue: e.target.value })}
+                  className={fieldCls}
+                />
+              </Field>
+            </div>
+
+            <Field label="Address">
+              <input
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                className={fieldCls}
+              />
+            </Field>
+            <Field label="Short summary" required>
+              <input
+                required
+                value={form.blurb}
+                onChange={(e) => setForm({ ...form, blurb: e.target.value })}
+                className={fieldCls}
+              />
+            </Field>
+            <Field label="Full description" required>
+              <textarea
+                required
+                rows={4}
+                value={form.about}
+                onChange={(e) => setForm({ ...form, about: e.target.value })}
+                className={`${fieldCls} resize-none`}
+              />
+            </Field>
+
+            {/* Ticket tiers */}
+            <div className="rounded-2xl border border-line bg-surface p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-fg">Ticket types</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Price in ₹ (0 = free). Capacity totals across tiers.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewTiers((r) => [...r, { name: "", price: 0, capacity: 50 }])}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
+                >
+                  + Add tier
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {newTiers.map((t, i) => (
+                  <div key={i} className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+                    <input
+                      value={t.name}
+                      onChange={(e) =>
+                        setNewTiers((r) => r.map((x, ix) => (ix === i ? { ...x, name: e.target.value } : x)))
+                      }
+                      placeholder="Early Bird"
+                      className={fieldCls}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={t.price}
+                      onChange={(e) =>
+                        setNewTiers((r) => r.map((x, ix) => (ix === i ? { ...x, price: Number(e.target.value) } : x)))
+                      }
+                      className={fieldCls}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      value={t.capacity}
+                      onChange={(e) =>
+                        setNewTiers((r) => r.map((x, ix) => (ix === i ? { ...x, capacity: Number(e.target.value) } : x)))
+                      }
+                      className={fieldCls}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewTiers((r) => (r.length > 1 ? r.filter((_, ix) => ix !== i) : r))}
+                      disabled={newTiers.length === 1}
+                      className="rounded-full border border-line px-3 text-xs text-muted hover:border-red-500/40 hover:text-red-500 disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="rounded-full border border-line px-5 py-2.5 text-sm font-medium text-muted hover:text-fg"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busyId === "create"}
+                className="rounded-full bg-brand px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-soft disabled:opacity-50"
+              >
+                {busyId === "create" ? "Creating…" : "Create draft"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <div className="mx-auto max-w-6xl space-y-12 px-5 py-10 sm:px-8">
         {loading && <p className="text-center text-sm text-muted">Loading…</p>}
@@ -458,6 +742,12 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                           Message attendees
                         </button>
                         <button
+                          onClick={() => toggleStats(ev.id)}
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
+                        >
+                          Stats
+                        </button>
+                        <button
                           onClick={() => openEdit(ev)}
                           className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
                         >
@@ -482,6 +772,78 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                           </span>
                         )}
                       </div>
+
+                      {statsFor === ev.id && stats[ev.id] && (
+                        <div className="border-b border-line bg-ink-2 p-5">
+                          <div className="grid gap-3 sm:grid-cols-4">
+                            {[
+                              { label: "Revenue", value: inr(stats[ev.id].revenue) },
+                              { label: "Tickets sold", value: String(stats[ev.id].tickets) },
+                              {
+                                label: "Checked in",
+                                value: `${stats[ev.id].checked_in}${
+                                  stats[ev.id].tickets
+                                    ? ` · ${Math.round(
+                                        (stats[ev.id].checked_in / stats[ev.id].tickets) * 100,
+                                      )}%`
+                                    : ""
+                                }`,
+                              },
+                              { label: "Last 7 days", value: `+${stats[ev.id].last7}` },
+                            ].map((c) => (
+                              <div
+                                key={c.label}
+                                className="rounded-xl border border-line bg-surface p-4"
+                              >
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                                  {c.label}
+                                </p>
+                                <p className="mt-1 font-display text-xl font-bold text-fg">
+                                  {c.value}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {stats[ev.id].tiers.length > 0 && (
+                            <div className="mt-4 space-y-2">
+                              <p className="text-xs font-semibold text-fg">By ticket type</p>
+                              {stats[ev.id].tiers.map((t) => {
+                                const pct = t.capacity
+                                  ? Math.min(100, Math.round((t.sold / t.capacity) * 100))
+                                  : 0;
+                                return (
+                                  <div key={t.name}>
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-fg">
+                                        {t.name}{" "}
+                                        <span className="text-faint">
+                                          {t.price > 0 ? inr(t.price) : "Free"}
+                                        </span>
+                                      </span>
+                                      <span className="text-muted">
+                                        {t.sold}/{t.capacity}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-2">
+                                      <div
+                                        className="h-full rounded-full bg-brand"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {stats[ev.id].waitlisted > 0 && (
+                            <p className="mt-3 text-xs text-amber-600">
+                              {stats[ev.id].waitlisted} on the waitlist
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {editFor === ev.id && edits && (
                         <div className="space-y-3 border-b border-line bg-ink-2 p-5">
@@ -684,5 +1046,28 @@ export function HostDashboard({ hostId }: { hostId: string }) {
         )}
       </div>
     </>
+  );
+}
+
+const fieldCls =
+  "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none";
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-muted">
+        {label}
+        {required && <span className="text-brand"> *</span>}
+      </span>
+      {children}
+    </label>
   );
 }

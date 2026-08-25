@@ -49,6 +49,31 @@ export default async function ProfilePage() {
 
   // Fetch Registrations
   // Since we don't have a direct helper like `getEvents` for user specific, we'll query it here.
+  // Order history — one row per purchase, with what was charged.
+  let orders: {
+    id: string;
+    quantity: number;
+    total: number;
+    status: string;
+    created_at: string;
+    promo_code: string | null;
+    events: { title: string; slug: string } | null;
+    ticket_types: { name: string } | null;
+  }[] = [];
+  try {
+    const { data } = await supabase
+      .from("orders")
+      .select(
+        "id,quantity,total,status,created_at,promo_code, events(title,slug), ticket_types(name)",
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    // Supabase types embedded relations as arrays; they're single rows here.
+    orders = (data as unknown as typeof orders) ?? [];
+  } catch {
+    /* orders table not present yet — hide the section */
+  }
+
   const { data: registrationsData } = await supabase
     .from("registrations")
     .select(`
@@ -177,6 +202,68 @@ export default async function ProfilePage() {
               <div className="rounded-2xl border border-line bg-surface p-8 text-center">
                 <Icon name="clock" className="mx-auto mb-3 h-8 w-8 text-muted" />
                 <p className="text-muted">You haven&apos;t attended any events yet.</p>
+              </div>
+            )}
+          </section>
+
+          {/* Order history */}
+          <section>
+            <h2 className="mb-4 font-display text-xl font-bold text-fg">
+              Order History
+            </h2>
+            {orders.length === 0 ? (
+              <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+                <Icon name="ticket" className="mx-auto mb-3 h-8 w-8 text-muted" />
+                <p className="text-muted">No orders yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+                <table className="w-full border-collapse text-left text-sm">
+                  <tbody className="divide-y divide-line">
+                    {orders.map((o) => (
+                      <tr key={o.id}>
+                        <td className="p-4">
+                          <p className="font-medium text-fg">
+                            {o.events?.title ?? "Event"}
+                          </p>
+                          <p className="text-xs text-faint">
+                            {new Date(o.created_at).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                            {o.ticket_types?.name ? ` · ${o.ticket_types.name}` : ""}
+                            {o.promo_code ? ` · code ${o.promo_code}` : ""}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[10px] text-faint">
+                            #{o.id.slice(0, 8).toUpperCase()}
+                          </p>
+                        </td>
+                        <td className="p-4 text-center text-xs text-muted">
+                          × {o.quantity}
+                        </td>
+                        <td className="p-4 text-right">
+                          <p className="font-semibold text-fg">
+                            {o.total > 0
+                              ? `₹${(o.total / 100).toLocaleString("en-IN")}`
+                              : "Free"}
+                          </p>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wide ${
+                              o.status === "paid"
+                                ? "text-host-soft"
+                                : o.status === "refunded"
+                                  ? "text-amber-600"
+                                  : "text-faint"
+                            }`}
+                          >
+                            {o.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>
