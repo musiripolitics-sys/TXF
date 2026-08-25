@@ -75,6 +75,12 @@ export function DownloadTicketBtn({ event, ticketCode, attendeeName, className =
             {/* Top Logo and Category */}
             <div>
               <div className="mb-8">
+                {/* Plain <img> on purpose: this subtree is rasterised by
+                    html-to-image. next/image lazy-loads (this template is
+                    hidden, so it might never load) and its /_next/image URLs
+                    already carry a query string, which toPng's cacheBust
+                    would corrupt — producing a ticket with no logo. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.png" alt="TXF Logo" className="h-16 w-auto object-contain -ml-2" />
               </div>
               
