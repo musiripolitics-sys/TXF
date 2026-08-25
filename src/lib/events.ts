@@ -52,10 +52,11 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
     try {
       const { data: h } = await supabase
         .from("events")
-        .select("host_name")
+        .select("host_name,host_id")
         .eq("slug", slug)
         .maybeSingle();
       if (h?.host_name) txf.hostName = h.host_name;
+      if (h?.host_id) txf.hostId = h.host_id;
     } catch {
       /* column not present yet — ignore */
     }

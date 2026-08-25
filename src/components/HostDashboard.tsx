@@ -293,7 +293,22 @@ export function HostDashboard({ hostId }: { hostId: string }) {
       .eq("id", ev.id);
     setBusyId(null);
     if (error) return toast("Couldn't update status. " + error.message, "error");
-    toast(next === "published" ? "Event is live again." : "Event unpublished.", "success");
+
+    // Going live tells everyone who follows this organizer.
+    if (next === "published") {
+      const { data: n } = await supabase.rpc("notify_followers", {
+        p_event_id: ev.id,
+      });
+      const followers = (n as number) ?? 0;
+      toast(
+        followers > 0
+          ? `Event is live — ${followers} follower${followers === 1 ? "" : "s"} notified.`
+          : "Event is live again.",
+        "success",
+      );
+    } else {
+      toast("Event unpublished.", "success");
+    }
     await refresh();
   };
 

@@ -221,7 +221,25 @@ export default async function EventDetailPage({
               <Detail label="When" value={`${event.dateLabel} · ${event.time}`} />
               <Detail label="Where" value={event.venue} sub={event.address} />
               <Detail label="Price" value={isFree ? "Free entry" : event.priceLabel} />
-              {event.hostName && <Detail label="Host" value={event.hostName} />}
+              {event.hostName && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-faint">
+                    Host
+                  </dt>
+                  <dd className="mt-0.5 text-fg">
+                    {event.hostId ? (
+                      <Link
+                        href={`/organizer/${event.hostId}`}
+                        className="font-medium text-brand-soft hover:underline"
+                      >
+                        {event.hostName} →
+                      </Link>
+                    ) : (
+                      event.hostName
+                    )}
+                  </dd>
+                </div>
+              )}
             </dl>
 
             <div className="mt-5">
