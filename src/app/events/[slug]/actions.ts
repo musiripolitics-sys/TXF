@@ -49,9 +49,18 @@ export async function registerForEvent(
   }
   const { attendee_name, attendee_email, attendee_phone } = parsed.data;
 
+  // Custom questions arrive as q_<questionId> fields on the same form.
+  const answers: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("q_") && typeof value === "string" && value.trim()) {
+      answers[key.slice(2)] = value.trim();
+    }
+  }
+  const answersPayload = Object.keys(answers).length > 0 ? answers : null;
+
   // With a tier chosen we can book N seats in one order; otherwise fall back
   // to the single-ticket path (which itself routes through the default tier).
-  const useOrder = !!ticketTypeId && quantity > 1;
+  const useOrder = !!ticketTypeId && (quantity > 1 || !!answersPayload);
   const { data, error } = useOrder
     ? await supabase.rpc("register_free_order", {
         p_event_id: eventId,
@@ -60,6 +69,7 @@ export async function registerForEvent(
         p_buyer_name: attendee_name,
         p_buyer_email: attendee_email,
         p_buyer_phone: attendee_phone,
+        p_answers: answersPayload,
       })
     : await supabase.rpc("register_for_event", {
         p_event_id: eventId,

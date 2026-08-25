@@ -92,6 +92,26 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
       /* ticket_types not present yet — ignore */
     }
 
+    // Custom registration questions (tolerant — table may not exist yet).
+    try {
+      const { data: qs } = await supabase
+        .from("event_questions")
+        .select("id,label,type,options,required,sort_order")
+        .eq("event_id", txf.id ?? "")
+        .order("sort_order", { ascending: true });
+      if (qs && qs.length > 0) {
+        txf.questions = qs.map((q) => ({
+          id: q.id,
+          label: q.label,
+          type: (q.type ?? "text") as "text" | "textarea" | "select",
+          options: q.options ?? undefined,
+          required: !!q.required,
+        }));
+      }
+    } catch {
+      /* event_questions not present yet — ignore */
+    }
+
     return txf;
   } catch {
     return getStaticEvent(slug) ?? null;

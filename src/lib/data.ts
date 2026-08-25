@@ -59,6 +59,16 @@ export type TXFEvent = {
   image?: string;
   hostName?: string;
   ticketTypes?: TicketType[];
+  questions?: EventQuestion[];
+};
+
+/** A custom question the organiser asks at registration. */
+export type EventQuestion = {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  options?: string[];
+  required: boolean;
 };
 
 /** A purchasable tier on an event (Early Bird / Regular / VIP …). */

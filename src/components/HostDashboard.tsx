@@ -103,9 +103,44 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [editFor, setEditFor] = useState<string | null>(null);
   const [edits, setEdits] = useState<EventEdits | null>(null);
 
+  type Question = { id: string; label: string; type: string; required: boolean };
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [newQ, setNewQ] = useState({ label: "", type: "text", required: false });
+
+  const loadQuestions = async (eventId: string) => {
+    const { data } = await supabase
+      .from("event_questions")
+      .select("id,label,type,required")
+      .eq("event_id", eventId)
+      .order("sort_order", { ascending: true });
+    setQuestions((data as Question[]) ?? []);
+  };
+
+  const addQuestion = async (eventId: string) => {
+    const label = newQ.label.trim();
+    if (!label) return;
+    const { error } = await supabase.from("event_questions").insert({
+      event_id: eventId,
+      label,
+      type: newQ.type,
+      required: newQ.required,
+      sort_order: questions.length,
+    });
+    if (error) return toast("Couldn't add question. " + error.message, "error");
+    setNewQ({ label: "", type: "text", required: false });
+    await loadQuestions(eventId);
+    toast("Question added.", "success");
+  };
+
+  const removeQuestion = async (eventId: string, id: string) => {
+    await supabase.from("event_questions").delete().eq("id", id);
+    await loadQuestions(eventId);
+  };
+
   const openEdit = (ev: HostEvent) => {
     if (editFor === ev.id) return setEditFor(null);
     setEditFor(ev.id);
+    loadQuestions(ev.id);
     setEdits({
       title: ev.title ?? "",
       time: ev.time ?? "",
@@ -484,6 +519,78 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                               className="w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
                             />
                           </label>
+                          {/* Custom registration questions */}
+                          <div className="rounded-xl border border-line bg-surface p-4">
+                            <p className="text-sm font-semibold text-fg">
+                              Registration questions
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted">
+                              Extra fields attendees fill in when they register
+                              (dietary needs, company, t-shirt size…).
+                            </p>
+
+                            {questions.length > 0 && (
+                              <ul className="mt-3 space-y-2">
+                                {questions.map((q) => (
+                                  <li
+                                    key={q.id}
+                                    className="flex items-center justify-between gap-3 rounded-lg bg-ink-2 px-3 py-2"
+                                  >
+                                    <span className="min-w-0 text-xs text-fg">
+                                      {q.label}
+                                      <span className="ml-2 text-faint">
+                                        {q.type}
+                                        {q.required ? " · required" : ""}
+                                      </span>
+                                    </span>
+                                    <button
+                                      onClick={() => removeQuestion(ev.id, q.id)}
+                                      className="shrink-0 text-[11px] font-medium text-red-500 hover:underline"
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap items-end gap-2">
+                              <input
+                                type="text"
+                                value={newQ.label}
+                                onChange={(e) => setNewQ({ ...newQ, label: e.target.value })}
+                                placeholder="e.g. Dietary requirements"
+                                className="min-w-40 flex-1 rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg placeholder:text-faint focus:border-brand focus:outline-none"
+                              />
+                              <select
+                                value={newQ.type}
+                                onChange={(e) => setNewQ({ ...newQ, type: e.target.value })}
+                                className="rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg focus:border-brand focus:outline-none"
+                              >
+                                <option value="text">Short text</option>
+                                <option value="textarea">Long text</option>
+                              </select>
+                              <label className="flex items-center gap-1.5 text-xs text-muted">
+                                <input
+                                  type="checkbox"
+                                  checked={newQ.required}
+                                  onChange={(e) =>
+                                    setNewQ({ ...newQ, required: e.target.checked })
+                                  }
+                                  className="accent-[var(--color-brand)]"
+                                />
+                                Required
+                              </label>
+                              <button
+                                onClick={() => addQuestion(ev.id)}
+                                disabled={!newQ.label.trim()}
+                                className="rounded-full border border-line px-3 py-2 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
+                              >
+                                Add question
+                              </button>
+                            </div>
+                          </div>
+
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={() => setEditFor(null)}

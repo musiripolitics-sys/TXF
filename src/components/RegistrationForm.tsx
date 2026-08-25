@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { registerForEvent, joinWaitlist } from "@/app/events/[slug]/actions";
 import { Icon } from "./Icon";
-import type { TicketType } from "@/lib/data";
+import type { TicketType, EventQuestion } from "@/lib/data";
 
 interface RegistrationFormProps {
   eventId: string;
@@ -14,6 +14,7 @@ interface RegistrationFormProps {
   priceLabel?: string;
   memberNote?: string;
   ticketTypes?: TicketType[];
+  questions?: EventQuestion[];
   userProfile?: {
     full_name?: string;
     email?: string;
@@ -30,6 +31,7 @@ export function RegistrationForm({
   priceLabel,
   memberNote,
   ticketTypes = [],
+  questions = [],
   userProfile,
 }: RegistrationFormProps) {
   const router = useRouter();
@@ -379,6 +381,44 @@ export function RegistrationForm({
               className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand"
             />
           </div>
+
+          {/* Organiser's custom questions */}
+          {!waitlistMode &&
+            questions.map((q) => {
+              const id = `q_${q.id}`;
+              const cls =
+                "w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand";
+              return (
+                <div key={q.id}>
+                  <label htmlFor={id} className="mb-1 block text-sm font-medium text-muted">
+                    {q.label}
+                    {!q.required && <span className="text-faint"> (Optional)</span>}
+                  </label>
+                  {q.type === "textarea" ? (
+                    <textarea
+                      id={id}
+                      name={id}
+                      rows={3}
+                      required={q.required}
+                      className={`${cls} resize-none`}
+                    />
+                  ) : q.type === "select" ? (
+                    <select id={id} name={id} required={q.required} defaultValue="" className={cls}>
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {(q.options ?? []).map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input type="text" id={id} name={id} required={q.required} className={cls} />
+                  )}
+                </div>
+              );
+            })}
 
           {isPaid && !waitlistMode && (
             <div>
