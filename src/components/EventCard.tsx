@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { SaveEventBtn } from "@/components/SaveEventBtn";
@@ -23,10 +24,12 @@ export function EventCard({ event }: { event: TXFEvent }) {
       {/* Cover */}
       <div className="relative aspect-[16/10] overflow-hidden">
         {event.image ? (
-          <img
+          <Image
             src={event.image}
             alt={event.title}
-            className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            className="object-cover transition duration-500 group-hover:scale-105"
           />
         ) : (
           <>

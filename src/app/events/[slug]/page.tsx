@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -121,11 +122,7 @@ export default async function EventDetailPage({
       <header className="relative overflow-hidden border-b border-line bg-ink-2">
         {event.image ? (
           <>
-            <img
-              src={event.image}
-              alt={event.title}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+            <Image src={event.image} alt={event.title} fill priority sizes="100vw" className="object-cover" />
             <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
           </>
         ) : (

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { leaderLinkedIn, type Leader } from "@/lib/data";
 
 /**
@@ -19,10 +20,12 @@ export function LeaderTeamCard({ leader }: { leader: Leader }) {
         {/* Monochrome portrait */}
         <div className={`relative aspect-[4/5] overflow-hidden rounded-xl bg-gradient-to-b ${isHiring ? "from-zinc-50 to-zinc-100 border border-dashed border-zinc-200" : "from-zinc-500 to-zinc-900"}`}>
           {leader.image && !isHiring ? (
-            <img
+            <Image
               src={leader.image}
               alt={leader.name}
-              className="absolute inset-0 h-full w-full object-cover grayscale transition duration-300 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-cover grayscale transition duration-300 group-hover:scale-105"
             />
           ) : (
             <>
