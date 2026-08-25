@@ -49,6 +49,21 @@ export default async function ProfilePage() {
 
   // Fetch Registrations
   // Since we don't have a direct helper like `getEvents` for user specific, we'll query it here.
+  // Saved / wishlisted events.
+  let savedEvents: { slug: string; title: string; date_label: string | null; city: string }[] = [];
+  try {
+    const { data } = await supabase
+      .from("saved_events")
+      .select("events(slug,title,date_label,city)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    savedEvents = ((data ?? []) as unknown as { events: (typeof savedEvents)[number] | null }[])
+      .map((r) => r.events)
+      .filter((e): e is (typeof savedEvents)[number] => !!e);
+  } catch {
+    /* saved_events not present yet — hide the section */
+  }
+
   // Order history — one row per purchase, with what was charged.
   let orders: {
     id: string;
@@ -205,6 +220,35 @@ export default async function ProfilePage() {
               </div>
             )}
           </section>
+
+          {/* Saved events */}
+          {savedEvents.length > 0 && (
+            <section>
+              <h2 className="mb-4 font-display text-xl font-bold text-fg">
+                Saved Events
+              </h2>
+              <div className="flex flex-col gap-3">
+                {savedEvents.map((e) => (
+                  <a
+                    key={e.slug}
+                    href={`/events/${e.slug}`}
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-4 transition-colors hover:border-brand/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-fg">{e.title}</p>
+                      <p className="text-xs text-faint">
+                        {e.date_label}
+                        {e.city ? ` · ${e.city}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-brand-soft">
+                      View →
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Order history */}
           <section>
