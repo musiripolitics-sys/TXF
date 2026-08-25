@@ -72,20 +72,16 @@ export async function POST(request: Request) {
         throw payErr;
       }
 
-      const { error: regErr } = await admin.rpc("register_for_event", {
-        p_event_id: notes.eventId,
-        p_attendee_name: notes.attendee_name || "Attendee",
-        p_attendee_email: notes.attendee_email || "",
-        p_attendee_phone: notes.attendee_phone || null,
+      // The pending order already holds the seats and carries the priced
+      // quantity — fulfilling it is idempotent, so a retried webhook is safe.
+      const { error: regErr } = await admin.rpc("fulfil_order", {
+        p_order_id: notes.orderId,
         p_payment_id: payment.id,
-        p_user_id: notes.userId || null,
       });
-      if (regErr && !regErr.message?.includes("ALREADY_REGISTERED")) {
+      if (regErr) {
         console.error("Webhook ticket fulfilment failed:", regErr.message);
       }
-      if (notes.promoCode) {
-        await admin.rpc("redeem_promo", { p_code: notes.promoCode });
-      }
+      // fulfil_order redeems the promo itself — nothing extra to do here.
     }
 
     if (notes.kind === "membership" && notes.userId && notes.tier) {

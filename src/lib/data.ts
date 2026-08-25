@@ -58,6 +58,20 @@ export type TXFEvent = {
   agenda?: { when: string; what: string }[];
   image?: string;
   hostName?: string;
+  ticketTypes?: TicketType[];
+};
+
+/** A purchasable tier on an event (Early Bird / Regular / VIP …). */
+export type TicketType = {
+  id: string;
+  name: string;
+  description?: string;
+  priceAmount: number; // paise; 0 = free tier
+  priceLabel: string;
+  available: number; // capacity - sold
+  maxPerOrder: number;
+  salesEnded: boolean;
+  salesNotStarted: boolean;
 };
 
 export const events: TXFEvent[] = [];

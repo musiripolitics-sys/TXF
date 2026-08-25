@@ -100,7 +100,7 @@ export function AdminDashboard({
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "submissions" | "create" | "manage" | "users"
+    "overview" | "submissions" | "create" | "manage" | "users" | "payouts"
   >("overview");
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -138,6 +138,76 @@ export function AdminDashboard({
     { when: "Wrap-up", what: "Panel, Q&A and closing" },
   ]);
 
+  // Ticket tiers. Price is entered in rupees and stored in paise.
+  type TierRow = {
+    name: string;
+    price: number;
+    capacity: number;
+    salesEnd: string;
+    maxPerOrder: number;
+  };
+  const blankTier: TierRow = {
+    name: "General Admission",
+    price: 0,
+    capacity: 100,
+    salesEnd: "",
+    maxPerOrder: 10,
+  };
+  const [tiers, setTiers] = useState<TierRow[]>([blankTier]);
+
+  type HostEarning = {
+    host_id: string;
+    host_name: string | null;
+    host_email: string | null;
+    gross: number;
+    platform_fee: number;
+    net: number;
+    paid_out: number;
+    balance: number;
+  };
+  const [hostEarnings, setHostEarnings] = useState<HostEarning[]>([]);
+
+  const payHost = async (h: HostEarning) => {
+    if (h.balance <= 0) return;
+    setBusyId(h.host_id + "payout");
+    const { error } = await supabase.rpc("record_payout", {
+      p_host_id: h.host_id,
+      p_amount: h.balance,
+      p_note: "Settled from admin console",
+    });
+    setBusyId(null);
+    if (error) return toast(error.message, "error");
+    toast(`Payout of ₹${(h.balance / 100).toLocaleString("en-IN")} recorded.`, "success");
+    await refresh();
+  };
+
+  const updateTier = (i: number, patch: Partial<TierRow>) =>
+    setTiers((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addTier = () =>
+    setTiers((rows) => [
+      ...rows,
+      { ...blankTier, name: "", capacity: 50 },
+    ]);
+  const removeTier = (i: number) =>
+    setTiers((rows) => (rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows));
+
+  /** Writes ticket tiers for a freshly created event. */
+  const saveTiers = async (eventId: string, rows: TierRow[]) => {
+    const valid = rows.filter((r) => r.name.trim() && r.capacity > 0);
+    const list = valid.length > 0 ? valid : [blankTier];
+    await supabase.from("ticket_types").insert(
+      list.map((r, idx) => ({
+        event_id: eventId,
+        name: r.name.trim() || "General Admission",
+        price_amount: Math.round((r.price || 0) * 100),
+        capacity: Number(r.capacity),
+        max_per_order: Number(r.maxPerOrder) || 10,
+        sales_end: r.salesEnd ? new Date(r.salesEnd).toISOString() : null,
+        sort_order: idx,
+      })),
+    );
+  };
+
   const refresh = useCallback(async () => {
     setLoading(true);
     const [
@@ -171,6 +241,15 @@ export function AdminDashboard({
     setEvents((evs as EventRow[]) ?? []);
     setUsers((usrs as AppUser[]) ?? []);
     setRegCount(regs ?? 0);
+
+    // Host payout ledger — tolerant so a DB without the payouts migration
+    // simply shows an empty tab instead of erroring.
+    try {
+      const { data: he } = await supabase.rpc("get_all_host_earnings");
+      if (he) setHostEarnings(he as HostEarning[]);
+    } catch {
+      /* not available yet */
+    }
     setPayments(
       (pays as { amount: number; stream: string; status: string }[]) ?? [],
     );
@@ -221,6 +300,17 @@ export function AdminDashboard({
       .single();
 
     if (!error && inserted) {
+      // Every event needs at least one tier or it can't be registered for.
+      await saveTiers(inserted.id, [
+        {
+          name: "General Admission",
+          price: (s.price_amount ?? 0) / 100,
+          capacity: s.capacity ?? 100,
+          salesEnd: "",
+          maxPerOrder: 10,
+        },
+      ]);
+
       // Denormalise the host's name onto the event (tolerant: silently no-ops
       // if the host_name column migration hasn't been run yet).
       const hostName = users.find((u) => u.id === s.organizer_id)?.full_name;
@@ -327,6 +417,14 @@ export function AdminDashboard({
     e.preventDefault();
     setBusyId("create");
 
+    // The event's headline price and capacity are derived from its tiers, so
+    // the listing, the detail page and the tiers can never disagree.
+    const validTiers = tiers.filter((t) => t.name.trim() && t.capacity > 0);
+    const tierList = validTiers.length > 0 ? validTiers : [blankTier];
+    const totalCapacity = tierList.reduce((sum, t) => sum + Number(t.capacity), 0);
+    const cheapest = Math.min(...tierList.map((t) => Math.round((t.price || 0) * 100)));
+    const isFree = cheapest === 0;
+
     const { data: inserted, error } = await supabase
       .from("events")
       .insert({
@@ -339,12 +437,13 @@ export function AdminDashboard({
         city: eventForm.city,
         venue: eventForm.venue,
         address: eventForm.address || `${eventForm.venue}, ${eventForm.city}`,
-        price_type: eventForm.price,
-        price_label: eventForm.price === "Free" ? "Free" : eventForm.priceLabel,
+        price_type: isFree ? "Free" : "Paid",
+        price_label: isFree ? "Free" : `₹${(cheapest / 100).toLocaleString("en-IN")}`,
+        price_amount: cheapest,
         blurb: eventForm.blurb,
         about: eventForm.about,
-        capacity: Number(eventForm.capacity),
-        spots_left: Number(eventForm.capacity),
+        capacity: totalCapacity,
+        spots_left: totalCapacity,
         status: "published",
         source: "custom",
         published_at: new Date().toISOString(),
@@ -353,6 +452,9 @@ export function AdminDashboard({
       .single();
 
     if (!error && inserted) {
+      // Without tiers the event can't be registered for at all.
+      await saveTiers(inserted.id, tierList);
+
       const valid = speakers.filter((s) => s.name.trim());
       if (valid.length) {
         const { data: spk } = await supabase
@@ -405,6 +507,7 @@ export function AdminDashboard({
       capacity: 100,
     });
     setSpeakers([{ name: "", role: "" }]);
+    setTiers([blankTier]);
     setAgenda([
       { when: "Doors open", what: "Registration & check-in" },
       { when: "Kickoff", what: "Welcome & intro" },
@@ -436,7 +539,7 @@ export function AdminDashboard({
 
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
         <div className="mb-8 flex gap-8 overflow-x-auto border-b border-line">
-          {(["overview", "submissions", "create", "manage", "users"] as const).map((tab) => (
+          {(["overview", "submissions", "create", "manage", "users", "payouts"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -451,6 +554,7 @@ export function AdminDashboard({
               {tab === "create" && "Create Event"}
               {tab === "manage" && `Manage Events (${events.length})`}
               {tab === "users" && `Users (${users.length})`}
+              {tab === "payouts" && "Payouts"}
             </button>
           ))}
         </div>
@@ -748,50 +852,93 @@ export function AdminDashboard({
                 />
               </Field>
 
-              <div className="grid gap-5 sm:grid-cols-3">
-                <Field label="Price Type">
-                  <select
-                    value={eventForm.price}
-                    onChange={(e) =>
-                      setEventForm({
-                        ...eventForm,
-                        price: e.target.value as "Free" | "Paid",
-                      })
-                    }
-                    className={inputCls}
+              {/* Ticket tiers — price and capacity come from these rows. */}
+              <div className="rounded-2xl border border-line bg-ink-2 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-fg">Ticket types</h3>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Add tiers like Early Bird or VIP. Price in ₹ (0 = free).
+                      Event capacity is the total across tiers.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addTier}
+                    className="shrink-0 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
                   >
-                    <option value="Free">Free</option>
-                    <option value="Paid">Paid</option>
-                  </select>
-                </Field>
-                <Field label="Price Label">
-                  <input
-                    type="text"
-                    required
-                    disabled={eventForm.price === "Free"}
-                    value={eventForm.price === "Free" ? "Free" : eventForm.priceLabel}
-                    onChange={(e) =>
-                      setEventForm({ ...eventForm, priceLabel: e.target.value })
-                    }
-                    className={`${inputCls} disabled:opacity-50`}
-                    placeholder="₹299"
-                  />
-                </Field>
-                <Field label="Capacity">
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={eventForm.capacity}
-                    onChange={(e) =>
-                      setEventForm({
-                        ...eventForm,
-                        capacity: Number(e.target.value),
-                      })
-                    }
-                    className={inputCls}
-                  />
-                </Field>
+                    + Add tier
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {tiers.map((t, i) => (
+                    <div
+                      key={i}
+                      className="grid gap-3 rounded-xl border border-line bg-surface p-3 sm:grid-cols-[2fr_1fr_1fr_1.4fr_auto]"
+                    >
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-muted">Name</span>
+                        <input
+                          type="text"
+                          value={t.name}
+                          onChange={(e) => updateTier(i, { name: e.target.value })}
+                          placeholder="Early Bird"
+                          className={inputCls}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-muted">Price ₹</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={t.price}
+                          onChange={(e) => updateTier(i, { price: Number(e.target.value) })}
+                          className={inputCls}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-muted">Capacity</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={t.capacity}
+                          onChange={(e) => updateTier(i, { capacity: Number(e.target.value) })}
+                          className={inputCls}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium text-muted">
+                          Sales end (optional)
+                        </span>
+                        <input
+                          type="date"
+                          value={t.salesEnd}
+                          onChange={(e) => updateTier(i, { salesEnd: e.target.value })}
+                          className={inputCls}
+                        />
+                      </label>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => removeTier(i)}
+                          disabled={tiers.length === 1}
+                          aria-label="Remove ticket type"
+                          className="rounded-full border border-line px-3 py-2 text-xs text-muted hover:border-red-500/40 hover:text-red-500 disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-3 text-xs text-faint">
+                  Total capacity:{" "}
+                  <strong className="text-fg">
+                    {tiers.reduce((s, t) => s + (Number(t.capacity) || 0), 0)}
+                  </strong>
+                </p>
               </div>
 
               <Field label="Blurb (Short Summary)" required>
@@ -1006,6 +1153,78 @@ export function AdminDashboard({
         )}
 
         {/* Users */}
+        {/* Payouts */}
+        {!loading && activeTab === "payouts" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="font-display text-2xl font-bold text-fg">Host payouts</h2>
+              <p className="mt-1 text-sm text-muted">
+                Hosts keep 90% of ticket sales on their events. Record a payout
+                once you&apos;ve actually transferred the money.
+              </p>
+            </div>
+
+            {hostEarnings.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line bg-surface p-12 text-center">
+                <p className="font-display text-lg text-fg">No host earnings yet.</p>
+                <p className="mt-1 text-sm text-muted">
+                  Once a host sells tickets, their balance shows up here.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-line shadow-soft">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead className="bg-ink-2 text-xs uppercase tracking-wider text-faint">
+                    <tr>
+                      <th className="p-4">Host</th>
+                      <th className="p-4 text-right">Gross</th>
+                      <th className="p-4 text-right">Fee (10%)</th>
+                      <th className="p-4 text-right">Paid out</th>
+                      <th className="p-4 text-right">Balance</th>
+                      <th className="p-4" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line bg-surface">
+                    {hostEarnings.map((h) => (
+                      <tr key={h.host_id}>
+                        <td className="p-4">
+                          <p className="font-medium text-fg">
+                            {h.host_name || "Host"}
+                          </p>
+                          <p className="text-xs text-faint">{h.host_email}</p>
+                        </td>
+                        <td className="p-4 text-right text-muted">
+                          ₹{(h.gross / 100).toLocaleString("en-IN")}
+                        </td>
+                        <td className="p-4 text-right text-muted">
+                          −₹{(h.platform_fee / 100).toLocaleString("en-IN")}
+                        </td>
+                        <td className="p-4 text-right text-muted">
+                          ₹{(h.paid_out / 100).toLocaleString("en-IN")}
+                        </td>
+                        <td className="p-4 text-right font-semibold text-fg">
+                          ₹{(h.balance / 100).toLocaleString("en-IN")}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => payHost(h)}
+                            disabled={h.balance <= 0 || busyId === h.host_id + "payout"}
+                            className="rounded-full bg-brand px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-soft disabled:opacity-40"
+                          >
+                            {busyId === h.host_id + "payout"
+                              ? "Recording…"
+                              : "Mark paid"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {!loading && activeTab === "users" && (
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-3">

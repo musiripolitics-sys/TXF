@@ -282,6 +282,7 @@ export default async function EventDetailPage({
                 isFull={event.spotsLeft <= 0}
                 isPaid={event.price === "Paid"}
                 priceLabel={memberPriceLabel ?? event.priceLabel}
+                ticketTypes={event.ticketTypes}
                 memberNote={
                   memberTier
                     ? `${discountPct(memberTier)}% ${memberTier} member discount applied`

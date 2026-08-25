@@ -26,6 +26,9 @@ const promoCode = z
 
 export const ticketOrderSchema = z.object({
   eventId: uuid,
+  // Which tier, and how many seats. Omitted = the event's default tier, qty 1.
+  ticketTypeId: uuid.optional(),
+  quantity: z.number().int().min(1).max(20).optional(),
   promoCode,
   // Attendee details ride along so the Razorpay order notes carry everything
   // the webhook needs to fulfil the ticket if the browser never comes back.
@@ -39,6 +42,8 @@ export const ticketVerifySchema = z.object({
   razorpay_order_id: z.string().min(1),
   razorpay_signature: z.string().min(1),
   eventId: uuid,
+  // Our own pending order — fulfilment reads price/quantity from it.
+  txfOrderId: uuid.optional(),
   promoCode,
   attendee_name: name,
   attendee_email: email,

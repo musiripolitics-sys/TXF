@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { registerForEvent, joinWaitlist } from "@/app/events/[slug]/actions";
 import { Icon } from "./Icon";
+import type { TicketType } from "@/lib/data";
 
 interface RegistrationFormProps {
   eventId: string;
@@ -12,6 +13,7 @@ interface RegistrationFormProps {
   isPaid?: boolean;
   priceLabel?: string;
   memberNote?: string;
+  ticketTypes?: TicketType[];
   userProfile?: {
     full_name?: string;
     email?: string;
@@ -19,12 +21,15 @@ interface RegistrationFormProps {
   } | null;
 }
 
+const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN")}`;
+
 export function RegistrationForm({
   eventId,
   isFull,
   isPaid = false,
   priceLabel,
   memberNote,
+  ticketTypes = [],
   userProfile,
 }: RegistrationFormProps) {
   const router = useRouter();
@@ -33,6 +38,17 @@ export function RegistrationForm({
   const [success, setSuccess] = useState<string | null>(null);
   const [waitlisted, setWaitlisted] = useState(false);
   const [promo, setPromo] = useState("");
+
+  // Tiers that can actually be bought right now.
+  const sellable = ticketTypes.filter(
+    (t) => !t.salesEnded && !t.salesNotStarted && t.available > 0,
+  );
+  const [tierId, setTierId] = useState<string>(sellable[0]?.id ?? "");
+  const [qty, setQty] = useState(1);
+  const tier = sellable.find((t) => t.id === tierId) ?? sellable[0];
+  const maxQty = Math.min(tier?.maxPerOrder ?? 10, tier?.available ?? 10);
+
+  const subtotal = (tier?.priceAmount ?? 0) * qty;
 
   // Full events take waitlist joins. Free: auto-promoted when a seat frees.
   // Paid: first in line gets notified to buy the freed seat.
@@ -66,7 +82,7 @@ export function RegistrationForm({
 
     // Free event — register directly via the server action.
     setLoading(true);
-    const res = await registerForEvent(eventId, formData);
+    const res = await registerForEvent(eventId, formData, tier?.id, qty);
     if (res.error) setError(res.error);
     else if (res.success && res.ticketCode) setSuccess(res.ticketCode);
     setLoading(false);
@@ -91,6 +107,8 @@ export function RegistrationForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventId,
+          ticketTypeId: tier?.id,
+          quantity: qty,
           promoCode: promo.trim() || undefined,
           ...attendee,
         }),
@@ -99,6 +117,14 @@ export function RegistrationForm({
       if (!res.ok || order.error) {
         setError(order.error || "Failed to start payment.");
         setLoading(false);
+        return;
+      }
+
+      // A 100%-discounted order is already fulfilled — no gateway needed.
+      if (order.free) {
+        setSuccess(order.tickets?.[0] ?? "");
+        setLoading(false);
+        router.refresh();
         return;
       }
 
@@ -126,6 +152,7 @@ export function RegistrationForm({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
                 eventId,
+                txfOrderId: order.txfOrderId,
                 promoCode: promo.trim() || undefined,
                 ...attendee,
               }),
@@ -211,6 +238,104 @@ export function RegistrationForm({
           {error && (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
               {error}
+            </div>
+          )}
+
+          {/* Ticket tiers — only shown when the event offers a real choice. */}
+          {!waitlistMode && sellable.length > 1 && (
+            <fieldset className="space-y-2">
+              <legend className="mb-1 block text-sm font-medium text-muted">
+                Select ticket
+              </legend>
+              {sellable.map((t) => (
+                <label
+                  key={t.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+                    t.id === tier?.id
+                      ? "border-brand bg-brand/5"
+                      : "border-line hover:border-brand/40"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="ticket_type"
+                    value={t.id}
+                    checked={t.id === tier?.id}
+                    onChange={() => {
+                      setTierId(t.id);
+                      setQty(1);
+                    }}
+                    className="mt-1 accent-[var(--color-brand)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-fg">{t.name}</span>
+                      <span className="text-sm font-bold text-fg">{t.priceLabel}</span>
+                    </span>
+                    {t.description && (
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {t.description}
+                      </span>
+                    )}
+                    <span className="mt-0.5 block text-xs text-faint">
+                      {t.available} left
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+
+          {/* Quantity */}
+          {!waitlistMode && tier && maxQty > 1 && (
+            <div>
+              <span className="mb-1 block text-sm font-medium text-muted">Quantity</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  disabled={qty <= 1}
+                  aria-label="Decrease quantity"
+                  className="h-9 w-9 rounded-full border border-line text-lg leading-none text-fg disabled:opacity-40"
+                >
+                  −
+                </button>
+                <span className="min-w-8 text-center text-sm font-semibold text-fg">
+                  {qty}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                  disabled={qty >= maxQty}
+                  aria-label="Increase quantity"
+                  className="h-9 w-9 rounded-full border border-line text-lg leading-none text-fg disabled:opacity-40"
+                >
+                  +
+                </button>
+                <span className="text-xs text-faint">max {maxQty}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Order summary — only meaningful for paid tiers */}
+          {!waitlistMode && tier && tier.priceAmount > 0 && (
+            <div className="rounded-xl border border-line bg-ink-2 p-3 text-sm">
+              <div className="flex items-center justify-between text-muted">
+                <span>
+                  {tier.name} × {qty}
+                </span>
+                <span>{inr(subtotal)}</span>
+              </div>
+              {memberNote && (
+                <div className="mt-1 flex items-center justify-between text-xs text-host-soft">
+                  <span>{memberNote}</span>
+                  <span>applied at checkout</span>
+                </div>
+              )}
+              <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold text-fg">
+                <span>Total</span>
+                <span>{inr(subtotal)}</span>
+              </div>
             </div>
           )}
 

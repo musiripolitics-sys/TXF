@@ -60,6 +60,38 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
       /* column not present yet — ignore */
     }
 
+    // Ticket tiers, fetched tolerantly so a DB without the Phase 1 migration
+    // still renders the event (it just falls back to the single event price).
+    try {
+      const { data: tiers } = await supabase
+        .from("ticket_types")
+        .select(
+          "id,name,description,price_amount,capacity,sold,sales_start,sales_end,max_per_order,sort_order",
+        )
+        .eq("event_id", txf.id ?? "")
+        .order("sort_order", { ascending: true });
+
+      if (tiers && tiers.length > 0) {
+        const now = Date.now();
+        txf.ticketTypes = tiers.map((t) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description ?? undefined,
+          priceAmount: t.price_amount ?? 0,
+          priceLabel:
+            (t.price_amount ?? 0) === 0
+              ? "Free"
+              : `₹${((t.price_amount ?? 0) / 100).toLocaleString("en-IN")}`,
+          available: Math.max((t.capacity ?? 0) - (t.sold ?? 0), 0),
+          maxPerOrder: t.max_per_order ?? 10,
+          salesNotStarted: !!t.sales_start && new Date(t.sales_start).getTime() > now,
+          salesEnded: !!t.sales_end && new Date(t.sales_end).getTime() < now,
+        }));
+      }
+    } catch {
+      /* ticket_types not present yet — ignore */
+    }
+
     return txf;
   } catch {
     return getStaticEvent(slug) ?? null;

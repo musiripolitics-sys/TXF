@@ -3,6 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { messageAttendees } from "@/app/host/dashboard/actions";
+import { toast } from "./Toast";
+
+type Earnings = {
+  gross: number;
+  platform_fee: number;
+  net: number;
+  paid_out: number;
+  balance: number;
+};
+
+const inr = (paise: number) => `₹${((paise ?? 0) / 100).toLocaleString("en-IN")}`;
 
 type Submission = {
   id: string;
@@ -30,7 +42,22 @@ type HostEvent = {
   date_label: string | null;
   spots_left: number;
   capacity: number;
+  status: string;
+  time: string | null;
+  venue: string | null;
+  address: string | null;
+  blurb: string | null;
+  about: string | null;
   registrations: Attendee[];
+};
+
+type EventEdits = {
+  title: string;
+  time: string;
+  venue: string;
+  address: string;
+  blurb: string;
+  about: string;
 };
 
 const statusStyle: Record<string, string> = {
@@ -45,6 +72,94 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [events, setEvents] = useState<HostEvent[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [earnings, setEarnings] = useState<Earnings | null>(null);
+  const [composeFor, setComposeFor] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  /** Download this event's attendee list as a CSV. */
+  const exportCsv = (ev: HostEvent) => {
+    const rows = [
+      ["Name", "Email", "Ticket code", "Status"],
+      ...(ev.registrations ?? []).map((a) => [
+        a.attendee_name,
+        a.attendee_email,
+        (a.ticket_code ?? "").toUpperCase(),
+        a.status,
+      ]),
+    ];
+    // Quote every field so commas in names can't break the columns.
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `attendees-${ev.slug}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [edits, setEdits] = useState<EventEdits | null>(null);
+
+  const openEdit = (ev: HostEvent) => {
+    if (editFor === ev.id) return setEditFor(null);
+    setEditFor(ev.id);
+    setEdits({
+      title: ev.title ?? "",
+      time: ev.time ?? "",
+      venue: ev.venue ?? "",
+      address: ev.address ?? "",
+      blurb: ev.blurb ?? "",
+      about: ev.about ?? "",
+    });
+  };
+
+  const saveEdit = async (eventId: string) => {
+    if (!edits) return;
+    setBusyId(eventId + "edit");
+    const { error } = await supabase
+      .from("events")
+      .update({
+        title: edits.title.trim(),
+        time: edits.time.trim() || null,
+        venue: edits.venue.trim() || null,
+        address: edits.address.trim() || null,
+        blurb: edits.blurb.trim() || null,
+        about: edits.about.trim() || null,
+      })
+      .eq("id", eventId);
+    setBusyId(null);
+    if (error) return toast("Couldn't save. " + error.message, "error");
+    toast("Event updated.", "success");
+    setEditFor(null);
+    await refresh();
+  };
+
+  /** Take an event off the public listing, or put it back. */
+  const togglePublished = async (ev: HostEvent) => {
+    const next = ev.status === "published" ? "draft" : "published";
+    setBusyId(ev.id + "status");
+    const { error } = await supabase
+      .from("events")
+      .update({ status: next })
+      .eq("id", ev.id);
+    setBusyId(null);
+    if (error) return toast("Couldn't update status. " + error.message, "error");
+    toast(next === "published" ? "Event is live again." : "Event unpublished.", "success");
+    await refresh();
+  };
+
+  const sendMessage = async (eventId: string) => {
+    setSending(true);
+    const res = await messageAttendees(eventId, message);
+    setSending(false);
+    if (res.error) return toast(res.error, "error");
+    toast(`Message sent to ${res.sent} attendee${res.sent === 1 ? "" : "s"}.`, "success");
+    setMessage("");
+    setComposeFor(null);
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -57,13 +172,21 @@ export function HostDashboard({ hostId }: { hostId: string }) {
       supabase
         .from("events")
         .select(
-          "id,slug,title,date_label,spots_left,capacity, registrations(id,attendee_name,attendee_email,status,ticket_code)",
+          "id,slug,title,date_label,spots_left,capacity,status,time,venue,address,blurb,about, registrations(id,attendee_name,attendee_email,status,ticket_code)",
         )
         .eq("host_id", hostId)
         .order("date", { ascending: true }),
     ]);
     setSubmissions((subs as Submission[]) ?? []);
     setEvents((evs as unknown as HostEvent[]) ?? []);
+
+    // Earnings are tolerant — a DB without the payouts migration just hides it.
+    try {
+      const { data: e } = await supabase.rpc("get_host_earnings");
+      if (e) setEarnings(e as Earnings);
+    } catch {
+      /* not available yet */
+    }
     setLoading(false);
   }, [supabase, hostId]);
 
@@ -191,6 +314,49 @@ export function HostDashboard({ hostId }: { hostId: string }) {
           </section>
         )}
 
+        {/* Earnings */}
+        {!loading && earnings && earnings.gross > 0 && (
+          <section>
+            <h2 className="mb-5 font-display text-2xl font-bold text-fg">Earnings</h2>
+            <div className="grid gap-4 sm:grid-cols-4">
+              {[
+                { label: "Ticket sales", value: inr(earnings.gross), sub: "gross" },
+                {
+                  label: "Platform fee",
+                  value: `−${inr(earnings.platform_fee)}`,
+                  sub: "10%",
+                },
+                { label: "Paid out", value: inr(earnings.paid_out), sub: "to date" },
+                {
+                  label: "Balance due",
+                  value: inr(earnings.balance),
+                  sub: "next payout",
+                  highlight: true,
+                },
+              ].map((c) => (
+                <div
+                  key={c.label}
+                  className={`rounded-2xl border bg-surface p-5 shadow-soft ${
+                    c.highlight ? "border-brand/40" : "border-line"
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wider text-faint">
+                    {c.label}
+                  </p>
+                  <p
+                    className={`mt-2 font-display text-2xl font-bold ${
+                      c.highlight ? "text-brand-soft" : "text-fg"
+                    }`}
+                  >
+                    {c.value}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Live events + attendees */}
         {!loading && (
           <section>
@@ -236,6 +402,131 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                           </p>
                         </div>
                       </div>
+
+                      {/* Organiser actions */}
+                      <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+                        <button
+                          onClick={() => exportCsv(ev)}
+                          disabled={attendees.length === 0}
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
+                        >
+                          Export CSV
+                        </button>
+                        <button
+                          onClick={() => {
+                            setComposeFor(composeFor === ev.id ? null : ev.id);
+                            setMessage("");
+                          }}
+                          disabled={attendees.length === 0}
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
+                        >
+                          Message attendees
+                        </button>
+                        <button
+                          onClick={() => openEdit(ev)}
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
+                        >
+                          Edit details
+                        </button>
+                        <button
+                          onClick={() => togglePublished(ev)}
+                          disabled={busyId === ev.id + "status"}
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
+                        >
+                          {ev.status === "published" ? "Unpublish" : "Publish"}
+                        </button>
+                        <Link
+                          href="/host/checkin"
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg hover:border-brand hover:text-brand"
+                        >
+                          Door check-in →
+                        </Link>
+                        {ev.status !== "published" && (
+                          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-600">
+                            Not live
+                          </span>
+                        )}
+                      </div>
+
+                      {editFor === ev.id && edits && (
+                        <div className="space-y-3 border-b border-line bg-ink-2 p-5">
+                          {(
+                            [
+                              ["title", "Title"],
+                              ["time", "Time (label)"],
+                              ["venue", "Venue"],
+                              ["address", "Address"],
+                              ["blurb", "Short summary"],
+                            ] as const
+                          ).map(([key, label]) => (
+                            <label key={key} className="block">
+                              <span className="mb-1 block text-[11px] font-medium text-muted">
+                                {label}
+                              </span>
+                              <input
+                                type="text"
+                                value={edits[key]}
+                                onChange={(e) =>
+                                  setEdits({ ...edits, [key]: e.target.value })
+                                }
+                                className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
+                              />
+                            </label>
+                          ))}
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-medium text-muted">
+                              Full description
+                            </span>
+                            <textarea
+                              rows={4}
+                              value={edits.about}
+                              onChange={(e) => setEdits({ ...edits, about: e.target.value })}
+                              className="w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
+                            />
+                          </label>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditFor(null)}
+                              className="rounded-full border border-line px-4 py-2 text-xs font-medium text-muted hover:text-fg"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEdit(ev.id)}
+                              disabled={busyId === ev.id + "edit" || !edits.title.trim()}
+                              className="rounded-full bg-brand px-5 py-2 text-xs font-medium text-white hover:bg-brand-soft disabled:opacity-50"
+                            >
+                              {busyId === ev.id + "edit" ? "Saving…" : "Save changes"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {composeFor === ev.id && (
+                        <div className="border-b border-line bg-ink-2 p-5">
+                          <textarea
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            rows={3}
+                            maxLength={2000}
+                            placeholder={`Send an update to everyone registered for ${ev.title}…`}
+                            className="w-full resize-none rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none"
+                          />
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-xs text-faint">
+                              Goes to {attendees.length} attendee
+                              {attendees.length === 1 ? "" : "s"} by email
+                            </span>
+                            <button
+                              onClick={() => sendMessage(ev.id)}
+                              disabled={sending || message.trim().length < 5}
+                              className="rounded-full bg-brand px-5 py-2 text-xs font-medium text-white hover:bg-brand-soft disabled:opacity-50"
+                            >
+                              {sending ? "Sending…" : "Send update"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {attendees.length === 0 ? (
                         <p className="p-5 text-sm text-muted">

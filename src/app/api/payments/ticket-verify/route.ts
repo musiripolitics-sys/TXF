@@ -3,7 +3,6 @@ import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { sendRegistrationConfirmation, sendPaymentReceipt } from "@/lib/email";
-import { getActiveTier, applyMemberDiscount } from "@/lib/membership";
 import { ticketVerifySchema, firstError } from "@/lib/validation";
 
 export async function POST(request: Request) {
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
       razorpay_order_id,
       razorpay_signature,
       eventId,
-      promoCode,
+      txfOrderId,
       attendee_name,
       attendee_email,
       attendee_phone,
@@ -48,10 +47,9 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    // Re-read the price from the DB (don't trust the client).
     const { data: event, error: eventErr } = await supabase
       .from("events")
-      .select("id, title, date_label, venue, price_amount, currency")
+      .select("id, title, date_label, venue, currency")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -59,17 +57,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    // Recompute the discount the same way the order did (best of member/promo).
-    const tier = await getActiveTier(supabase, user.id);
-    const memberAmount = applyMemberDiscount(event.price_amount, tier);
-    let promoPct = 0;
-    if (promoCode) {
-      const { data: pct } = await supabase.rpc("validate_promo", { p_code: promoCode });
-      promoPct = (pct as number) ?? 0;
+    // The pending order is the source of truth for what was charged — it was
+    // priced server-side at checkout and already holds the seats.
+    let orderQuery = supabase
+      .from("orders")
+      .select("id, total, quantity, currency, status")
+      .eq("event_id", eventId)
+      .eq("user_id", user.id);
+    orderQuery = txfOrderId
+      ? orderQuery.eq("id", txfOrderId)
+      : orderQuery.eq("status", "pending").order("created_at", { ascending: false }).limit(1);
+
+    const { data: order } = await orderQuery.maybeSingle();
+    if (!order) {
+      return NextResponse.json(
+        { error: "Checkout session not found. Please start again." },
+        { status: 404 },
+      );
     }
-    const promoAmount = Math.round(event.price_amount * (100 - promoPct) / 100);
-    const finalAmount = Math.min(memberAmount, promoAmount);
-    const promoApplied = promoCode && promoAmount < memberAmount;
+    const finalAmount = order.total;
 
     // 1. Log the payment (idempotent on provider_ref).
     const { data: payment, error: paymentError } = await supabase
@@ -96,17 +102,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Register + decrement capacity atomically, linking the payment.
-    const { data: ticketCode, error: regError } = await supabase.rpc(
-      "register_for_event",
-      {
-        p_event_id: eventId,
-        p_attendee_name: attendee_name,
-        p_attendee_email: attendee_email,
-        p_attendee_phone: attendee_phone ?? null,
-        p_payment_id: payment.id,
-      },
-    );
+    // 2. Issue the tickets held by the order (idempotent, links the payment).
+    const { data: fulfilled, error: regError } = await supabase.rpc("fulfil_order", {
+      p_order_id: order.id,
+      p_payment_id: payment.id,
+    });
+    const ticketCodes = (fulfilled as { tickets?: string[] })?.tickets ?? [];
+    const ticketCode = ticketCodes[0];
 
     if (regError) {
       const msg = regError.message ?? "";
@@ -158,12 +160,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Consume the promo only after a successful, paid registration.
-    if (promoApplied) {
-      await supabase.rpc("redeem_promo", { p_code: promoCode });
-    }
+    // (fulfil_order redeems the promo itself, so there's nothing to do here.)
 
     // Best-effort emails (never block the success response).
+    const qty = order.quantity ?? 1;
     await Promise.all([
       sendRegistrationConfirmation({
         to: attendee_email,
@@ -172,18 +172,19 @@ export async function POST(request: Request) {
         ticketCode: ticketCode as string,
         dateLabel: event.date_label,
         venue: event.venue,
+        extraTickets: ticketCodes.length > 1 ? ticketCodes.slice(1) : undefined,
       }),
       sendPaymentReceipt({
         to: attendee_email,
         name: attendee_name,
-        description: `Ticket — ${event.title ?? "Event"}${tier ? ` (${tier} member price)` : ""}`,
+        description: `${qty} × Ticket — ${event.title ?? "Event"}`,
         amount: finalAmount,
-        currency: event.currency || "INR",
+        currency: order.currency || event.currency || "INR",
         paymentRef: razorpay_payment_id,
       }),
     ]);
 
-    return NextResponse.json({ success: true, ticketCode });
+    return NextResponse.json({ success: true, ticketCode, ticketCodes });
   } catch (error: any) {
     console.error("Ticket payment verification failed:", error);
     return NextResponse.json(

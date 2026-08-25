@@ -10,7 +10,33 @@ import {
 } from "@/lib/email";
 import { registerSchema, firstError } from "@/lib/validation";
 
-export async function registerForEvent(eventId: string, formData: FormData) {
+/** Maps an RPC error to a message a human can act on. */
+function registrationError(message: string): string {
+  if (message.includes("ALREADY_REGISTERED"))
+    return "You are already registered for this event.";
+  if (message.includes("NOT_ENOUGH_SEATS") || message.includes("EVENT_FULL"))
+    return "There aren't enough seats left for that quantity.";
+  if (message.includes("MAX_QTY"))
+    return "That's more tickets than this ticket type allows per order.";
+  if (message.includes("MIN_QTY")) return "Please choose at least one ticket.";
+  if (message.includes("SALES_ENDED")) return "Sales for this ticket have closed.";
+  if (message.includes("SALES_NOT_STARTED"))
+    return "Sales for this ticket haven't opened yet.";
+  if (message.includes("EVENT_NOT_OPEN"))
+    return "Registration for this event isn't open yet.";
+  if (message.includes("EVENT_OVER")) return "This event has already taken place.";
+  if (message.includes("EVENT_NOT_FOUND")) return "Event not found.";
+  if (message.includes("TICKET_TYPE_NOT_FOUND"))
+    return "That ticket type is no longer available.";
+  return "Failed to register. Please try again.";
+}
+
+export async function registerForEvent(
+  eventId: string,
+  formData: FormData,
+  ticketTypeId?: string,
+  quantity = 1,
+) {
   const supabase = await createClient();
 
   const parsed = registerSchema.safeParse({
@@ -23,29 +49,34 @@ export async function registerForEvent(eventId: string, formData: FormData) {
   }
   const { attendee_name, attendee_email, attendee_phone } = parsed.data;
 
-  // Register + decrement capacity atomically (locks the event row server-side,
-  // so seats can't oversell and the count actually goes down under RLS).
-  const { data, error } = await supabase.rpc("register_for_event", {
-    p_event_id: eventId,
-    p_attendee_name: attendee_name,
-    p_attendee_email: attendee_email,
-    p_attendee_phone: attendee_phone,
-  });
+  // With a tier chosen we can book N seats in one order; otherwise fall back
+  // to the single-ticket path (which itself routes through the default tier).
+  const useOrder = !!ticketTypeId && quantity > 1;
+  const { data, error } = useOrder
+    ? await supabase.rpc("register_free_order", {
+        p_event_id: eventId,
+        p_ticket_type_id: ticketTypeId,
+        p_quantity: quantity,
+        p_buyer_name: attendee_name,
+        p_buyer_email: attendee_email,
+        p_buyer_phone: attendee_phone,
+      })
+    : await supabase.rpc("register_for_event", {
+        p_event_id: eventId,
+        p_attendee_name: attendee_name,
+        p_attendee_email: attendee_email,
+        p_attendee_phone: attendee_phone,
+      });
 
   if (error) {
-    const msg = error.message ?? "";
-    if (msg.includes("ALREADY_REGISTERED"))
-      return { error: "You are already registered for this event." };
-    if (msg.includes("EVENT_FULL"))
-      return { error: "Sorry, this event is full!" };
-    if (msg.includes("EVENT_NOT_OPEN"))
-      return { error: "Registration for this event isn't open yet." };
-    if (msg.includes("EVENT_NOT_FOUND")) return { error: "Event not found." };
     console.error("Registration error:", error);
-    return { error: "Failed to register. Please try again." };
+    return { error: registrationError(error.message ?? "") };
   }
 
-  const ticketCode = data as string;
+  const codes: string[] = useOrder
+    ? ((data as { tickets?: string[] })?.tickets ?? [])
+    : [data as string];
+  const ticketCode = codes[0];
 
   // Best-effort confirmation email (never blocks registration).
   const { data: event } = await supabase
@@ -60,6 +91,7 @@ export async function registerForEvent(eventId: string, formData: FormData) {
     ticketCode,
     dateLabel: event?.date_label,
     venue: event?.venue,
+    extraTickets: codes.length > 1 ? codes.slice(1) : undefined,
   });
 
   // In-app notification for signed-in registrants (RLS: own insert).
@@ -69,12 +101,15 @@ export async function registerForEvent(eventId: string, formData: FormData) {
       user_id: user.id,
       type: "event",
       title: `You're registered for ${event?.title ?? "an event"}`,
-      body: `Ticket ${ticketCode.toUpperCase()} — see you there!`,
+      body:
+        codes.length > 1
+          ? `${codes.length} tickets confirmed — see you there!`
+          : `Ticket ${ticketCode.toUpperCase()} — see you there!`,
       link: event?.slug ? `/events/${event.slug}` : null,
     });
   }
 
-  return { success: true, ticketCode };
+  return { success: true, ticketCode, ticketCodes: codes };
 }
 
 export async function joinWaitlist(eventId: string, formData: FormData) {
