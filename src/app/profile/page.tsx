@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TicketRow } from "@/components/TicketRow";
 import { dbEventToTXF, type DBEvent } from "@/lib/events-map";
 import { Icon } from "@/components/Icon";
+import { getCreditHistory } from "@/lib/community";
 
 export const metadata = { title: "Profile" };
 
@@ -19,6 +20,10 @@ export default async function ProfilePage() {
     .select("full_name, email, city, bio, points, primary_role, host_status")
     .eq("id", user.id)
     .single();
+
+  // Credit ledger — tolerant, so a database without the community section of
+  // schema.sql simply shows an empty history.
+  const creditHistory = await getCreditHistory(supabase, user.id);
 
   const roleLabels: Record<string, string> = {
     admin: "Admin",
@@ -352,6 +357,53 @@ export default async function ProfilePage() {
                 </a>
               </div>
             )}
+
+            {/* Credit history — why the balance is what it is */}
+            <div id="credits" className="mt-6 scroll-mt-24 rounded-2xl border border-line bg-surface p-6 shadow-soft">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="font-display text-lg font-bold text-fg">Credits</h3>
+                <span className="font-display text-2xl font-bold tabular-nums text-fg">
+                  {profile?.points ?? 0}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                You earn 10 credits each time you&apos;re checked in to a session.
+                Credits unlock posting in the community and downloads in your
+                session groups.
+              </p>
+
+              {creditHistory.length === 0 ? (
+                <p className="mt-4 text-sm text-faint">
+                  No movements yet — attend a session to earn your first 10.
+                </p>
+              ) : (
+                <ul className="mt-4 flex flex-col gap-2.5">
+                  {creditHistory.map((e) => (
+                    <li key={e.id} className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-fg">
+                          {e.reason ?? (e.delta > 0 ? "Credits earned" : "Credits spent")}
+                        </p>
+                        <p className="text-xs text-faint">
+                          {new Date(e.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-sm font-semibold tabular-nums ${
+                          e.delta > 0 ? "text-host-soft" : "text-muted"
+                        }`}
+                      >
+                        {e.delta > 0 ? `+${e.delta}` : e.delta}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             {/* Directory progress */}
             <div className="mt-6 rounded-2xl border border-line bg-surface p-6 shadow-soft">

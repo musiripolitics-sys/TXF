@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CommunityFeed } from "@/components/CommunityFeed";
+import { getGates, getBalance, getMyGroups } from "@/lib/community";
 
 export const metadata = {
   title: "Community",
@@ -11,29 +12,18 @@ export const metadata = {
 export default async function CommunityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/community");
-  // Admin check and session groups in parallel.
+
   const supabase = await createClient();
-  const [admin, { data: attendedRegs }] = await Promise.all([
+  // One parallel batch — role, groups, gates and balance.
+  const [admin, groups, gates, balance] = await Promise.all([
     isAdmin(),
-    supabase
-      .from("registrations")
-      .select("event_id, events(id, title)")
-      .eq("user_id", user.id)
-      .eq("status", "attended"),
+    getMyGroups(supabase, user.id),
+    getGates(supabase),
+    getBalance(supabase, user.id),
   ]);
 
-  const seen = new Set<string>();
-  const eventGroups: { id: string; title: string }[] = [];
-  for (const r of attendedRegs ?? []) {
-    const ev = r.events as unknown as { id: string; title: string } | null;
-    if (ev && !seen.has(ev.id)) {
-      seen.add(ev.id);
-      eventGroups.push({ id: ev.id, title: ev.title });
-    }
-  }
-
   return (
-    <div className="mx-auto max-w-2xl px-5 py-12 sm:px-8">
+    <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
       <span className="text-xs font-semibold uppercase tracking-wider text-brand-soft">
         Community
       </span>
@@ -48,7 +38,7 @@ export default async function CommunityPage() {
           Member directory →
         </a>
       </div>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 max-w-2xl text-sm text-muted">
         Pick a channel, share wins, ask questions. Session groups are private to
         attendees of that event.
       </p>
@@ -56,7 +46,9 @@ export default async function CommunityPage() {
       <CommunityFeed
         currentUserId={user.id}
         isAdmin={admin}
-        eventGroups={eventGroups}
+        eventGroups={groups.map((g) => ({ id: g.id, title: g.title }))}
+        gates={gates}
+        balance={balance}
       />
     </div>
   );
