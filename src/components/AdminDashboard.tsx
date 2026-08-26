@@ -133,6 +133,7 @@ export function AdminDashboard({
   >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const [mailFailures, setMailFailures] = useState(0);
 
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -276,6 +277,18 @@ export function AdminDashboard({
     setEvents((evs as EventRow[]) ?? []);
     setUsers((usrs as AppUser[]) ?? []);
     setRegCount(regs ?? 0);
+
+    // Email delivery failures in the last 7 days. Tolerant, like the rest.
+    try {
+      const since = new Date(Date.now() - 7 * 864e5).toISOString();
+      const { count } = await supabase
+        .from("email_failures")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", since);
+      setMailFailures(count ?? 0);
+    } catch {
+      setMailFailures(0);
+    }
 
     // Open moderation reports — tolerant so a DB without the reports migration
     // simply shows an empty tab.
@@ -635,6 +648,20 @@ export function AdminDashboard({
   return (
     <>
       {dialog}
+      {mailFailures > 0 && (
+        <div className="border-b border-red-500/30 bg-red-500/10">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm sm:px-8">
+            <span className="font-semibold text-red-500">
+              {mailFailures} {mailFailures === 1 ? "email" : "emails"} failed to send in the last 7 days.
+            </span>
+            <span className="text-muted">
+              Members aren&apos;t getting confirmations or reminders. Run{" "}
+              <code className="rounded bg-ink-2 px-1.5 py-0.5 text-xs">npm run check:smtp</code>{" "}
+              to see why.
+            </span>
+          </div>
+        </div>
+      )}
       <header className="border-b border-line bg-ink-2">
         <div className="mx-auto flex max-w-7xl items-baseline justify-between gap-4 px-5 py-8 sm:px-8">
           <div>
