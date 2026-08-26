@@ -6,6 +6,11 @@ import { decideHostRequest } from "@/app/admin/actions";
 import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 
+const SUBMISSION_BASE =
+  "id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity";
+// Added by the event-discovery section of schema.sql.
+const SUBMISSION_COLS = `${SUBMISSION_BASE},tags,time`;
+
 type Submission = {
   id: string;
   title: string;
@@ -22,6 +27,7 @@ type Submission = {
   price_amount: number;
   capacity: number;
   tags?: string[] | null;
+  time?: string | null;
 };
 
 type EventRow = {
@@ -237,8 +243,17 @@ export function AdminDashboard({
     ] = await Promise.all([
       supabase
         .from("host_submissions")
-        .select("id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity")
-        .order("submitted_at", { ascending: false }),
+        .select(SUBMISSION_COLS)
+        .order("submitted_at", { ascending: false })
+        .then(async (r) =>
+          // Pending migration: fall back to the columns that definitely exist.
+          r.error
+            ? await supabase
+                .from("host_submissions")
+                .select(SUBMISSION_BASE)
+                .order("submitted_at", { ascending: false })
+            : r,
+        ),
       supabase
         .from("events")
         .select("id,slug,title,category,date,date_label,time,city,price_label,source")
@@ -328,7 +343,7 @@ export function AdminDashboard({
         category: s.category,
         date: s.date,
         date_label: formatDateLabel(s.date),
-        time: "10:00 AM – 1:00 PM IST",
+        time: s.time || "10:00 AM – 1:00 PM IST",
         city: s.city,
         venue: s.venue,
         address: `${s.venue}, ${s.city}`,

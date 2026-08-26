@@ -4,6 +4,26 @@ import { useState } from "react";
 import { eventCategories } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
 
+/**
+ * Turn two 24-hour inputs into the display string the rest of the app uses,
+ * e.g. "10:00 AM – 1:00 PM IST".
+ */
+function formatTimeRange(start: string, end: string): string | null {
+  const to12h = (v: string) => {
+    const [hStr, m] = v.split(":");
+    const h = Number(hStr);
+    if (Number.isNaN(h)) return null;
+    const suffix = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m ?? "00"} ${suffix}`;
+  };
+  const a = start ? to12h(start) : null;
+  const b = end ? to12h(end) : null;
+  if (!a && !b) return null;
+  if (a && b) return `${a} – ${b} IST`;
+  return `${a ?? b} IST`;
+}
+
 export function HostForm() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -20,6 +40,8 @@ export function HostForm() {
     priceRupees: "",
     capacity: "100",
     tags: "",
+    startTime: "10:00",
+    endTime: "13:00",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +64,7 @@ export function HostForm() {
       return;
     }
 
-    const { error: insertError } = await supabase.from("host_submissions").insert({
+    const core = {
       title: formData.title,
       category: formData.category,
       date: formData.date,
@@ -54,6 +76,9 @@ export function HostForm() {
       price_type: formData.priceType,
       price_amount: paise,
       capacity: Math.max(1, parseInt(formData.capacity || "100", 10)),
+    };
+
+    const extras = {
       // Same normalisation as the admin form, so tags stay one set.
       tags: Array.from(
         new Set(
@@ -63,7 +88,19 @@ export function HostForm() {
             .filter(Boolean),
         ),
       ),
-    });
+      time: formatTimeRange(formData.startTime, formData.endTime),
+    };
+
+    // tags and time arrive with the event-discovery section of schema.sql. If
+    // it hasn't been applied, submit without them rather than failing the
+    // whole submission — losing the tags is better than losing the event.
+    let { error: insertError } = await supabase
+      .from("host_submissions")
+      .insert({ ...core, ...extras });
+
+    if (insertError) {
+      ({ error: insertError } = await supabase.from("host_submissions").insert(core));
+    }
 
     setSubmitting(false);
 
@@ -102,6 +139,8 @@ export function HostForm() {
                 title: "",
                 category: "Meetup",
                 tags: "",
+                startTime: "10:00",
+                endTime: "13:00",
                 date: "",
                 city: "",
                 venue: "",
@@ -176,6 +215,32 @@ export function HostForm() {
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
+        </div>
+
+        <div>
+          <label htmlFor="host-start" className="mb-1.5 block text-sm font-medium text-fg">
+            Time
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="host-start"
+              type="time"
+              required
+              aria-label="Start time"
+              value={formData.startTime}
+              onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+              className="w-full rounded-xl border border-line bg-ink px-3 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+            <span className="shrink-0 text-sm text-faint">to</span>
+            <input
+              type="time"
+              required
+              aria-label="End time"
+              value={formData.endTime}
+              onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+              className="w-full rounded-xl border border-line bg-ink px-3 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+          </div>
         </div>
 
         <div>
