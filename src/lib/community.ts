@@ -172,3 +172,43 @@ export function formatBytes(n: number | null): string {
   }
   return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
+
+export type EarnedBadge = {
+  slug: string | null;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  awarded_at: string;
+};
+
+/**
+ * Badges this member has earned. Tolerant like everything else here: a
+ * database without the trust-levels section just returns none.
+ */
+export async function getBadges(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<EarnedBadge[]> {
+  try {
+    const { data, error } = await supabase
+      .from("user_badges")
+      .select("awarded_at, badges(slug, name, description, icon)")
+      .eq("user_id", userId)
+      .order("awarded_at", { ascending: false });
+    if (error || !data) return [];
+
+    return data
+      .map((r) => {
+        const b = r.badges as unknown as {
+          slug: string | null;
+          name: string;
+          description: string | null;
+          icon: string | null;
+        } | null;
+        return b ? { ...b, awarded_at: r.awarded_at as string } : null;
+      })
+      .filter((b): b is EarnedBadge => b !== null);
+  } catch {
+    return [];
+  }
+}

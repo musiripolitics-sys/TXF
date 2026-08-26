@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TicketRow } from "@/components/TicketRow";
 import { dbEventToTXF, type DBEvent } from "@/lib/events-map";
 import { Icon } from "@/components/Icon";
-import { getCreditHistory } from "@/lib/community";
+import { getCreditHistory, getBadges } from "@/lib/community";
 
 export const metadata = { title: "Profile" };
 
@@ -23,7 +23,10 @@ export default async function ProfilePage() {
 
   // Credit ledger — tolerant, so a database without the community section of
   // schema.sql simply shows an empty history.
-  const creditHistory = await getCreditHistory(supabase, user.id);
+  const [creditHistory, badges] = await Promise.all([
+    getCreditHistory(supabase, user.id),
+    getBadges(supabase, user.id),
+  ]);
 
   const roleLabels: Record<string, string> = {
     admin: "Admin",
@@ -355,6 +358,28 @@ export default async function ProfilePage() {
                 <a href="/membership" className="text-brand font-medium hover:underline">
                   View Plans
                 </a>
+              </div>
+            )}
+
+            {/* Badges — earned automatically from attendance and posting */}
+            {badges.length > 0 && (
+              <div className="mt-6 rounded-2xl border border-line bg-surface p-6 shadow-soft">
+                <h3 className="font-display text-lg font-bold text-fg">Badges</h3>
+                <div className="mt-4 flex flex-col gap-3">
+                  {badges.map((b) => (
+                    <div key={b.slug ?? b.name} className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-brand-soft">
+                        <Icon name={b.icon ?? "medal"} className="h-5 w-5" strokeWidth={1.7} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-fg">{b.name}</p>
+                        {b.description && (
+                          <p className="text-xs text-muted">{b.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

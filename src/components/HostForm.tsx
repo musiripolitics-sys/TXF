@@ -19,6 +19,7 @@ export function HostForm() {
     priceType: "Free" as "Free" | "Paid",
     priceRupees: "",
     capacity: "100",
+    tags: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +54,15 @@ export function HostForm() {
       price_type: formData.priceType,
       price_amount: paise,
       capacity: Math.max(1, parseInt(formData.capacity || "100", 10)),
+      // Same normalisation as the admin form, so tags stay one set.
+      tags: Array.from(
+        new Set(
+          formData.tags
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ),
     });
 
     setSubmitting(false);
@@ -91,6 +101,7 @@ export function HostForm() {
               setFormData({
                 title: "",
                 category: "Meetup",
+                tags: "",
                 date: "",
                 city: "",
                 venue: "",
@@ -269,6 +280,22 @@ export function HostForm() {
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
+      </div>
+
+      <div>
+        <label htmlFor="host-tags" className="mb-1.5 block text-sm font-medium text-fg">
+          Tags <span className="text-faint">(optional)</span>
+        </label>
+        <input
+          id="host-tags"
+          placeholder="react, beginner, students welcome"
+          value={formData.tags}
+          onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+          className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        />
+        <p className="mt-1.5 text-xs text-faint">
+          Comma separated. These help people find your event on the events page.
+        </p>
       </div>
 
       {error && (

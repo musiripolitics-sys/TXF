@@ -21,6 +21,7 @@ type Submission = {
   price_type: "Free" | "Paid";
   price_amount: number;
   capacity: number;
+  tags?: string[] | null;
 };
 
 type EventRow = {
@@ -138,6 +139,10 @@ export function AdminDashboard({
     about: "",
     capacity: 100,
     tags: "",
+    highlights: "",
+    refundPolicy: "",
+    latitude: "",
+    longitude: "",
   });
   const [speakers, setSpeakers] = useState<{ name: string; role: string }[]>([
     { name: "", role: "" },
@@ -327,6 +332,7 @@ export function AdminDashboard({
         city: s.city,
         venue: s.venue,
         address: `${s.venue}, ${s.city}`,
+        tags: s.tags ?? [],
         price_type: s.price_type ?? "Free",
         price_label:
           s.price_type === "Paid" && s.price_amount > 0
@@ -497,6 +503,13 @@ export function AdminDashboard({
               .filter(Boolean),
           ),
         ),
+        highlights: eventForm.highlights
+          .split("\n")
+          .map((h) => h.trim())
+          .filter(Boolean),
+        refund_policy: eventForm.refundPolicy.trim() || null,
+        latitude: eventForm.latitude.trim() ? Number(eventForm.latitude) : null,
+        longitude: eventForm.longitude.trim() ? Number(eventForm.longitude) : null,
         capacity: totalCapacity,
         spots_left: totalCapacity,
         status: "published",
@@ -551,6 +564,10 @@ export function AdminDashboard({
       title: "",
       category: "Meetup",
       tags: "",
+      highlights: "",
+      refundPolicy: "",
+      latitude: "",
+      longitude: "",
       date: "",
       time: "10:00 AM – 1:00 PM IST",
       city: "",
@@ -1020,6 +1037,57 @@ export function AdminDashboard({
                 <p className="mt-1 text-xs text-faint">
                   Comma separated. Lowercased on save, so &ldquo;React&rdquo; and
                   &ldquo;react&rdquo; stay one tag. These become filters on the events page.
+                </p>
+              </Field>
+
+              <Field label="Good to know">
+                <textarea
+                  rows={3}
+                  value={eventForm.highlights}
+                  onChange={(e) => setEventForm({ ...eventForm, highlights: e.target.value })}
+                  placeholder={"Laptop required\nBeginner friendly\nLunch included"}
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-faint">
+                  One per line. Shown as a checklist on the event page — this is what
+                  stops people emailing to ask.
+                </p>
+              </Field>
+
+              <Field label="Map coordinates">
+                <div className="flex gap-2">
+                  <input
+                    value={eventForm.latitude}
+                    onChange={(e) => setEventForm({ ...eventForm, latitude: e.target.value })}
+                    placeholder="Latitude (13.0827)"
+                    inputMode="decimal"
+                    className={inputCls}
+                  />
+                  <input
+                    value={eventForm.longitude}
+                    onChange={(e) => setEventForm({ ...eventForm, longitude: e.target.value })}
+                    placeholder="Longitude (80.2707)"
+                    inputMode="decimal"
+                    className={inputCls}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-faint">
+                  Optional. With both, the event page draws a map; without them it
+                  shows the address and map links instead.
+                </p>
+              </Field>
+
+              <Field label="Refund & cancellation policy">
+                <textarea
+                  rows={3}
+                  value={eventForm.refundPolicy}
+                  onChange={(e) => setEventForm({ ...eventForm, refundPolicy: e.target.value })}
+                  placeholder="Full refund up to 48 hours before the event. After that, tickets are transferable but not refundable."
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-faint">
+                  Shown on paid events only. Leaving this blank is why refund questions
+                  end up in your inbox.
                 </p>
               </Field>
 
