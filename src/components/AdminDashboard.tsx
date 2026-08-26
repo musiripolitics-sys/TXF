@@ -130,6 +130,8 @@ export function AdminDashboard({
     { amount: number; stream: string; status: string }[]
   >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Event queued for deletion; when set, the confirmation dialog is shown.
+  const [eventToDelete, setEventToDelete] = useState<EventRow | null>(null);
 
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -417,6 +419,7 @@ export function AdminDashboard({
     setBusyId(id);
     await supabase.from("events").delete().eq("id", id);
     setBusyId(null);
+    setEventToDelete(null);
     await refresh();
   };
 
@@ -1289,7 +1292,7 @@ export function AdminDashboard({
                           </span>
                         ) : (
                           <button
-                            onClick={() => deleteEvent(ev.id)}
+                            onClick={() => setEventToDelete(ev)}
                             disabled={busyId === ev.id}
                             className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-60"
                           >
@@ -1593,6 +1596,53 @@ export function AdminDashboard({
           </div>
         )}
       </div>
+
+      {eventToDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-event-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => {
+            if (busyId !== eventToDelete.id) setEventToDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="delete-event-title"
+              className="text-lg font-semibold text-fg"
+            >
+              Delete this event?
+            </h3>
+            <p className="mt-2 text-sm text-muted">
+              You&rsquo;re about to permanently delete{" "}
+              <span className="font-semibold text-fg">
+                {eventToDelete.title}
+              </span>
+              . This action can&rsquo;t be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setEventToDelete(null)}
+                disabled={busyId === eventToDelete.id}
+                className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-muted hover:bg-ink/40 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteEvent(eventToDelete.id)}
+                disabled={busyId === eventToDelete.id}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+              >
+                {busyId === eventToDelete.id ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
