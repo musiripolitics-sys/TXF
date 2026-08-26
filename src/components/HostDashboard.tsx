@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { messageAttendees } from "@/app/host/dashboard/actions";
 import { toast } from "./Toast";
 
@@ -72,6 +73,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [events, setEvents] = useState<HostEvent[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [composeFor, setComposeFor] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -244,6 +246,13 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   };
 
   const removeQuestion = async (eventId: string, id: string) => {
+    const ok = await confirm({
+      title: "Remove this question?",
+      body: "Answers already given by registrants are kept, but nobody will be asked it again.",
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
     await supabase.from("event_questions").delete().eq("id", id);
     await loadQuestions(eventId);
   };
@@ -381,6 +390,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
   return (
     <>
+      {dialog}
       <header className="border-b border-line bg-ink-2">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-5 py-8 sm:px-8">
           <div>

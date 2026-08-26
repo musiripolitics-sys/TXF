@@ -5,6 +5,7 @@ import { eventCategories, categoryTheme, type EventCategory } from "@/lib/data";
 import { decideHostRequest } from "@/app/admin/actions";
 import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 const SUBMISSION_BASE =
   "id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity";
@@ -131,8 +132,7 @@ export function AdminDashboard({
     { amount: number; stream: string; status: string }[]
   >([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Event queued for deletion; when set, the confirmation dialog is shown.
-  const [eventToDelete, setEventToDelete] = useState<EventRow | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -417,10 +417,20 @@ export function AdminDashboard({
   };
 
   const deleteEvent = async (id: string) => {
+    const ev = events.find((e) => e.id === id);
+    const ok = await confirm({
+      title: `Delete “${ev?.title ?? "this event"}”?`,
+      body:
+        "Every registration, ticket type and issued ticket goes with it, along " +
+        "with the event's session group and its posts. Attendees are not " +
+        "notified. This can't be undone.",
+      confirmLabel: "Delete event",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusyId(id);
     await supabase.from("events").delete().eq("id", id);
     setBusyId(null);
-    setEventToDelete(null);
     await refresh();
   };
 
@@ -429,6 +439,15 @@ export function AdminDashboard({
     if (role === "admin" && userId === adminId && has) {
       toast("You can't remove your own admin role.", "error");
       return;
+    }
+    if (has) {
+      const ok = await confirm({
+        title: `Remove the ${role} role?`,
+        body: "They lose access to everything that role unlocks. You can add it back later.",
+        confirmLabel: "Remove role",
+        tone: "danger",
+      });
+      if (!ok) return;
     }
     setBusyId(userId + role);
     if (has) {
@@ -615,6 +634,7 @@ export function AdminDashboard({
 
   return (
     <>
+      {dialog}
       <header className="border-b border-line bg-ink-2">
         <div className="mx-auto flex max-w-7xl items-baseline justify-between gap-4 px-5 py-8 sm:px-8">
           <div>
@@ -1304,7 +1324,7 @@ export function AdminDashboard({
                           </span>
                         ) : (
                           <button
-                            onClick={() => setEventToDelete(ev)}
+                            onClick={() => deleteEvent(ev.id)}
                             disabled={busyId === ev.id}
                             className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-60"
                           >
@@ -1609,52 +1629,6 @@ export function AdminDashboard({
         )}
       </div>
 
-      {eventToDelete && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-event-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => {
-            if (busyId !== eventToDelete.id) setEventToDelete(null);
-          }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3
-              id="delete-event-title"
-              className="text-lg font-semibold text-fg"
-            >
-              Delete this event?
-            </h3>
-            <p className="mt-2 text-sm text-muted">
-              You&rsquo;re about to permanently delete{" "}
-              <span className="font-semibold text-fg">
-                {eventToDelete.title}
-              </span>
-              . This action can&rsquo;t be undone.
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setEventToDelete(null)}
-                disabled={busyId === eventToDelete.id}
-                className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-muted hover:bg-ink/40 disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteEvent(eventToDelete.id)}
-                disabled={busyId === eventToDelete.id}
-                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60"
-              >
-                {busyId === eventToDelete.id ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

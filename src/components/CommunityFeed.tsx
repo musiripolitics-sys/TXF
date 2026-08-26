@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createPost, createComment } from "@/app/community/actions";
 import { toast } from "./Toast";
 import { ReportButton } from "./ReportButton";
+import { useConfirm } from "./ConfirmDialog";
 
 type Post = {
   id: string;
@@ -90,6 +91,7 @@ export function CommunityFeed({
   balance?: number;
 }) {
   const supabase = createClient();
+  const { confirm, dialog } = useConfirm();
   const eventChannels: Channel[] = eventGroups.map((g) => ({
     type: "event",
     id: g.id,
@@ -187,6 +189,17 @@ export function CommunityFeed({
   };
 
   const removePost = async (id: string) => {
+    const replies = comments[id]?.length ?? 0;
+    const ok = await confirm({
+      title: "Delete this post?",
+      body:
+        replies > 0
+          ? `Its ${replies} ${replies === 1 ? "comment goes" : "comments go"} with it. This can't be undone.`
+          : "This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await supabase.from("posts").delete().eq("id", id);
     setPosts((p) => p.filter((x) => x.id !== id));
   };
@@ -222,6 +235,13 @@ export function CommunityFeed({
   };
 
   const removeComment = async (postId: string, id: string) => {
+    const ok = await confirm({
+      title: "Delete this comment?",
+      body: "This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await supabase.from("post_comments").delete().eq("id", id);
     setComments((c) => ({ ...c, [postId]: (c[postId] ?? []).filter((x) => x.id !== id) }));
   };
@@ -255,6 +275,7 @@ export function CommunityFeed({
 
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-[210px_minmax(0,1fr)]">
+      {dialog}
       {/* Rail — channels, your groups, and what you can spend */}
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-faint">
