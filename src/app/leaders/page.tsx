@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Button } from "@/components/Button";
 import { Section, SectionHeading } from "@/components/Section";
 import { LeaderTeamCard } from "@/components/LeaderTeamCard";
@@ -6,13 +7,21 @@ import { OrgTree, type Org } from "@/components/OrgTree";
 import { getLeaders } from "@/lib/content";
 import { createClient } from "@/lib/supabase/server";
 
+// Leadership board is hidden for now. To bring it back: delete HIDDEN below,
+// drop the notFound() call, and restore the "Leaders" links in Nav.tsx and
+// Footer.tsx plus <Leadership /> in app/page.tsx. Page code is left intact.
+const HIDDEN = true;
+
 export const metadata: Metadata = {
+  robots: { index: false, follow: false },
   title: "Leaders",
   description:
     "Meet the Techxfluence leaders — founder, directors, coordinators, ambassadors and mentors — and see how the community is structured.",
 };
 
 export default async function LeadersPage() {
+  if (HIDDEN) notFound();
+
   const leaders = await getLeaders();
 
   // Live member leaderboard — real attendance points, opt-in members only.
