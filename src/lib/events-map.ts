@@ -22,6 +22,11 @@ export type DBEvent = {
   starts_at?: string | null;
   ends_at?: string | null;
   host_name?: string | null;
+  tags?: string[] | null;
+  highlights?: unknown;
+  refund_policy?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   event_speakers?: {
     sort_order: number;
     speakers: { name: string; role: string | null; initials: string | null } | null;
@@ -101,6 +106,13 @@ export function dbEventToTXF(row: DBEvent): TXFEvent {
     agenda: agenda.length > 0 ? agenda : undefined,
     image: row.image_url ?? categoryImages[row.category] ?? undefined,
     hostName: row.host_name ?? undefined,
+    tags: Array.isArray(row.tags) ? row.tags.filter(Boolean) : undefined,
+    highlights: Array.isArray(row.highlights)
+      ? (row.highlights as unknown[]).map(String).filter(Boolean)
+      : undefined,
+    refundPolicy: row.refund_policy ?? undefined,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
     startsAt: row.starts_at ?? undefined,
     endsAt: row.ends_at ?? undefined,
   };

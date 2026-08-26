@@ -89,6 +89,19 @@ export function EventCard({ event }: { event: TXFEvent }) {
           {event.venue && !isOnline ? ` · ${event.venue}` : ""}
         </p>
 
+        {event.tags && event.tags.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {event.tags.slice(0, 3).map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-ink-2 px-2 py-0.5 text-[11px] font-medium text-faint"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="mt-auto flex items-center justify-between pt-4">
           <span className="text-sm font-bold text-fg">
             {isFree ? "Free" : `From ${event.priceLabel}`}

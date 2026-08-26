@@ -59,6 +59,11 @@ export type TXFEvent = {
   image?: string;
   hostName?: string;
   hostId?: string;
+  tags?: string[];
+  highlights?: string[];
+  refundPolicy?: string;
+  latitude?: number;
+  longitude?: number;
   startsAt?: string;
   endsAt?: string;
   ticketTypes?: TicketType[];

@@ -7,8 +7,14 @@ import {
 } from "@/lib/data";
 import { dbEventToTXF, type DBEvent } from "./events-map";
 
-const COLS =
+const BASE_COLS =
   "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url,starts_at,ends_at";
+
+// Added by the event-discovery section of schema.sql. Selected separately so a
+// database that hasn't had it applied yet falls back to the base columns
+// instead of erroring — which would drop the page to static seed data.
+const DISCOVERY_COLS = "tags,highlights,refund_policy,latitude,longitude";
+const COLS = `${BASE_COLS},${DISCOVERY_COLS}`;
 
 /**
  * Published events from Supabase, newest date first.
@@ -19,15 +25,22 @@ export async function getEvents(): Promise<TXFEvent[]> {
   try {
     const supabase = await createClient();
     const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
-      .from("events")
-      .select(COLS)
-      .eq("status", "published")
-      .gte("date", today) // past events drop off the listing
-      .order("date", { ascending: true });
+
+    const query = (cols: string) =>
+      supabase
+        .from("events")
+        .select(cols)
+        .eq("status", "published")
+        .gte("date", today) // past events drop off the listing
+        .order("date", { ascending: true });
+
+    let { data, error } = await query(COLS);
+    // Missing discovery columns means the migration is still pending; the rest
+    // of the page works fine without them.
+    if (error) ({ data, error } = await query(BASE_COLS));
 
     if (error || !data || data.length === 0) return staticEvents;
-    return (data as DBEvent[]).map(dbEventToTXF);
+    return (data as unknown as DBEvent[]).map(dbEventToTXF);
   } catch {
     return staticEvents;
   }
@@ -39,18 +52,23 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
     const supabase = await createClient();
     // One round trip. Embedding the related rows here instead of issuing a
     // query each saves ~400ms of latency on this page.
-    const { data, error } = await supabase
-      .from("events")
-      .select(
-        `${COLS}, host_name, host_id,
-         event_speakers(sort_order, speakers(name, role, initials)),
-         event_agenda(sort_order, when_label, what),
-         ticket_types(id,name,description,price_amount,capacity,sold,sales_start,sales_end,max_per_order,sort_order),
-         event_questions(id,label,type,options,required,sort_order)`,
-      )
-      .eq("slug", slug)
-      .eq("status", "published")
-      .maybeSingle();
+    const query = (cols: string) =>
+      supabase
+        .from("events")
+        .select(
+          `${cols}, host_name, host_id,
+           event_speakers(sort_order, speakers(name, role, initials)),
+           event_agenda(sort_order, when_label, what),
+           ticket_types(id,name,description,price_amount,capacity,sold,sales_start,sales_end,max_per_order,sort_order),
+           event_questions(id,label,type,options,required,sort_order)`,
+        )
+        .eq("slug", slug)
+        .eq("status", "published")
+        .maybeSingle();
+
+    let { data, error } = await query(COLS);
+    // Same fallback as getEvents: the discovery columns are optional.
+    if (error) ({ data, error } = await query(BASE_COLS));
 
     if (error || !data) return getStaticEvent(slug) ?? null;
 

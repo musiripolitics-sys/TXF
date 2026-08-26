@@ -137,6 +137,7 @@ export function AdminDashboard({
     blurb: "",
     about: "",
     capacity: 100,
+    tags: "",
   });
   const [speakers, setSpeakers] = useState<{ name: string; role: string }[]>([
     { name: "", role: "" },
@@ -488,6 +489,14 @@ export function AdminDashboard({
         price_amount: cheapest,
         blurb: eventForm.blurb,
         about: eventForm.about,
+        tags: Array.from(
+          new Set(
+            eventForm.tags
+              .split(",")
+              .map((t) => t.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ),
         capacity: totalCapacity,
         spots_left: totalCapacity,
         status: "published",
@@ -541,6 +550,7 @@ export function AdminDashboard({
     setEventForm({
       title: "",
       category: "Meetup",
+      tags: "",
       date: "",
       time: "10:00 AM – 1:00 PM IST",
       city: "",
@@ -998,6 +1008,19 @@ export function AdminDashboard({
                   }
                   className={inputCls}
                 />
+              </Field>
+
+              <Field label="Tags">
+                <input
+                  value={eventForm.tags}
+                  onChange={(e) => setEventForm({ ...eventForm, tags: e.target.value })}
+                  placeholder="react, beginner, students welcome"
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-faint">
+                  Comma separated. Lowercased on save, so &ldquo;React&rdquo; and
+                  &ldquo;react&rdquo; stay one tag. These become filters on the events page.
+                </p>
               </Field>
 
               <Field label="About (Full Description)" required>
