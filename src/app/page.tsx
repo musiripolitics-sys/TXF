@@ -11,12 +11,14 @@ export default function Home() {
   return (
     <>
       <Hero />
-      <CategoryBrowse />
+      {/* What we run, then what's on, then the numbers behind it — the
+          business first, the membership pitch after. */}
+      <Activities />
       <UpcomingEvents />
       <StatsBand />
+      <CategoryBrowse />
       <Membership />
       <Partners />
-      <Activities />
       <FinalCTA />
     </>
   );
