@@ -23,7 +23,13 @@ import {
   type Sort,
 } from "@/lib/event-filters";
 
-export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) {
+export function EventsBrowser({
+  initialEvents,
+  attendance = {},
+}: {
+  initialEvents: TXFEvent[];
+  attendance?: Record<string, { going: number; names: string[] }>;
+}) {
   const params = useSearchParams();
 
   // The URL is the source of truth, so the back button and shared links work
@@ -379,7 +385,11 @@ export function EventsBrowser({ initialEvents }: { initialEvents: TXFEvent[] }) 
           {results.length > 0 ? (
             <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {results.map((event) => (
-                <EventCard key={event.slug} event={event} />
+                <EventCard
+                  key={event.slug}
+                  event={event}
+                  attendance={event.id ? attendance[event.id] : undefined}
+                />
               ))}
             </div>
           ) : (

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { EventsBrowser } from "@/components/EventsBrowser";
-import { getEvents } from "@/lib/events";
+import { getEvents, getAttendance } from "@/lib/events";
 import {
   fromParams,
   toParams,
@@ -65,11 +65,15 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
 
 export default async function EventsPage() {
   const events = await getEvents();
+  // One round trip for the whole page's social proof.
+  const attendance = await getAttendance(
+    events.map((e) => e.id).filter(Boolean) as string[],
+  );
   // Filters live in the query string and are read client-side, so the browser
   // needs a boundary while the params resolve.
   return (
     <Suspense fallback={null}>
-      <EventsBrowser initialEvents={events} />
+      <EventsBrowser initialEvents={events} attendance={attendance} />
     </Suspense>
   );
 }

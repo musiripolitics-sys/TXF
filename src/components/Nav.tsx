@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 
 const links = [
   { label: "Events", href: "/events" },
+  { label: "Chapters", href: "/communities" },
   { label: "Community", href: "/community" },
   { label: "Membership", href: "/membership" },
   { label: "Host an Event", href: "/host" },

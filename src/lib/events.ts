@@ -130,3 +130,33 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
     return getStaticEvent(slug) ?? null;
   }
 }
+
+export type Attendance = { going: number; names: string[] };
+
+/**
+ * Who's coming, for the social-proof strip.
+ *
+ * Counts are aggregate and shown to anyone; names come back only for members
+ * who opted into the directory, and only when the viewer is signed in — the
+ * database enforces both, this just relays it.
+ */
+export async function getAttendance(
+  eventIds: string[],
+): Promise<Record<string, Attendance>> {
+  if (eventIds.length === 0) return {};
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("event_attendance", {
+      p_event_ids: eventIds,
+    });
+    if (error || !data) return {};
+
+    const out: Record<string, Attendance> = {};
+    for (const row of data as { event_id: string; going: number; names: string[] }[]) {
+      out[row.event_id] = { going: row.going ?? 0, names: row.names ?? [] };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}

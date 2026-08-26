@@ -3,13 +3,20 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { SaveEventBtn } from "@/components/SaveEventBtn";
 import { categoryTheme, type TXFEvent } from "@/lib/data";
+import { GoingStrip } from "./GoingStrip";
 
 /**
  * Marketplace event card (Eventbrite-style): image on top, then date, title,
  * venue and price. Whole card links to the detail page. Styled in the TXF
  * brand — dark surfaces, brand accent, per-category gradient when no artwork.
  */
-export function EventCard({ event }: { event: TXFEvent }) {
+export function EventCard({
+  event,
+  attendance,
+}: {
+  event: TXFEvent;
+  attendance?: { going: number; names: string[] };
+}) {
   const theme = categoryTheme[event.category];
   const isFree = event.price === "Free";
   const isOnline = event.city?.toLowerCase() === "online";
@@ -99,6 +106,12 @@ export function EventCard({ event }: { event: TXFEvent }) {
                 {t}
               </span>
             ))}
+          </div>
+        )}
+
+        {attendance && attendance.going > 0 && (
+          <div className="mt-3">
+            <GoingStrip going={attendance.going} names={attendance.names} />
           </div>
         )}
 

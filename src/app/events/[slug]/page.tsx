@@ -13,7 +13,8 @@ import { EventFacts } from "@/components/EventFacts";
 import { EventWhereBlock } from "@/components/EventWhereBlock";
 import { EventOrganizer } from "@/components/EventOrganizer";
 import { RelatedEvents } from "@/components/RelatedEvents";
-import { getEvents } from "@/lib/events";
+import { getEvents, getAttendance } from "@/lib/events";
+import { GoingStrip } from "@/components/GoingStrip";
 import {
   getActiveTier,
   applyMemberDiscount,
@@ -93,10 +94,14 @@ export default async function EventDetailPage({
   const pct = Math.round((filled / event.capacity) * 100);
 
   // Siblings for the "you might also like" rail, and the organiser's stats.
-  const [allEvents, organizer] = await Promise.all([
+  const [allEvents, organizer, attendanceMap] = await Promise.all([
     getEvents(),
     loadOrganizer(event.hostId),
+    event.id
+      ? getAttendance([event.id])
+      : Promise.resolve({} as Awaited<ReturnType<typeof getAttendance>>),
   ]);
+  const attendance = event.id ? attendanceMap[event.id] : undefined;
 
   const user = await getCurrentUser();
   let userProfile = null;
@@ -201,6 +206,19 @@ export default async function EventDetailPage({
           capacity={event.capacity}
         />
       </div>
+
+      {attendance && attendance.going > 0 && (
+        <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+            <GoingStrip going={attendance.going} names={attendance.names} size="md" />
+            {attendance.names.length === 0 && (
+              <span className="text-xs text-faint">
+                Sign in to see who else is coming.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto grid max-w-5xl gap-10 px-5 py-10 pb-28 sm:px-8 lg:grid-cols-[1.6fr_1fr] lg:pb-12">
         {/* Main column */}
