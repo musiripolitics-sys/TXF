@@ -99,8 +99,19 @@ export function AdminDashboard({
 }) {
   const supabase = createClient();
 
+  type Report = {
+    id: string;
+    post_id: string | null;
+    comment_id: string | null;
+    reason: string | null;
+    created_at: string;
+    body: string | null;
+    author_name: string | null;
+  };
+  const [reports, setReports] = useState<Report[]>([]);
+
   const [activeTab, setActiveTab] = useState<
-    "overview" | "submissions" | "create" | "manage" | "users" | "payouts"
+    "overview" | "submissions" | "create" | "manage" | "users" | "payouts" | "reports"
   >("overview");
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -241,6 +252,41 @@ export function AdminDashboard({
     setEvents((evs as EventRow[]) ?? []);
     setUsers((usrs as AppUser[]) ?? []);
     setRegCount(regs ?? 0);
+
+    // Open moderation reports — tolerant so a DB without the reports migration
+    // simply shows an empty tab.
+    try {
+      const { data: reps } = await supabase
+        .from("post_reports")
+        .select("id, post_id, comment_id, reason, created_at")
+        .eq("resolved", false)
+        .order("created_at", { ascending: false });
+
+      if (reps && reps.length > 0) {
+        const postIds = reps.map((r) => r.post_id).filter(Boolean) as string[];
+        const commentIds = reps.map((r) => r.comment_id).filter(Boolean) as string[];
+        const [{ data: ps }, { data: cs }] = await Promise.all([
+          postIds.length
+            ? supabase.from("posts").select("id, body, author_name").in("id", postIds)
+            : Promise.resolve({ data: [] }),
+          commentIds.length
+            ? supabase.from("post_comments").select("id, body, author_name").in("id", commentIds)
+            : Promise.resolve({ data: [] }),
+        ]);
+        const byId = new Map<string, { body: string; author_name: string }>();
+        for (const x of [...(ps ?? []), ...(cs ?? [])]) byId.set(x.id, x);
+        setReports(
+          reps.map((r) => {
+            const t = byId.get((r.post_id ?? r.comment_id) as string);
+            return { ...r, body: t?.body ?? null, author_name: t?.author_name ?? null };
+          }),
+        );
+      } else {
+        setReports([]);
+      }
+    } catch {
+      setReports([]);
+    }
 
     // Host payout ledger — tolerant so a DB without the payouts migration
     // simply shows an empty tab instead of erroring.
@@ -539,7 +585,7 @@ export function AdminDashboard({
 
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
         <div className="mb-8 flex gap-8 overflow-x-auto border-b border-line">
-          {(["overview", "submissions", "create", "manage", "users", "payouts"] as const).map((tab) => (
+          {(["overview", "submissions", "create", "manage", "users", "payouts", "reports"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -555,6 +601,7 @@ export function AdminDashboard({
               {tab === "manage" && `Manage Events (${events.length})`}
               {tab === "users" && `Users (${users.length})`}
               {tab === "payouts" && "Payouts"}
+              {tab === "reports" && (reports.length > 0 ? `Reports (${reports.length})` : "Reports")}
             </button>
           ))}
         </div>
@@ -1149,6 +1196,77 @@ export function AdminDashboard({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Reports */}
+        {!loading && activeTab === "reports" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="font-display text-2xl font-bold text-fg">Reported content</h2>
+              <p className="mt-1 text-sm text-muted">
+                Posts and comments members have flagged. Resolving clears it from
+                this queue — delete the content itself from the community feed.
+              </p>
+            </div>
+
+            {reports.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line bg-surface p-12 text-center">
+                <p className="text-sm font-medium text-fg">Nothing reported</p>
+                <p className="mt-1 text-sm text-faint">
+                  Members can report a post or comment from the community feed.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reports.map((r) => (
+                  <div
+                    key={r.id}
+                    className="rounded-2xl border border-line bg-surface p-5 shadow-soft"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-soft">
+                          {r.post_id ? "Post" : "Comment"}
+                          {r.author_name ? ` by ${r.author_name}` : ""}
+                        </p>
+                        <p className="mt-1.5 line-clamp-3 whitespace-pre-wrap text-sm text-fg">
+                          {r.body ?? "(the content has already been deleted)"}
+                        </p>
+                        <p className="mt-2 text-sm text-muted">
+                          <span className="font-medium text-fg">Reason:</span>{" "}
+                          {r.reason ?? "No reason given."}
+                        </p>
+                        <p className="mt-1 text-xs text-faint">
+                          {new Date(r.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <a
+                          href="/community"
+                          className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-fg hover:border-brand hover:text-brand"
+                        >
+                          Open feed
+                        </a>
+                        <button
+                          onClick={async () => {
+                            const { error } = await supabase.rpc("resolve_report", {
+                              p_report_id: r.id,
+                            });
+                            if (error) return toast("Couldn't resolve that report.", "error");
+                            setReports((list) => list.filter((x) => x.id !== r.id));
+                            toast("Report resolved.", "success");
+                          }}
+                          className="rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                        >
+                          Resolve
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

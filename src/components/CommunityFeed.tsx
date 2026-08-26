@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { createPost, createComment } from "@/app/community/actions";
 import { toast } from "./Toast";
+import { ReportButton } from "./ReportButton";
 
 type Post = {
   id: string;
@@ -462,6 +463,7 @@ export function CommunityFeed({
                             Delete
                           </button>
                         )}
+                        {!mine && <ReportButton postId={p.id} />}
                       </div>
 
                       {open[p.id] && (
@@ -605,6 +607,7 @@ function CommentRow({
               Delete
             </button>
           )}
+          {c.author_id !== currentUserId && <ReportButton commentId={c.id} compact />}
         </div>
       </div>
     </div>

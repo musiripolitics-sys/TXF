@@ -256,3 +256,31 @@ export async function uploadGroupFile(formData: FormData) {
   revalidatePath(`/community/g/${eventId}`);
   return { success: true };
 }
+
+/**
+ * Report a post or comment. The database notifies every admin and keeps the
+ * report row, so the queue outlives a dismissed notification.
+ */
+export async function reportContent(
+  target: { postId?: string; commentId?: string },
+  reason: string,
+) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to report this." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("report_content", {
+    p_post_id: target.postId ?? null,
+    p_comment_id: target.commentId ?? null,
+    p_reason: reason.slice(0, 500),
+  });
+
+  if (error) {
+    console.error("Report error:", error);
+    return { error: "Couldn't send that report. Please try again." };
+  }
+
+  const result = data as { status: string; message: string };
+  if (result.status !== "ok") return { error: result.message };
+  return { success: true, message: result.message };
+}
