@@ -9,6 +9,11 @@ import { createClient } from "@/lib/supabase/server";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { EventActions } from "@/components/EventActions";
 import { EventJsonLd } from "@/components/EventJsonLd";
+import { EventFacts } from "@/components/EventFacts";
+import { EventWhereBlock } from "@/components/EventWhereBlock";
+import { EventOrganizer } from "@/components/EventOrganizer";
+import { RelatedEvents } from "@/components/RelatedEvents";
+import { getEvents } from "@/lib/events";
 import {
   getActiveTier,
   applyMemberDiscount,
@@ -49,6 +54,28 @@ export async function generateMetadata({
   };
 }
 
+/** Events hosted and follower count for the organiser card. */
+async function loadOrganizer(hostId?: string) {
+  if (!hostId) return null;
+  try {
+    const supabase = await createClient();
+    const [{ count: hosted }, { count: followers }] = await Promise.all([
+      supabase
+        .from("events")
+        .select("id", { count: "exact", head: true })
+        .eq("host_id", hostId)
+        .eq("status", "published"),
+      supabase
+        .from("organizer_follows")
+        .select("organizer_id", { count: "exact", head: true })
+        .eq("organizer_id", hostId),
+    ]);
+    return { hosted: hosted ?? 0, followers: followers ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
 export default async function EventDetailPage({
   params,
 }: {
@@ -64,6 +91,12 @@ export default async function EventDetailPage({
   const agenda = event.agenda ?? [];
   const filled = event.capacity - event.spotsLeft;
   const pct = Math.round((filled / event.capacity) * 100);
+
+  // Siblings for the "you might also like" rail, and the organiser's stats.
+  const [allEvents, organizer] = await Promise.all([
+    getEvents(),
+    loadOrganizer(event.hostId),
+  ]);
 
   const user = await getCurrentUser();
   let userProfile = null;
@@ -158,7 +191,18 @@ export default async function EventDetailPage({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-10 px-5 py-12 pb-28 sm:px-8 lg:grid-cols-[1.6fr_1fr] lg:pb-12">
+      <div className="mx-auto max-w-5xl px-5 pt-8 sm:px-8">
+        <EventFacts
+          dateLabel={event.dateLabel}
+          time={event.time}
+          venue={event.venue}
+          city={event.city}
+          spotsLeft={event.spotsLeft}
+          capacity={event.capacity}
+        />
+      </div>
+
+      <div className="mx-auto grid max-w-5xl gap-10 px-5 py-10 pb-28 sm:px-8 lg:grid-cols-[1.6fr_1fr] lg:pb-12">
         {/* Main column */}
         <div className="space-y-10">
           <section>
@@ -185,6 +229,66 @@ export default async function EventDetailPage({
               ))}
             </ol>
           </section>
+          )}
+
+          <EventWhereBlock
+            venue={event.venue}
+            address={event.address}
+            city={event.city}
+            latitude={event.latitude}
+            longitude={event.longitude}
+          />
+
+          {event.highlights && event.highlights.length > 0 && (
+            <section>
+              <h2 className="font-display text-xl font-semibold text-fg">Good to know</h2>
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {event.highlights.map((h) => (
+                  <li
+                    key={h}
+                    className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
+                  >
+                    <span className="mt-0.5 shrink-0 text-brand-soft" aria-hidden>✓</span>
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <EventOrganizer
+            hostId={event.hostId}
+            hostName={event.hostName}
+            eventsHosted={organizer?.hosted}
+            followers={organizer?.followers}
+          />
+
+          {!isFree && event.refundPolicy && (
+            <section>
+              <h2 className="font-display text-xl font-semibold text-fg">
+                Refunds &amp; cancellation
+              </h2>
+              <p className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-surface px-4 py-4 text-sm leading-relaxed text-muted">
+                {event.refundPolicy}
+              </p>
+            </section>
+          )}
+
+          {event.tags && event.tags.length > 0 && (
+            <section>
+              <h2 className="font-display text-xl font-semibold text-fg">Tags</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {event.tags.map((t) => (
+                  <Link
+                    key={t}
+                    href={`/events?tag=${encodeURIComponent(t)}`}
+                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand"
+                  >
+                    {t}
+                  </Link>
+                ))}
+              </div>
+            </section>
           )}
 
           {event.speakers.length > 0 && (
@@ -215,8 +319,8 @@ export default async function EventDetailPage({
         <aside className="lg:pt-2">
           <div className="lg:sticky lg:top-24 rounded-2xl border border-line bg-surface p-6 shadow-soft">
             <dl className="space-y-4 text-sm">
-              <Detail label="When" value={`${event.dateLabel} · ${event.time}`} />
-              <Detail label="Where" value={event.venue} sub={event.address} />
+              {/* When and where now lead the page in the facts band, so the
+                  sidebar stays focused on the decision: price, then register. */}
               <Detail label="Price" value={isFree ? "Free entry" : event.priceLabel} />
               {event.hostName && (
                 <div>
@@ -336,6 +440,8 @@ export default async function EventDetailPage({
           </div>
         </aside>
       </div>
+
+      <RelatedEvents current={event} all={allEvents} />
 
       {/* Mobile sticky register bar */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur lg:hidden">
