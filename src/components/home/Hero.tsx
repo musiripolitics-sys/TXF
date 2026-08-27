@@ -26,7 +26,7 @@ const SHOWCASE = [
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-line">
+    <section className="relative flex min-h-[calc(100svh-4rem)] items-center overflow-hidden border-b border-line">
       <div className="absolute inset-0 bg-grid" aria-hidden />
       <div className="absolute inset-0 glow-brand" aria-hidden />
       <div
@@ -34,7 +34,7 @@ export function Hero() {
         aria-hidden
       />
 
-      <div className="relative mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-20">
+      <div className="relative mx-auto w-full max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
         <div className="grid items-center gap-8 lg:gap-12 lg:grid-cols-[1.05fr_1fr]">
           {/* ── Copy ── */}
           <div className="max-w-xl">
