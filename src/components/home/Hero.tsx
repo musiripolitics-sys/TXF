@@ -58,10 +58,14 @@ export function Hero() {
             </div>
 
             <div className="animate-float-up mt-5 flex flex-col gap-3 sm:flex-row">
-              <Button href="/events" variant="join" size="lg">
+              {/* Both in the brand palette now — the purple and green predated
+                  it. Filled and outline rather than two solid buttons, so the
+                  pair still has a hierarchy; hosting keeps its filled button
+                  up in the nav. */}
+              <Button href="/events" variant="brand" size="lg">
                 Browse events
               </Button>
-              <Button href="/host" variant="host" size="lg">
+              <Button href="/host" variant="outline" size="lg">
                 Host an event
               </Button>
             </div>
