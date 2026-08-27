@@ -4,7 +4,6 @@ import { Button } from "@/components/Button";
 export function FinalCTA() {
   return (
     <section className="edge-t relative -mt-1 overflow-hidden bg-[#0e0e0c] px-5 sm:px-8">
-      <div className="cross-rule opacity-70" aria-hidden />
       <div
         className="pointer-events-none absolute bottom-0 left-1/2 h-72 w-[40rem] -translate-x-1/2 translate-y-1/3 rounded-full bg-brand/20 blur-[120px]"
         aria-hidden

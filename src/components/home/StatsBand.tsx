@@ -8,7 +8,6 @@ const leads = ["A community of", "We've hosted", "Backed by", "Active across"];
 export function StatsBand() {
   return (
     <section className="edge-tb relative overflow-hidden bg-[#0e0e0c] text-white">
-      <div className="cross-rule opacity-60" aria-hidden />
       <div
         className="pointer-events-none absolute left-1/2 top-1/2 h-64 w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/15 blur-[120px]"
         aria-hidden

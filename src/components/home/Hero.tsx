@@ -25,7 +25,6 @@ const FORMATS = [
 export function Hero() {
   return (
     <section className="edge-b relative -mt-16 overflow-hidden bg-[#0e0e0c] pt-16 text-white">
-      <div className="cross-rule opacity-70" aria-hidden />
       <div
         className="pointer-events-none absolute right-[8%] top-[18%] h-80 w-80 rounded-full bg-brand/25 blur-[130px]"
         aria-hidden
@@ -53,18 +52,7 @@ export function Hero() {
               <br />
               community,
               <br />
-              <span className="relative inline-block text-brand">
-                in person
-                <svg
-                  className="pointer-events-none absolute -inset-x-6 -inset-y-3 h-[calc(100%+1.5rem)] w-[calc(100%+3rem)]"
-                  viewBox="0 0 100 40"
-                  preserveAspectRatio="none"
-                  aria-hidden
-                >
-                  <line x1="0" y1="38" x2="100" y2="6" stroke="currentColor" strokeWidth="0.5" opacity="0.5" />
-                  <line x1="0" y1="10" x2="100" y2="34" stroke="currentColor" strokeWidth="0.5" opacity="0.25" />
-                </svg>
-              </span>
+              <span className="text-brand">in person</span>
             </h1>
 
             <p className="animate-float-up mt-6 max-w-md text-lg leading-relaxed text-white/65">
