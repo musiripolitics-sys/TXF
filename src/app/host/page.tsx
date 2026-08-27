@@ -38,7 +38,7 @@ export default function HostPage() {
             and manage events on Techxfluence with full support.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button href="#submit" variant="host" size="lg">
+            <Button href="#submit" variant="brand" size="lg">
               Submit your event
             </Button>
             <Button href="/legal/organizer-agreement" variant="outline" size="lg">
