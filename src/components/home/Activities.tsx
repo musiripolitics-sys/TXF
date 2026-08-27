@@ -91,7 +91,7 @@ export async function Activities() {
         description="Six things we run, year-round, across India."
       />
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {activities.map((a) => {
           const art = artFor(a.title);
           const detail = detailFor(a.title);
@@ -100,12 +100,12 @@ export async function Activities() {
               key={a.title}
               // tabIndex so the back is reachable by keyboard, not just mouse.
               tabIndex={0}
-              className="flip h-72 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+              className="flip rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               <div className="flip-inner rounded-2xl shadow-soft">
                 {/* Front: the photograph and the name. */}
                 <div className="flip-face flip-front border border-line bg-surface">
-                  <div className="relative h-full w-full">
+                  <div className="relative aspect-[16/9] w-full">
                     {art ? (
                       <Image
                         src={art.image}
@@ -147,7 +147,7 @@ export async function Activities() {
                         className="object-cover opacity-[0.07]"
                       />
                     )}
-                    <div className="relative flex h-full flex-col p-5">
+                    <div className="relative flex h-full flex-col justify-center p-4">
                       <span className="flex items-center gap-2">
                         <Icon
                           name={art?.icon ?? "sparkle"}
@@ -159,10 +159,10 @@ export async function Activities() {
                         </h3>
                       </span>
 
-                      <p className="mt-2 text-sm font-medium text-fg">{a.desc}</p>
+                      <p className="mt-1.5 text-sm font-medium leading-snug text-fg">{a.desc}</p>
 
                       {detail ? (
-                        <ul className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+                        <ul className="mt-2.5 flex flex-col gap-1.5 border-t border-line pt-2.5">
                           {detail.map((point) => (
                             <li key={point} className="flex gap-2 text-[13px] leading-snug text-muted">
                               <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-brand" aria-hidden />
