@@ -61,10 +61,6 @@ export function Nav({ role = "member" }: { role?: AppRole }) {
     router.refresh();
   };
 
-  // The homepage hero is dark and runs beneath this bar, so until the user
-  // scrolls, the nav has to invert to stay legible against it.
-  const onDarkHero = pathname === "/" && !scrolled;
-
   // Close the mobile menu whenever the route changes.
   useEffect(() => setOpen(false), [pathname]);
 
@@ -77,16 +73,14 @@ export function Nav({ role = "member" }: { role?: AppRole }) {
       }`}
     >
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-        <Logo light={onDarkHero} />
+        <Logo />
 
         <div className="hidden items-center gap-7 md:flex">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className={`text-sm transition-colors ${
-                onDarkHero ? "text-white/75 hover:text-white" : "text-muted hover:text-fg"
-              }`}
+              className="text-sm text-muted transition-colors hover:text-fg"
             >
               {l.label}
             </Link>
@@ -109,11 +103,7 @@ export function Nav({ role = "member" }: { role?: AppRole }) {
               )}
               <button
                 onClick={handleSignOut}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
-                  onDarkHero
-                    ? "border-white/25 text-white/80 hover:border-white hover:text-white"
-                    : "border-line bg-surface text-muted hover:text-fg hover:border-fg"
-                }`}
+                className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium text-muted hover:text-fg hover:border-fg transition-all duration-200 cursor-pointer"
               >
                 Sign out
               </button>

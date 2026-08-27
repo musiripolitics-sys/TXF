@@ -7,20 +7,16 @@ const leads = ["A community of", "We've hosted", "Backed by", "Active across"];
 
 export function StatsBand() {
   return (
-    <section className="edge-tb relative overflow-hidden bg-[#0e0e0c] text-white">
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-64 w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/15 blur-[120px]"
-        aria-hidden
-      />
-      <div className="edge-pad-t edge-pad-b relative mx-auto max-w-7xl px-5 sm:px-8">
+    <section className="border-y border-line bg-ink-2">
+      <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
         <div className="text-center">
-          <span className="text-xs font-medium uppercase tracking-wider text-brand">
+          <span className="text-xs font-medium uppercase tracking-wider text-brand-soft">
             By the numbers
           </span>
-          <h2 className="mt-4 font-display text-4xl font-bold tracking-[-0.03em] text-white sm:text-5xl text-balance">
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-fg sm:text-4xl text-balance">
             A movement, by the numbers
           </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-white/60 text-balance">
+          <p className="mx-auto mt-4 max-w-2xl text-muted text-balance">
             With events across 20+ cities, it&apos;s never been easier to learn,
             build and connect with people who get it.
           </p>
@@ -30,14 +26,14 @@ export function StatsBand() {
           {stats.map((s, i) => (
             <div
               key={s.label}
-              className="px-4 text-center lg:border-l lg:border-white/12 lg:first:border-l-0"
+              className="px-4 text-center lg:border-l lg:border-line lg:first:border-l-0"
             >
-              <dt className="text-sm text-white/45">{leads[i]}</dt>
+              <dt className="text-sm text-faint">{leads[i]}</dt>
               <dd className="mt-2">
-                <span className="block font-display text-6xl font-bold leading-none tracking-[-0.04em] text-white sm:text-7xl">
+                <span className="block font-display text-5xl font-bold leading-none tracking-tight text-fg sm:text-6xl">
                   <CountUp value={s.value} />
                 </span>
-                <span className="mt-2 block text-xs font-semibold uppercase tracking-wider text-brand sm:text-sm">
+                <span className="mt-2 block text-xs font-semibold uppercase tracking-wider text-muted sm:text-sm">
                   {s.label}
                 </span>
               </dd>

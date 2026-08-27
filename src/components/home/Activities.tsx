@@ -11,9 +11,7 @@ const accentMap: Record<string, string> = {
 export async function Activities() {
   const activities = await getActivities();
   return (
-    // No top border and no band colour: the hero's diagonal is the only seam
-    // here, and a second horizontal edge right under it read as a mistake.
-    <div className="relative overflow-hidden border-b border-line">
+    <div className="relative overflow-hidden border-y border-line bg-ink-2">
       <Section id="activities" className="relative z-10">
       <SectionHeading
         eyebrow="Our Activities"

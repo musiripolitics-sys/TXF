@@ -8,12 +8,9 @@ import Link from "next/link";
 export function Logo({
   className = "",
   withTagline = false,
-  light = false,
 }: {
   className?: string;
   withTagline?: boolean;
-  /** Render the wordmark white, for dark grounds. */
-  light?: boolean;
 }) {
   return (
     <Link
@@ -27,9 +24,7 @@ export function Logo({
         width={160}
         height={40}
         priority
-        className={`h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105 ${
-          light ? "brightness-0 invert" : ""
-        }`}
+        className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
       />
     </Link>
   );
