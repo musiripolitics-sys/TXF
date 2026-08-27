@@ -287,6 +287,28 @@ export default async function EventDetailPage({
           </section>
           )}
 
+          {event.speakers.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {event.speakers.map((s) => (
+                <div
+                  key={s.name}
+                  className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
+                    {s.initials}
+                  </span>
+                  <div>
+                    <p className="font-medium text-fg">{s.name}</p>
+                    <p className="text-xs text-faint">{s.role}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          )}
+
           <EventWhereBlock
             venue={event.venue}
             address={event.address}
@@ -347,27 +369,6 @@ export default async function EventDetailPage({
             </section>
           )}
 
-          {event.speakers.length > 0 && (
-          <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {event.speakers.map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
-                    {s.initials}
-                  </span>
-                  <div>
-                    <p className="font-medium text-fg">{s.name}</p>
-                    <p className="text-xs text-faint">{s.role}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-          )}
 
         </div>
 

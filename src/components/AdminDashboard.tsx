@@ -6,6 +6,7 @@ import { decideHostRequest } from "@/app/admin/actions";
 import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { EventContentEditor } from "@/components/EventContentEditor";
 
 const SUBMISSION_BASE =
   "id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity";
@@ -134,6 +135,7 @@ export function AdminDashboard({
   const [busyId, setBusyId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
   const [mailFailures, setMailFailures] = useState(0);
+  const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
 
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -648,6 +650,16 @@ export function AdminDashboard({
   return (
     <>
       {dialog}
+      {editing && (
+        <EventContentEditor
+          eventId={editing.id}
+          eventTitle={editing.title}
+          onClose={() => {
+            setEditing(null);
+            refresh();
+          }}
+        />
+      )}
       {mailFailures > 0 && (
         <div className="border-b border-red-500/30 bg-red-500/10">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-sm sm:px-8">
@@ -1350,13 +1362,21 @@ export function AdminDashboard({
                             Read Only
                           </span>
                         ) : (
-                          <button
-                            onClick={() => deleteEvent(ev.id)}
-                            disabled={busyId === ev.id}
-                            className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-60"
-                          >
-                            {busyId === ev.id ? "…" : "Delete"}
-                          </button>
+                          <span className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setEditing({ id: ev.id, title: ev.title })}
+                              className="text-xs font-semibold text-brand-soft hover:underline"
+                            >
+                              Content
+                            </button>
+                            <button
+                              onClick={() => deleteEvent(ev.id)}
+                              disabled={busyId === ev.id}
+                              className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-60"
+                            >
+                              {busyId === ev.id ? "…" : "Delete"}
+                            </button>
+                          </span>
                         )}
                       </td>
                     </tr>
