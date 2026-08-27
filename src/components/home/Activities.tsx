@@ -44,37 +44,77 @@ export async function Activities() {
           return (
             <article
               key={a.title}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-brand/40 hover:shadow-[0_16px_40px_-20px_rgba(0,0,0,0.25)]"
+              // tabIndex so the back is reachable by keyboard, not just mouse.
+              tabIndex={0}
+              className="flip h-64 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
-              <div className="relative aspect-[16/10] overflow-hidden">
-                {art ? (
-                  <Image
-                    src={art.image}
-                    alt=""
-                    fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    className="object-cover transition duration-500 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-brand to-join" />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+              <div className="flip-inner rounded-2xl shadow-soft">
+                {/* Front: the photograph and the name. */}
+                <div className="flip-face flip-front border border-line bg-surface">
+                  <div className="relative h-full w-full">
+                    {art ? (
+                      <Image
+                        src={art.image}
+                        alt=""
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-brand to-join" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
-                <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 p-4">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 text-white backdrop-blur-sm">
-                    <Icon
-                      name={art?.icon ?? "sparkle"}
-                      className="h-4 w-4"
-                      strokeWidth={1.8}
-                    />
-                  </span>
-                  <h3 className="font-display text-lg font-bold text-white">
-                    {a.title}
-                  </h3>
+                    <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 p-4">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 text-white backdrop-blur-sm">
+                        <Icon
+                          name={art?.icon ?? "sparkle"}
+                          className="h-4 w-4"
+                          strokeWidth={1.8}
+                        />
+                      </span>
+                      <h3 className="font-display text-lg font-bold text-white">
+                        {a.title}
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Back: what it actually is. Keeps a dimmed frame of the same
+                    photo so the card still reads as the same thing. */}
+                <div className="flip-face flip-back border border-brand/30 bg-surface">
+                  <div className="relative h-full w-full">
+                    {art && (
+                      <Image
+                        src={art.image}
+                        alt=""
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover opacity-[0.07]"
+                      />
+                    )}
+                    <div className="relative flex h-full flex-col justify-center p-6">
+                      <span className="flex items-center gap-2">
+                        <Icon
+                          name={art?.icon ?? "sparkle"}
+                          className="h-4 w-4 shrink-0 text-brand-soft"
+                          strokeWidth={1.8}
+                        />
+                        <h3 className="font-display text-base font-bold text-fg">
+                          {a.title}
+                        </h3>
+                      </span>
+                      <p className="mt-3 text-sm leading-relaxed text-muted">
+                        {a.desc}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <p className="flex-1 px-5 py-4 text-sm leading-relaxed text-muted">
+              {/* Touch devices get no hover, so the detail sits under the
+                  photo instead of being locked behind a gesture. */}
+              <p className="mt-3 text-sm leading-relaxed text-muted [@media(hover:hover)]:hidden">
                 {a.desc}
               </p>
             </article>
