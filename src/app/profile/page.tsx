@@ -195,8 +195,8 @@ export default async function ProfilePage() {
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Left Column (Events) */}
         <div className="space-y-8 lg:col-span-2">
-          {/* Registered Events */}
-          <section>
+          {/* Registered Events — the target of "My tickets" in the nav. */}
+          <section id="tickets" className="scroll-mt-24">
             <h2 className="mb-4 font-display text-xl font-bold text-fg">Upcoming Events</h2>
             {registeredEvents.length > 0 ? (
               <div className="flex flex-col gap-4">

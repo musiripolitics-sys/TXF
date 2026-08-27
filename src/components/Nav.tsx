@@ -13,9 +13,7 @@ const links = [
   { label: "Chapters", href: "/communities" },
   { label: "Community", href: "/community" },
   { label: "Membership", href: "/membership" },
-  { label: "Host an Event", href: "/host" },
-  { label: "Careers", href: "/careers" },
-  { label: "About", href: "/about" },
+  { label: "My tickets", href: "/profile#tickets" },
 ];
 
 type AppRole = "admin" | "host" | "member";
@@ -113,8 +111,8 @@ export function Nav({ role = "member" }: { role?: AppRole }) {
               <Button href="/login" variant="ghost" size="sm">
                 Sign in
               </Button>
-              <Button href="/events" variant="brand" size="sm">
-                Join Events
+              <Button href="/host" variant="brand" size="sm">
+                Host an event
               </Button>
             </>
           )}
