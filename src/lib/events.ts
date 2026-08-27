@@ -8,7 +8,7 @@ import {
 import { dbEventToTXF, type DBEvent } from "./events-map";
 
 const BASE_COLS =
-  "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url,starts_at,ends_at";
+  "id,slug,title,category,date,date_label,time,city,venue,address,price_type,price_label,blurb,about,spots_left,capacity,image_url,starts_at,ends_at,host_name";
 
 // Added by the event-discovery section of schema.sql. Selected separately so a
 // database that hasn't had it applied yet falls back to the base columns
@@ -56,7 +56,7 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
       supabase
         .from("events")
         .select(
-          `${cols}, host_name, host_id,
+          `${cols}, host_id,
            event_speakers(sort_order, speakers(name, role, initials)),
            event_agenda(sort_order, when_label, what),
            ticket_types(id,name,description,price_amount,capacity,sold,sales_start,sales_end,max_per_order,sort_order),
