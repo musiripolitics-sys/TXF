@@ -24,7 +24,7 @@ const FORMATS = [
 
 export function Hero() {
   return (
-    <section className="edge-b relative -mt-16 overflow-hidden bg-[#0e0e0c] pt-16 text-white">
+    <section className="edge-b relative -mt-[calc(4rem+1px)] overflow-hidden bg-[#0e0e0c] pt-[calc(4rem+1px)] text-white">
       <div
         className="pointer-events-none absolute right-[8%] top-[18%] h-80 w-80 rounded-full bg-brand/25 blur-[130px]"
         aria-hidden
