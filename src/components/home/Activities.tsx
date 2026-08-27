@@ -27,6 +27,59 @@ const ART: Record<string, { image: string; icon: string }> = {
 
 const artFor = (title: string) => ART[title.trim().toLowerCase()] ?? null;
 
+/**
+ * The back of each card.
+ *
+ * The activities table holds a single line each, which left the flipped face
+ * mostly empty. These three points per service fill it and answer the
+ * questions someone actually has: what happens, who it's for, what they walk
+ * away with.
+ *
+ * DRAFT COPY — written to describe each format, not from operational detail
+ * only TXF knows. Worth a read-through and edit. If it should be editable
+ * without a deploy it belongs in the activities table instead; ask and I'll
+ * move it.
+ */
+const DETAIL: Record<string, string[]> = {
+  "monthly meetups": [
+    "Short talks from people building locally, then an open floor",
+    "Open to anyone in tech — no experience bar",
+    "You leave knowing people in your own city",
+  ],
+  meetups: [
+    "Short talks from people building locally, then an open floor",
+    "Open to anyone in tech — no experience bar",
+    "You leave knowing people in your own city",
+  ],
+  hackathons: [
+    "Form a team on the day or bring your own",
+    "A weekend to take an idea from nothing to working",
+    "Demo to the room, with prizes for what ships",
+  ],
+  workshops: [
+    "Laptops open — you build alongside the instructor",
+    "Kept small enough that questions get answered",
+    "You leave with something you made yourself",
+  ],
+  "startup showcases": [
+    "Early teams pitch to a room of founders and operators",
+    "Straight feedback from people who have shipped before",
+    "Exposure well past your own network",
+  ],
+  mentorship: [
+    "Paired with someone senior in your field",
+    "Career direction, product calls, or technical depth",
+    "Built around what you're working on right now",
+  ],
+  "innovation challenges": [
+    "Open briefs and bounties posted for the community",
+    "Enter solo or as a team, and work at your own pace",
+    "Recognition and a public record of what you built",
+  ],
+};
+
+const detailFor = (title: string) => DETAIL[title.trim().toLowerCase()] ?? null;
+
 export async function Activities() {
   const activities = await getActivities();
   return (
@@ -41,12 +94,13 @@ export async function Activities() {
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {activities.map((a) => {
           const art = artFor(a.title);
+          const detail = detailFor(a.title);
           return (
             <article
               key={a.title}
               // tabIndex so the back is reachable by keyboard, not just mouse.
               tabIndex={0}
-              className="flip h-64 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+              className="flip h-72 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               <div className="flip-inner rounded-2xl shadow-soft">
                 {/* Front: the photograph and the name. */}
@@ -93,7 +147,7 @@ export async function Activities() {
                         className="object-cover opacity-[0.07]"
                       />
                     )}
-                    <div className="relative flex h-full flex-col justify-center p-6">
+                    <div className="relative flex h-full flex-col p-5">
                       <span className="flex items-center gap-2">
                         <Icon
                           name={art?.icon ?? "sparkle"}
@@ -104,9 +158,19 @@ export async function Activities() {
                           {a.title}
                         </h3>
                       </span>
-                      <p className="mt-3 text-sm leading-relaxed text-muted">
-                        {a.desc}
-                      </p>
+
+                      <p className="mt-2 text-sm font-medium text-fg">{a.desc}</p>
+
+                      {detail ? (
+                        <ul className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+                          {detail.map((point) => (
+                            <li key={point} className="flex gap-2 text-[13px] leading-snug text-muted">
+                              <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-brand" aria-hidden />
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   </div>
                 </div>
