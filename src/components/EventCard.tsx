@@ -8,10 +8,11 @@ import { GoingStrip } from "./GoingStrip";
 /**
  * Event card.
  *
- * Reads title-first, the way the big listing sites do: the artwork carries the
- * card, the title is the largest thing under it, and everything after it is
- * one quiet line each — when, who's running it, who's going. No border or
- * panel behind the text, so the photograph is the only thing with weight.
+ * Reads title-first, the way the big listing sites do: the artwork leads, the
+ * title is the largest thing under it, and everything after is one quiet line
+ * each — when, who's running it, who's going. The whole thing sits in a single
+ * surface so a grid of them reads as a set of objects rather than columns of
+ * loose text.
  *
  * Price, format and urgency ride on the image as badges rather than taking a
  * row of their own.
@@ -53,9 +54,12 @@ export function EventCard({
     .join(" · ");
 
   return (
-    <Link href={`/events/${event.slug}`} className="group flex flex-col">
+    <Link
+      href={`/events/${event.slug}`}
+      className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-brand/40 hover:shadow-[0_16px_40px_-20px_rgba(0,0,0,0.25)]"
+    >
       {/* Cover */}
-      <div className="relative aspect-[16/9] overflow-hidden rounded-2xl">
+      <div className="relative aspect-[16/9] overflow-hidden">
         {event.image ? (
           <Image
             src={event.image}
@@ -109,7 +113,7 @@ export function EventCard({
       </div>
 
       {/* Body — title leads, then one quiet line each. */}
-      <div className="flex flex-1 flex-col pt-3">
+      <div className="flex flex-1 flex-col p-4">
         <h3 className="line-clamp-2 font-display text-lg font-bold leading-snug tracking-tight text-fg transition-colors group-hover:text-brand">
           {event.title}
         </h3>
