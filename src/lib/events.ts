@@ -13,7 +13,8 @@ const BASE_COLS =
 // Added by the event-discovery section of schema.sql. Selected separately so a
 // database that hasn't had it applied yet falls back to the base columns
 // instead of erroring — which would drop the page to static seed data.
-const DISCOVERY_COLS = "tags,highlights,refund_policy,latitude,longitude";
+const DISCOVERY_COLS =
+  "tags,highlights,refund_policy,latitude,longitude,community_id";
 const COLS = `${BASE_COLS},${DISCOVERY_COLS}`;
 
 /**

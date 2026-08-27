@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { registerForEvent, joinWaitlist } from "@/app/events/[slug]/actions";
 import { Icon } from "./Icon";
+import {
+  RegistrationNextSteps,
+  type NextStepsProps,
+} from "./RegistrationNextSteps";
 import type { TicketType, EventQuestion } from "@/lib/data";
 
 interface RegistrationFormProps {
@@ -33,7 +37,8 @@ export function RegistrationForm({
   ticketTypes = [],
   questions = [],
   userProfile,
-}: RegistrationFormProps) {
+  nextSteps,
+}: RegistrationFormProps & { nextSteps?: NextStepsProps }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +200,8 @@ export function RegistrationForm({
           {success}
         </div>
         <p className="mt-2 text-xs text-faint">Your ticket code</p>
+
+        {nextSteps && <RegistrationNextSteps {...nextSteps} />}
         {!userProfile?.email && (
           <p className="mx-auto mt-5 max-w-xs rounded-xl border border-line bg-surface p-3 text-xs text-muted">
             <a
@@ -220,6 +227,11 @@ export function RegistrationForm({
         <p className="mt-2 text-muted">
           This event is full, but we&apos;ll email you the moment a spot opens up.
         </p>
+
+        {nextSteps && (
+          // No calendar entry: a waitlist place isn't a seat yet.
+          <RegistrationNextSteps {...nextSteps} showCalendar={false} />
+        )}
       </div>
     );
   }

@@ -59,6 +59,7 @@ export type TXFEvent = {
   image?: string;
   hostName?: string;
   hostId?: string;
+  communityId?: string;
   tags?: string[];
   highlights?: string[];
   refundPolicy?: string;

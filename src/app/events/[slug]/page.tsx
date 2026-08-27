@@ -55,6 +55,22 @@ export async function generateMetadata({
   };
 }
 
+/** The chapter an event belongs to, for the post-registration prompt. */
+async function loadChapter(communityId?: string) {
+  if (!communityId) return null;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("communities")
+      .select("slug, name")
+      .eq("id", communityId)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Events hosted and follower count for the organiser card. */
 async function loadOrganizer(hostId?: string) {
   if (!hostId) return null;
@@ -102,6 +118,28 @@ export default async function EventDetailPage({
       : Promise.resolve({} as Awaited<ReturnType<typeof getAttendance>>),
   ]);
   const attendance = event.id ? attendanceMap[event.id] : undefined;
+
+  // Somewhere to go once they've registered: the same ranking the bottom rail
+  // uses, trimmed to what fits beside a ticket code.
+  const nextUp = allEvents
+    .filter((e) => e.slug !== event.slug)
+    .sort(
+      (a, b) =>
+        (b.category === event.category ? 2 : 0) + (b.city === event.city ? 1 : 0) -
+        ((a.category === event.category ? 2 : 0) + (a.city === event.city ? 1 : 0)) ||
+        a.date.localeCompare(b.date),
+    )
+    .slice(0, 2)
+    .map((e) => ({
+      slug: e.slug,
+      title: e.title,
+      dateLabel: e.dateLabel,
+      city: e.city,
+      image: e.image,
+      priceLabel: e.price === "Free" ? "Free" : e.priceLabel,
+    }));
+
+  const chapter = await loadChapter(event.communityId);
 
   const user = await getCurrentUser();
   let userProfile = null;
@@ -447,6 +485,19 @@ export default async function EventDetailPage({
                     : undefined
                 }
                 userProfile={userProfile}
+                nextSteps={{
+                  calendar: {
+                    title: event.title,
+                    dateISO: event.date,
+                    time: event.time,
+                    location: [event.venue, event.address, event.city]
+                      .filter(Boolean)
+                      .join(", "),
+                    details: event.blurb,
+                  },
+                  related: nextUp,
+                  chapter,
+                }}
               />
             </div>
             <p className="mt-3 text-center text-xs text-faint">
