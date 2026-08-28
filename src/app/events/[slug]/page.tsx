@@ -250,8 +250,23 @@ export default async function EventDetailPage({
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
             <GoingStrip going={attendance.going} names={attendance.names} size="md" />
             {attendance.names.length === 0 && (
+              // Names are a Pro perk now, so the prompt depends on who's asking.
               <span className="text-xs text-faint">
-                Sign in to see who else is coming.
+                {!user ? (
+                  <>
+                    <Link href="/login" className="text-brand-soft hover:underline">
+                      Sign in
+                    </Link>{" "}
+                    to see who else is coming.
+                  </>
+                ) : !memberTier ? (
+                  <>
+                    <Link href="/membership" className="text-brand-soft hover:underline">
+                      Go Pro
+                    </Link>{" "}
+                    to see who else is coming.
+                  </>
+                ) : null}
               </span>
             )}
           </div>

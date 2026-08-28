@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { DirectoryBrowser, type Member } from "@/components/DirectoryBrowser";
+import { getActiveTier } from "@/lib/membership";
+import { Button } from "@/components/Button";
 
 export const metadata = {
   title: "Member Directory",
@@ -13,9 +15,15 @@ export default async function DirectoryPage() {
   if (!user) redirect("/login?next=/directory");
 
   const supabase = await createClient();
-  const { data } = await supabase.rpc("get_directory");
+  const [{ data }, tier] = await Promise.all([
+    supabase.rpc("get_directory"),
+    getActiveTier(supabase, user.id),
+  ]);
 
   const members = (data as Member[]) ?? [];
+  // The database returns nothing to free members. Say why, rather than
+  // showing an empty page that looks broken.
+  const locked = !tier;
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12 sm:px-8">
@@ -38,7 +46,25 @@ export default async function DirectoryPage() {
         .
       </p>
 
-      <DirectoryBrowser members={members} />
+      {locked ? (
+        <div className="mt-8 rounded-2xl border border-brand/30 bg-brand/[0.04] px-6 py-10 text-center">
+          <h2 className="font-display text-xl font-bold text-fg">
+            The directory is a Pro feature
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+            Pro members can browse everyone who&rsquo;s opted in — what they build,
+            which city they&rsquo;re in, and how to reach them. Attending events
+            stays free, always.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Button href="/membership" variant="brand" size="lg">
+              See what Pro includes
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <DirectoryBrowser members={members} />
+      )}
     </div>
   );
 }
