@@ -35,6 +35,7 @@ export function HostForm() {
     city: "",
     venue: "",
     email: "",
+    phone: "",
     description: "",
     priceType: "Free" as "Free" | "Paid",
     priceRupees: "",
@@ -79,6 +80,7 @@ export function HostForm() {
     };
 
     const extras = {
+      organizer_phone: formData.phone.trim(),
       // Same normalisation as the admin form, so tags stay one set.
       tags: Array.from(
         new Set(
@@ -91,9 +93,9 @@ export function HostForm() {
       time: formatTimeRange(formData.startTime, formData.endTime),
     };
 
-    // tags and time arrive with the event-discovery section of schema.sql. If
-    // it hasn't been applied, submit without them rather than failing the
-    // whole submission — losing the tags is better than losing the event.
+    // tags, time and organizer_phone arrive with the event-discovery section of
+    // schema.sql. If it hasn't been applied, submit without them rather than
+    // failing the whole submission — losing them is better than losing the event.
     let { error: insertError } = await supabase
       .from("host_submissions")
       .insert({ ...core, ...extras });
@@ -145,6 +147,7 @@ export function HostForm() {
                 city: "",
                 venue: "",
                 email: "",
+                phone: "",
                 description: "",
                 priceType: "Free",
                 priceRupees: "",
@@ -192,6 +195,7 @@ export function HostForm() {
             Category
           </label>
           <select
+            required
             value={formData.category}
             onChange={(e) => setFormData({ ...formData, category: e.target.value })}
             className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
@@ -278,6 +282,7 @@ export function HostForm() {
             Ticketing
           </label>
           <select
+            required
             value={formData.priceType}
             onChange={(e) =>
               setFormData({ ...formData, priceType: e.target.value as "Free" | "Paid" })
@@ -329,6 +334,21 @@ export function HostForm() {
           placeholder="e.g., organizer@techxfluence.com"
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-fg">
+          Phone contact
+        </label>
+        <input
+          type="tel"
+          required
+          inputMode="tel"
+          placeholder="e.g., +91 98765 43210"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
           className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
       </div>

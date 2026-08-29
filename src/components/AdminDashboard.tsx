@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 const SUBMISSION_BASE =
   "id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity";
 // Added by the event-discovery section of schema.sql.
-const SUBMISSION_COLS = `${SUBMISSION_BASE},tags,time`;
+const SUBMISSION_COLS = `${SUBMISSION_BASE},tags,time,organizer_phone`;
 
 type Submission = {
   id: string;
@@ -19,6 +19,7 @@ type Submission = {
   city: string;
   venue: string;
   organizer_email: string;
+  organizer_phone?: string | null;
   organizer_id: string | null;
   description: string;
   status: "pending" | "approved" | "declined";
@@ -800,6 +801,17 @@ export function AdminDashboard({
                               {s.organizer_email}
                             </a>
                           </p>
+                          {s.organizer_phone && (
+                            <p>
+                              <strong>Phone:</strong>{" "}
+                              <a
+                                href={`tel:${s.organizer_phone}`}
+                                className="text-brand-soft underline hover:text-brand"
+                              >
+                                {s.organizer_phone}
+                              </a>
+                            </p>
+                          )}
                         </div>
                         <p className="mb-4 line-clamp-4 rounded-xl bg-ink-2 p-3.5 text-sm text-muted">
                           {s.description}
