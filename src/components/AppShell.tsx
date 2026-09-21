@@ -25,6 +25,7 @@ const hostItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "Console", icon: "sparkle" },
+  { href: "/admin/os", label: "Business OS", icon: "rocket" },
 ];
 
 export function AppShell({
