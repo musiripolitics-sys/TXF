@@ -17,11 +17,12 @@ const links = [
   { label: "About", href: "/about" },
 ];
 
-type AppRole = "admin" | "host" | "member";
+type AppRole = "admin" | "host" | "employee" | "member";
 
 const roleMeta: Record<AppRole, { label: string; dash?: { href: string; label: string } }> = {
   admin: { label: "Admin", dash: { href: "/admin", label: "Console" } },
   host: { label: "Host", dash: { href: "/host/dashboard", label: "My Events" } },
+  employee: { label: "Team", dash: { href: "/workspace", label: "My Workspace" } },
   member: { label: "Member" },
 };
 

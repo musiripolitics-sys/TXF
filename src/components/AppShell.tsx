@@ -8,7 +8,7 @@ import { Icon } from "./Icon";
 import { NotificationBell } from "./NotificationBell";
 import { createClient } from "@/lib/supabase/client";
 
-type Role = "member" | "host" | "admin";
+type Role = "member" | "host" | "employee" | "admin";
 type NavItem = { href: string; label: string; icon: string };
 
 const primary: NavItem[] = [
@@ -28,6 +28,10 @@ const adminItems: NavItem[] = [
   { href: "/admin/os", label: "Business OS", icon: "rocket" },
 ];
 
+const workspaceItems: NavItem[] = [
+  { href: "/workspace", label: "My Workspace", icon: "home" },
+];
+
 export function AppShell({
   role,
   children,
@@ -44,6 +48,7 @@ export function AppShell({
     ...primary,
     ...hostItems,
     ...adminItems,
+    ...workspaceItems,
     { href: "/profile/edit", label: "Settings" },
     { href: "/account", label: "Account" },
   ];
@@ -95,6 +100,9 @@ export function AppShell({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">
         <Group items={primary} />
+        {(role === "employee" || role === "admin") && (
+          <Group title="Work" items={workspaceItems} />
+        )}
         {(role === "host" || role === "admin") && (
           <Group title="Hosting" items={hostItems} />
         )}

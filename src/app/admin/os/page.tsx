@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { KpiCard, Card, SectionHeading, EmptyState } from "@/components/os/ui";
 import { DashboardFilters } from "@/components/os/DashboardFilters";
@@ -192,12 +193,12 @@ function RoadmapSnapshot({ goals }: { goals: Partial<Record<BosStatus, number>> 
         title="No roadmap goals yet"
         hint="Add your first 90-day goals to see progress here."
         action={
-          <a
+          <Link
             href="/admin/os/roadmap"
             className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white"
           >
             Open roadmap
-          </a>
+          </Link>
         }
       />
     );
@@ -214,14 +215,14 @@ function RoadmapSnapshot({ goals }: { goals: Partial<Record<BosStatus, number>> 
     <Card>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
         {order.map((s) => (
-          <a key={s} href="/admin/os/roadmap" className="group">
+          <Link key={s} href="/admin/os/roadmap" className="group">
             <p className="font-display text-2xl font-bold tabular-nums text-fg">
               {goals[s] ?? 0}
             </p>
             <p className="mt-0.5 text-xs text-muted group-hover:text-fg">
               {STATUS_META[s].label}
             </p>
-          </a>
+          </Link>
         ))}
       </div>
     </Card>

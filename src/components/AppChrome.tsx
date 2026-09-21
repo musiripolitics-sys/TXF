@@ -15,6 +15,11 @@ const roleTheme: Record<string, React.CSSProperties> = {
     "--color-brand-soft": "#1d4ed8",
     "--color-brand-ink": "#0a1f4d",
   } as React.CSSProperties,
+  employee: {
+    "--color-brand": "#0d9488",
+    "--color-brand-soft": "#0f766e",
+    "--color-brand-ink": "#042f2e",
+  } as React.CSSProperties,
   member: {},
 };
 
