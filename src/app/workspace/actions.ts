@@ -87,6 +87,17 @@ const leadSchema = z.object({
   stage: z.enum(["lead", "contacted", "qualified", "proposal", "negotiation", "won", "lost"]).default("lead"),
 });
 
+export async function updateMyKpiActual(id: string, actual: number) {
+  const gate = await requireStaff();
+  if ("error" in gate) return gate;
+  if (!Number.isFinite(actual)) return { error: "Invalid value" };
+  const supabase = await createClient();
+  const { error } = await supabase.from("employee_kpis").update({ actual }).eq("id", id).eq("employee_id", gate.user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/workspace");
+  return { success: true };
+}
+
 export async function addMyLead(input: unknown) {
   const gate = await requireStaff();
   if ("error" in gate) return gate;

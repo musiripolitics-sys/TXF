@@ -5,7 +5,7 @@ import { AppShell } from "./AppShell";
 import { Nav } from "./Nav";
 import { Footer } from "./Footer";
 
-type Role = "member" | "host" | "employee" | "admin";
+type Role = "member" | "host" | "employee" | "ambassador" | "admin";
 
 // Authenticated, functional areas get the app-shell (sidebar). Everything else
 // (marketing / funnel) keeps the website chrome (top nav + footer).
@@ -15,6 +15,7 @@ const APP_PREFIXES = [
   "/profile",
   "/admin",
   "/workspace",
+  "/ambassador",
   "/host/dashboard",
   "/host/checkin",
   "/account",

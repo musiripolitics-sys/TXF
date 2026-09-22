@@ -23,12 +23,21 @@ export default async function WorkspacePage() {
   }
 
   const supabase = await createClient();
-  const [{ data: tasks }, { data: goals }, { data: kpis }, { data: workstreams }] = await Promise.all([
-    supabase.from("tasks").select("*").eq("owner_id", user.id).order("due_date", { nullsFirst: false }),
-    supabase.from("goals").select("*").eq("owner_id", user.id).order("end_date", { nullsFirst: false }),
-    supabase.from("employee_kpis").select("*").eq("employee_id", user.id).order("period", { ascending: false }),
-    supabase.from("workstreams").select("id,key,name,color").order("sort_order"),
-  ]);
+  const [{ data: tasks }, { data: goals }, { data: kpis }, { data: workstreams }, { data: approvals }, { data: eventOps }] =
+    await Promise.all([
+      supabase.from("tasks").select("*").eq("owner_id", user.id).order("due_date", { nullsFirst: false }),
+      supabase.from("goals").select("*").eq("owner_id", user.id).order("end_date", { nullsFirst: false }),
+      supabase.from("employee_kpis").select("*").eq("employee_id", user.id).order("period", { ascending: false }),
+      supabase.from("workstreams").select("id,key,name,color").order("sort_order"),
+      supabase.from("approvals").select("id,request_title,request_type,decision").eq("requester_id", user.id).eq("decision", "pending"),
+      supabase.from("event_ops").select("event_id,event_type,events(title,date)").eq("owner_id", user.id),
+    ]);
+
+  const assignedEvents = ((eventOps as unknown as { event_id: string; event_type: string | null; events: { title: string; date: string }[] | { title: string; date: string } | null }[]) ?? [])
+    .map((o) => {
+      const ev = Array.isArray(o.events) ? o.events[0] : o.events;
+      return { id: o.event_id, title: ev?.title ?? "Event", date: ev?.date ?? "", type: o.event_type ?? "" };
+    });
 
   return (
     <WorkspaceClient
@@ -37,6 +46,8 @@ export default async function WorkspacePage() {
       goals={(goals as Goal[]) ?? []}
       kpis={(kpis as KpiRow[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
+      approvals={(approvals as PendingApproval[]) ?? []}
+      assignedEvents={assignedEvents}
     />
   );
 }
@@ -48,3 +59,6 @@ export type KpiRow = {
   target: number | null;
   actual: number | null;
 };
+
+export type PendingApproval = { id: string; request_title: string; request_type: string; decision: string };
+export type AssignedEvent = { id: string; title: string; date: string; type: string };

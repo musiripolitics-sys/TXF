@@ -8,7 +8,27 @@ export type Report = {
   title: string;
   columns: string[];
   rows: (string | number)[][];
+  /** Index of a YYYY-MM-DD date column, enabling the period filter. */
+  dateIdx?: number;
 };
+
+type Period = "all" | "week" | "month" | "quarter";
+
+function rangeFor(period: Period): [string, string] | null {
+  if (period === "all") return null;
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  if (period === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    return [iso(start), iso(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6))];
+  }
+  if (period === "month") return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
+  const q = Math.floor(m / 3) * 3;
+  return [iso(new Date(y, q, 1)), iso(new Date(y, q + 3, 0))];
+}
 
 function toCSV(columns: string[], rows: (string | number)[][]): string {
   const esc = (v: string | number) => {
@@ -30,9 +50,32 @@ function download(filename: string, csv: string) {
 
 export function ReportsClient({ reports }: { reports: Report[] }) {
   const [active, setActive] = useState(reports[0]?.key ?? "");
-  const report = reports.find((r) => r.key === active);
+  const [period, setPeriod] = useState<Period>("all");
+  const base = reports.find((r) => r.key === active);
+
+  // Apply the period filter when the report declares a date column.
+  const report = base
+    ? (() => {
+        const range = rangeFor(period);
+        if (!range || base.dateIdx == null) return base;
+        const [from, to] = range;
+        return {
+          ...base,
+          rows: base.rows.filter((row) => {
+            const cell = String(row[base.dateIdx as number] ?? "");
+            return cell >= from && cell <= to;
+          }),
+        };
+      })()
+    : undefined;
 
   const date = new Date().toISOString().slice(0, 10);
+  const periods: { key: Period; label: string }[] = [
+    { key: "all", label: "All time" },
+    { key: "week", label: "This week" },
+    { key: "month", label: "This month" },
+    { key: "quarter", label: "This quarter" },
+  ];
 
   return (
     <>
@@ -59,7 +102,7 @@ export function ReportsClient({ reports }: { reports: Report[] }) {
         )}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1.5">
+      <div className="mb-3 flex flex-wrap gap-1.5">
         {reports.map((r) => (
           <button
             key={r.key}
@@ -69,12 +112,25 @@ export function ReportsClient({ reports }: { reports: Report[] }) {
             }`}
           >
             {r.title}
-            <span className={`ml-1.5 rounded-full px-1.5 text-[10px] ${active === r.key ? "bg-white/25" : "bg-ink-2"}`}>
-              {r.rows.length}
-            </span>
           </button>
         ))}
       </div>
+
+      {base?.dateIdx != null && (
+        <div className="mb-4 flex rounded-full border border-line bg-surface p-0.5 w-fit">
+          {periods.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                period === p.key ? "bg-brand text-white" : "text-muted hover:text-fg"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!report || report.rows.length === 0 ? (
         <EmptyState title="No data for this report yet" hint="Add records in the relevant module first." />

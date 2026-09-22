@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/os/ui";
-import { shortDate, inr } from "@/lib/bos";
+import { shortDate, inr, pct } from "@/lib/bos";
 
 export const metadata = { title: "Alerts · Business OS" };
 
@@ -21,13 +21,9 @@ export default async function AlertsPage() {
   const soon30 = inDays(30);
 
   const [
-    { data: tasks },
-    { data: approvals },
-    { data: risks },
-    { data: campaigns },
-    { data: legal },
-    { data: vendors },
-    { data: goals },
+    { data: tasks }, { data: approvals }, { data: risks }, { data: campaigns },
+    { data: legal }, { data: vendors }, { data: goals }, { data: kpis },
+    { data: events }, { data: regs }, { data: cashflow }, { data: hiring },
   ] = await Promise.all([
     supabase.from("tasks").select("id,title,due_date,status,budget,actual_cost"),
     supabase.from("approvals").select("id,request_title,decision"),
@@ -36,11 +32,15 @@ export default async function AlertsPage() {
     supabase.from("legal_items").select("id,requirement,expiry_date,due_date,status"),
     supabase.from("vendors").select("id,name,end_date"),
     supabase.from("goals").select("id,objective,end_date,status"),
+    supabase.from("employee_kpis").select("kpi_name,target,actual,employee_id"),
+    supabase.from("events").select("id,title,date,status,capacity"),
+    supabase.from("registrations").select("event_id,status"),
+    supabase.from("cashflow_months").select("*").eq("scenario", "base").order("month", { ascending: false }).limit(1),
+    supabase.from("hiring_plan").select("id,role,target_month,status"),
   ]);
 
   const alerts: { group: string; items: Alert[] }[] = [];
   const add = (group: string, items: Alert[]) => items.length && alerts.push({ group, items });
-
   const openTask = (s: string) => s !== "completed" && s !== "cancelled";
 
   add("Overdue tasks", (tasks ?? [])
@@ -52,13 +52,15 @@ export default async function AlertsPage() {
     .map((x) => ({ tone: "warn" as const, text: x.title, href: "/admin/os/tasks?view=blocked" })));
 
   add("Budget overruns", [
-    ...(tasks ?? [])
-      .filter((x) => (x.actual_cost ?? 0) > (x.budget ?? 0) && (x.budget ?? 0) > 0)
+    ...(tasks ?? []).filter((x) => (x.actual_cost ?? 0) > (x.budget ?? 0) && (x.budget ?? 0) > 0)
       .map((x) => ({ tone: "warn" as const, text: `${x.title} — spent ${inr(x.actual_cost)} of ${inr(x.budget)}`, href: "/admin/os/tasks" })),
-    ...(campaigns ?? [])
-      .filter((x) => (x.actual_spend ?? 0) > (x.budget ?? 0) && (x.budget ?? 0) > 0)
+    ...(campaigns ?? []).filter((x) => (x.actual_spend ?? 0) > (x.budget ?? 0) && (x.budget ?? 0) > 0)
       .map((x) => ({ tone: "warn" as const, text: `${x.name} — spent ${inr(x.actual_spend)} of ${inr(x.budget)}`, href: "/admin/os/campaigns" })),
   ]);
+
+  add("Missed KPIs", (kpis ?? [])
+    .filter((k) => Number(k.target ?? 0) > 0 && Number(k.actual ?? 0) < Number(k.target ?? 0))
+    .map((k) => ({ tone: "warn" as const, text: `${k.kpi_name} — ${k.actual ?? 0} of ${k.target} (${pct((Number(k.actual ?? 0) / Number(k.target)) * 100)})`, href: "/admin/os/empkpis" })));
 
   add("Pending approvals", (approvals ?? [])
     .filter((x) => x.decision === "pending")
@@ -68,21 +70,47 @@ export default async function AlertsPage() {
     .filter((x) => (x.risk_score ?? 0) >= 15 && x.status !== "completed" && x.status !== "cancelled")
     .map((x) => ({ tone: "bad" as const, text: `${x.risk} (score ${x.risk_score})`, href: "/admin/os/risks" })));
 
+  // Registration / attendance per event
+  const regCount = new Map<string, number>();
+  const attCount = new Map<string, number>();
+  for (const r of regs ?? []) {
+    if (r.status === "registered" || r.status === "attended") regCount.set(r.event_id, (regCount.get(r.event_id) ?? 0) + 1);
+    if (r.status === "attended") attCount.set(r.event_id, (attCount.get(r.event_id) ?? 0) + 1);
+  }
+  add("Low registration", (events ?? [])
+    .filter((e) => e.status === "published" && e.date >= t && e.date <= soon30 && (e.capacity ?? 0) > 0 && (regCount.get(e.id) ?? 0) / e.capacity < 0.3)
+    .map((e) => ({ tone: "warn" as const, text: `${e.title} — ${regCount.get(e.id) ?? 0}/${e.capacity} registered`, href: "/admin/os/events", when: shortDate(e.date) })));
+
+  add("Low attendance", (events ?? [])
+    .filter((e) => e.status === "completed" && (regCount.get(e.id) ?? 0) > 0 && (attCount.get(e.id) ?? 0) / (regCount.get(e.id) ?? 1) < 0.5)
+    .map((e) => ({ tone: "warn" as const, text: `${e.title} — ${attCount.get(e.id) ?? 0}/${regCount.get(e.id) ?? 0} attended`, href: "/admin/os/events" })));
+
+  // Cash-flow warning (runway < 3 months)
+  const cf = (cashflow ?? [])[0];
+  if (cf) {
+    const outflow = cf.marketing_spend + cf.event_cost + cf.payroll + cf.hiring_cost + cf.technology_cost + cf.other_expenses;
+    const closing = cf.opening_cash + cf.revenue_forecast - outflow;
+    const burn = Math.max(outflow - cf.revenue_forecast, 0);
+    if (burn > 0 && closing / burn < 3) {
+      add("Cash flow warning", [{ tone: "bad", text: `Runway ~${(closing / burn).toFixed(1)} months at current burn`, href: "/admin/os/finance" }]);
+    }
+  }
+
   add("Upcoming deadlines (7 days)", [
-    ...(goals ?? [])
-      .filter((x) => x.end_date && x.end_date >= t && x.end_date <= soon && x.status !== "completed")
+    ...(goals ?? []).filter((x) => x.end_date && x.end_date >= t && x.end_date <= soon && x.status !== "completed")
       .map((x) => ({ tone: "warn" as const, text: x.objective, href: "/admin/os/roadmap", when: shortDate(x.end_date) })),
-    ...(legal ?? [])
-      .filter((x) => x.due_date && x.due_date >= t && x.due_date <= soon && x.status !== "completed")
+    ...(legal ?? []).filter((x) => x.due_date && x.due_date >= t && x.due_date <= soon && x.status !== "completed")
       .map((x) => ({ tone: "warn" as const, text: x.requirement, href: "/admin/os/legal", when: shortDate(x.due_date) })),
   ]);
 
+  add("Hiring deadlines (30 days)", (hiring ?? [])
+    .filter((h) => h.target_month && h.target_month >= t && h.target_month <= soon30 && h.status !== "completed" && h.status !== "cancelled")
+    .map((h) => ({ tone: "warn" as const, text: `Hire: ${h.role}`, href: "/admin/os/hiring", when: shortDate(h.target_month) })));
+
   add("Expiring contracts (30 days)", [
-    ...(legal ?? [])
-      .filter((x) => x.expiry_date && x.expiry_date >= t && x.expiry_date <= soon30)
+    ...(legal ?? []).filter((x) => x.expiry_date && x.expiry_date >= t && x.expiry_date <= soon30)
       .map((x) => ({ tone: "warn" as const, text: `${x.requirement} expires`, href: "/admin/os/legal", when: shortDate(x.expiry_date) })),
-    ...(vendors ?? [])
-      .filter((x) => x.end_date && x.end_date >= t && x.end_date <= soon30)
+    ...(vendors ?? []).filter((x) => x.end_date && x.end_date >= t && x.end_date <= soon30)
       .map((x) => ({ tone: "warn" as const, text: `${x.name} contract ends`, href: "/admin/os/vendors", when: shortDate(x.end_date) })),
   ]);
 
@@ -98,7 +126,7 @@ export default async function AlertsPage() {
       </div>
 
       {total === 0 ? (
-        <EmptyState title="No alerts 🎉" hint="No overdue tasks, overruns, pending approvals or expiring contracts." />
+        <EmptyState title="No alerts 🎉" hint="No overdue work, overruns, missed KPIs, low turnout, cash risk or expiries." />
       ) : (
         <div className="space-y-6">
           {alerts.map((g) => (

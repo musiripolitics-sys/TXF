@@ -8,10 +8,10 @@ import {
   BOS_STATUSES, BOS_PRIORITIES, STATUS_META, shortDate, num,
   type BosStatus, type BosPriority,
 } from "@/lib/bos";
-import { setMyTaskStatus, addMyTask, logMyExpense, addMyLead } from "./actions";
+import { setMyTaskStatus, addMyTask, logMyExpense, addMyLead, updateMyKpiActual } from "./actions";
 import type { Task } from "../admin/os/tasks/types";
 import type { Goal, Workstream } from "../admin/os/roadmap/types";
-import type { KpiRow } from "./page";
+import type { KpiRow, PendingApproval, AssignedEvent } from "./page";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -21,15 +21,29 @@ export function WorkspaceClient({
   goals,
   kpis,
   workstreams,
+  approvals,
+  assignedEvents,
 }: {
   name: string;
   tasks: Task[];
   goals: Goal[];
   kpis: KpiRow[];
   workstreams: Workstream[];
+  approvals: PendingApproval[];
+  assignedEvents: AssignedEvent[];
 }) {
   const [modal, setModal] = useState<null | "task" | "expense" | "lead">(null);
   const [pending, start] = useTransition();
+  const [kpiVals, setKpiVals] = useState<Record<string, string>>(
+    Object.fromEntries(kpis.map((k) => [k.id, k.actual != null ? String(k.actual) : ""])),
+  );
+
+  const saveKpi = (id: string) =>
+    start(async () => {
+      const res = await updateMyKpiActual(id, Number(kpiVals[id] || 0));
+      if (res?.error) toast(res.error, "error");
+      else toast("KPI updated", "success");
+    });
 
   const t = todayISO();
   const open = (s: BosStatus) => s !== "completed" && s !== "cancelled";
@@ -153,18 +167,63 @@ export function WorkspaceClient({
                 <div className="space-y-4">
                   {kpis.map((k) => {
                     const target = Number(k.target ?? 0);
-                    const actual = Number(k.actual ?? 0);
+                    const actual = Number(kpiVals[k.id] || 0);
                     return (
                       <div key={k.id}>
-                        <div className="mb-1 flex items-center justify-between text-sm">
+                        <div className="mb-1 flex items-center justify-between gap-2 text-sm">
                           <span className="text-fg">{k.kpi_name}</span>
-                          <span className="tabular-nums text-muted">{actual} / {target || "—"}</span>
+                          <span className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={kpiVals[k.id] ?? ""}
+                              onChange={(e) => setKpiVals({ ...kpiVals, [k.id]: e.target.value })}
+                              className="w-16 rounded-lg border border-line bg-surface px-2 py-0.5 text-right text-xs tabular-nums text-fg outline-none focus:border-brand"
+                            />
+                            <span className="text-xs tabular-nums text-muted">/ {target || "—"}</span>
+                            <button onClick={() => saveKpi(k.id)} disabled={pending} className="ml-1 text-xs font-medium text-brand-soft hover:underline disabled:opacity-60">Save</button>
+                          </span>
                         </div>
                         <Meter actual={actual} target={target} />
                       </div>
                     );
                   })}
                 </div>
+              </Card>
+            )}
+          </section>
+
+          <section>
+            <h2 className="mb-2 font-display text-sm font-semibold text-fg">Assigned events</h2>
+            {assignedEvents.length === 0 ? (
+              <EmptyState title="No assigned events" hint="Events you own appear here." />
+            ) : (
+              <Card className="p-0">
+                <ul className="divide-y divide-line">
+                  {assignedEvents.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div><p className="font-medium text-fg">{e.title}</p><p className="text-xs text-muted">{e.type}</p></div>
+                      <span className="text-xs text-muted">{shortDate(e.date)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </section>
+
+          <section>
+            <h2 className="mb-2 font-display text-sm font-semibold text-fg">My pending approvals</h2>
+            {approvals.length === 0 ? (
+              <EmptyState title="Nothing pending" hint="Requests you submit for approval show here." />
+            ) : (
+              <Card className="p-0">
+                <ul className="divide-y divide-line">
+                  {approvals.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <p className="font-medium text-fg">{a.request_title}</p>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700">{a.request_type} · pending</span>
+                    </li>
+                  ))}
+                </ul>
               </Card>
             )}
           </section>
