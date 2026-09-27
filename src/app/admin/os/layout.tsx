@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { OsNav } from "@/components/os/OsNav";
+import { OsShell } from "@/components/os/OsShell";
 
 export const metadata = { title: "Business OS" };
 
 /**
- * The Business Operating System module. Admin-only. Rendered inside the
- * existing AppShell (Chrome routes /admin/** through the admin sidebar + blue
- * theme), so this layout only adds the module sub-nav and page padding.
+ * The Business OS runs in its own shell rather than inside AppShell. Nesting
+ * it there meant every page carried the app sidebar and a wall of module pills
+ * at the same time; Chrome now routes /admin/os/** straight through to this.
  */
 export default async function OsLayout({
   children,
@@ -16,6 +16,7 @@ export default async function OsLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/admin/os");
+
   if (!(await isAdmin())) {
     return (
       <div className="mx-auto max-w-md px-5 py-24 text-center">
@@ -28,10 +29,5 @@ export default async function OsLayout({
     );
   }
 
-  return (
-    <div className="mx-auto max-w-7xl px-5 py-6 md:px-8">
-      <OsNav />
-      {children}
-    </div>
-  );
+  return <OsShell email={user.email ?? ""}>{children}</OsShell>;
 }

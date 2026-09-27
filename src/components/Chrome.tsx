@@ -32,6 +32,14 @@ export function Chrome({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+
+  // The Business OS ships its own full-height shell. Wrapping it in AppShell
+  // too gave it two competing navigations stacked on top of each other, which
+  // is most of why it was hard to move around in.
+  if (pathname === "/admin/os" || pathname.startsWith("/admin/os/")) {
+    return <>{children}</>;
+  }
+
   const isApp =
     authed && APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p));
 
