@@ -3,6 +3,8 @@ import Razorpay from "razorpay";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { membershipOrderSchema, firstError } from "@/lib/validation";
+import { razorpayErrorDetail } from "@/lib/razorpay-error";
+
 
 /** Razorpay rejects orders below one rupee. */
 const RAZORPAY_MIN_PAISE = 100;
@@ -70,9 +72,11 @@ export async function POST(request: Request) {
       keyId: key_id,
     });
   } catch (error: any) {
-    console.error("Error creating Razorpay order:", error);
+    // Log the gateway's own reason — "Failed to create payment order" on its
+    // own is undiagnosable, and Razorpay hides the detail under error.error.
+    console.error("Error creating Razorpay order:", razorpayErrorDetail(error), error);
     return NextResponse.json(
-      { error: error?.message || "Failed to create payment order" },
+      { error: "Couldn't start the payment. Please try again." },
       { status: 500 }
     );
   }
