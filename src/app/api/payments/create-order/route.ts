@@ -4,6 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { membershipOrderSchema, firstError } from "@/lib/validation";
 
+/** Razorpay rejects orders below one rupee. */
+const RAZORPAY_MIN_PAISE = 100;
+
+
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
@@ -25,7 +29,9 @@ export async function POST(request: Request) {
       .select("price_amount")
       .eq("tier", tier)
       .maybeSingle();
-    if (!plan?.price_amount || plan.price_amount <= 0) {
+    // Razorpay rejects anything below one rupee, so a misconfigured plan is
+    // caught here rather than becoming a 500 from their API.
+    if (!plan?.price_amount || plan.price_amount < RAZORPAY_MIN_PAISE) {
       return NextResponse.json({ error: "Membership plan not available" }, { status: 400 });
     }
     const amount = plan.price_amount;
