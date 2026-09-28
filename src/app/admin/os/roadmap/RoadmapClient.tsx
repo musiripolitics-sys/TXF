@@ -15,7 +15,7 @@ import {
   type BosStatus,
   type BosPriority,
 } from "@/lib/bos";
-import { saveGoal, deleteGoal } from "../actions";
+import { saveGoal, deleteGoal, syncRoadmapTasks } from "../actions";
 import type { Goal, Workstream, OwnerOption } from "./types";
 
 type View = "month" | "week" | "list";
@@ -47,6 +47,7 @@ export function RoadmapClient({
   owners: OwnerOption[];
 }) {
   const [view, setView] = useState<View>("month");
+  const [syncing, setSyncing] = useState(false);
   const [fWork, setFWork] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [fPriority, setFPriority] = useState("");
@@ -159,6 +160,27 @@ export function RoadmapClient({
   const selectCls =
     "rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus:border-brand";
 
+  // Each roadmap line becomes a task, so its dates show up as work on the
+  // calendar instead of living only on this page.
+  const onSyncTasks = () => {
+    setSyncing(true);
+    void syncRoadmapTasks()
+      .then((res) => {
+        if ("error" in res && res.error) {
+          toast(res.error, "error");
+          return;
+        }
+        const created = ("created" in res ? res.created : 0) ?? 0;
+        toast(
+          created > 0
+            ? `Created ${created} task${created === 1 ? "" : "s"} from the roadmap`
+            : "Every goal already has a task",
+          "success",
+        );
+      })
+      .finally(() => setSyncing(false));
+  };
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -170,12 +192,22 @@ export function RoadmapClient({
             Strategy broken into month → week → owner → KPI.
           </p>
         </div>
-        <button
-          onClick={openNew}
-          className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white"
-        >
-          + Add goal
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onSyncTasks}
+            disabled={syncing}
+            className="rounded-full border border-line px-4 py-2 text-sm font-medium text-muted transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
+            title="Create a task for every goal that doesn't have one yet"
+          >
+            {syncing ? "Creating…" : "Create tasks from goals"}
+          </button>
+          <button
+            onClick={openNew}
+            className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white"
+          >
+            + Add goal
+          </button>
+        </div>
       </div>
 
       {/* Controls */}

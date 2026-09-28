@@ -2,6 +2,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { KpiCard, Panel, PanelStat, Meter, EmptyState } from "@/components/os/ui";
 import { DashboardFilters } from "@/components/os/DashboardFilters";
+import { AttentionBand, type AttentionItem } from "@/components/os/AttentionBand";
+import { SectionStatusGrid } from "@/components/os/SectionStatusGrid";
+import { emptySections, totalOverdue, type SectionStatus } from "@/lib/bos-sections";
 import {
   inrCompact,
   inr,
@@ -19,6 +22,15 @@ const isoYearStart = () => `${new Date().getFullYear()}-01-01`;
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const s = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 
+/** Whole days between a past date and today. Never negative. */
+function daysLate(date: string | null): number | null {
+  if (!date) return null;
+  const diff = Date.now() - new Date(date).getTime();
+  return diff <= 0 ? null : Math.floor(diff / 86_400_000);
+}
+
+const OPEN_STATUSES = "(completed,cancelled)";
+
 export default async function ExecutiveDashboard({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const from = s(sp.from) || isoYearStart();
@@ -28,7 +40,18 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
   const workstream = s(sp.workstream);
 
   const supabase = await createClient();
-  const [{ data, error }, { data: owners }, { data: workstreams }] = await Promise.all([
+  const today = isoToday();
+
+  const [
+    { data, error },
+    { data: owners },
+    { data: workstreams },
+    sectionRes,
+    lateTasksRes,
+    lateGoalsRes,
+    approvalsRes,
+    reviewsRes,
+  ] = await Promise.all([
     supabase.rpc("bos_dashboard_summary", {
       p_from: from,
       p_to: to,
@@ -37,6 +60,35 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     }),
     supabase.from("users").select("id,full_name,email").in("primary_role", ["admin", "employee", "event_host"]).order("full_name"),
     supabase.from("workstreams").select("id,name").order("sort_order"),
+    // Added by migration 0011 — absent on a database that hasn't run it yet,
+    // so every consumer below treats an error as "no data", not a crash.
+    supabase.rpc("bos_section_status"),
+    supabase
+      .from("tasks")
+      .select("id,title,due_date,owner_id")
+      .lt("due_date", today)
+      .not("status", "in", OPEN_STATUSES)
+      .order("due_date", { ascending: true })
+      .limit(8),
+    supabase
+      .from("goals")
+      .select("id,objective,deliverable,end_date,owner_id")
+      .lt("end_date", today)
+      .not("status", "in", OPEN_STATUSES)
+      .order("end_date", { ascending: true })
+      .limit(5),
+    supabase
+      .from("approvals")
+      .select("id,request_title,created_at")
+      .eq("decision", "pending")
+      .order("created_at", { ascending: true })
+      .limit(5),
+    supabase
+      .from("task_reviews")
+      .select("task_id,created_at,tasks(title)")
+      .eq("outcome", "pending")
+      .order("created_at", { ascending: true })
+      .limit(5),
   ]);
 
   const filterProps = {
@@ -59,6 +111,65 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     );
   }
 
+  const ownerName = new Map(
+    ((owners as { id: string; full_name: string | null; email: string | null }[]) ?? []).map(
+      (o) => [o.id, o.full_name || o.email || null] as const,
+    ),
+  );
+
+  const sections = (sectionRes.error ? null : (sectionRes.data as SectionStatus)) ?? null;
+
+  const attention: AttentionItem[] = [
+    ...((lateTasksRes.data as { id: string; title: string; due_date: string; owner_id: string | null }[]) ?? []).map(
+      (t): AttentionItem => ({
+        id: t.id,
+        kind: "Task",
+        title: t.title,
+        href: `/admin/os/tasks?view=overdue`,
+        daysLate: daysLate(t.due_date),
+        owner: t.owner_id ? ownerName.get(t.owner_id) : null,
+      }),
+    ),
+    ...((lateGoalsRes.data as { id: string; objective: string | null; deliverable: string | null; end_date: string; owner_id: string | null }[]) ?? []).map(
+      (g): AttentionItem => ({
+        id: g.id,
+        kind: "Goal",
+        title: g.deliverable?.trim() || g.objective || "Untitled goal",
+        href: "/admin/os/roadmap",
+        daysLate: daysLate(g.end_date),
+        owner: g.owner_id ? ownerName.get(g.owner_id) : null,
+      }),
+    ),
+    ...((approvalsRes.data as { id: string; request_title: string | null; created_at: string }[]) ?? []).map(
+      (a): AttentionItem => ({
+        id: a.id,
+        kind: "Approval",
+        title: a.request_title || "Untitled request",
+        href: "/admin/os/approvals",
+        daysLate: null,
+        note: "Pending",
+      }),
+    ),
+    // PostgREST types an embedded relation as an array even when the foreign
+    // key makes it at most one row, so the task comes back as tasks[0].
+    ...((reviewsRes.data as { task_id: string; tasks: { title: string }[] | null }[] | null) ?? []).map(
+      (r): AttentionItem => {
+        const taskTitle = r.tasks?.[0]?.title;
+        return {
+        id: r.task_id,
+        kind: "Review",
+        title: taskTitle ? `Review "${taskTitle}"` : "Review a completed task",
+        href: "/admin/os/reviews?tab=tasks",
+        daysLate: null,
+        note: "Unwritten",
+        };
+      },
+    ),
+  ]
+    // Worst first: anything with a day count outranks anything merely waiting.
+    .sort((a, b) => (b.daysLate ?? -1) - (a.daysLate ?? -1))
+    .slice(0, 10);
+
   const d = (data ?? {}) as DashboardSummary;
   const netCash = (d.revenue_actual ?? 0) - (d.expenses_total ?? 0);
   const hasTarget = (d.revenue_target ?? 0) > 0;
@@ -70,6 +181,30 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
   return (
     <>
       <Header {...filterProps} />
+
+      {/* ── What is late, by name. The dashboard's main job. ── */}
+      <AttentionBand items={attention} />
+
+      {/* ── Every section of the OS and where it stands ── */}
+      <Panel
+        icon="home"
+        title="All sections"
+        desc={
+          sections
+            ? `${totalOverdue(sections)} overdue across the OS · ${emptySections(sections).length} sections not started yet`
+            : "Current state of every part of the Business OS"
+        }
+        className="mb-4"
+      >
+        {sections ? (
+          <SectionStatusGrid status={sections} />
+        ) : (
+          <EmptyState
+            title="Section status needs migration 0011"
+            hint="Run supabase/migrations/0011_business_os_chain.sql, then reload to see every section's live state here."
+          />
+        )}
+      </Panel>
 
       {/* ── Headline ── */}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">

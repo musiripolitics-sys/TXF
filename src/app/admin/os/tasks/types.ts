@@ -27,6 +27,9 @@ export type Task = {
   budget: number;
   actual_cost: number;
   target: number | null;
+  estimate_hours: number | null;
+  actual_hours: number | null;
+  completed_at: string | null;
   actual: number | null;
   comments: string | null;
   created_at: string;

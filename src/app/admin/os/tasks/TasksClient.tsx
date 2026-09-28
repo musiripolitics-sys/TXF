@@ -37,6 +37,8 @@ const blank = {
   actualCostRupees: "",
   target: "",
   actual: "",
+  estimateHours: "",
+  actualHours: "",
   comments: "",
 };
 
@@ -135,6 +137,8 @@ export function TasksClient({
       actualCostRupees: t.actual_cost ? paiseToRupees(t.actual_cost).toString() : "",
       target: t.target?.toString() ?? "",
       actual: t.actual?.toString() ?? "",
+      estimateHours: t.estimate_hours?.toString() ?? "",
+      actualHours: t.actual_hours?.toString() ?? "",
       comments: t.comments ?? "",
     });
     setOpen(true);
@@ -157,6 +161,8 @@ export function TasksClient({
       actual_cost: form.actualCostRupees ? rupeesToPaise(Number(form.actualCostRupees)) : 0,
       target: form.target ? Number(form.target) : null,
       actual: form.actual ? Number(form.actual) : null,
+      estimate_hours: form.estimateHours ? Number(form.estimateHours) : null,
+      actual_hours: form.actualHours ? Number(form.actualHours) : null,
       comments: form.comments || null,
     };
     start(async () => {
@@ -346,6 +352,12 @@ export function TasksClient({
           </Field>
           <Field label="Actual">
             <Input type="number" step="any" value={form.actual} onChange={(e) => setForm({ ...form, actual: e.target.value })} />
+          </Field>
+          <Field label="Estimated hours">
+            <Input type="number" min={0} step="0.5" value={form.estimateHours} onChange={(e) => setForm({ ...form, estimateHours: e.target.value })} />
+          </Field>
+          <Field label="Actual hours">
+            <Input type="number" min={0} step="0.5" value={form.actualHours} onChange={(e) => setForm({ ...form, actualHours: e.target.value })} />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Comments">

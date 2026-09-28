@@ -139,6 +139,10 @@ const taskSchema = z.object({
   actual_cost: z.coerce.number().int().min(0).default(0),
   target: z.coerce.number().optional().nullable(),
   actual: z.coerce.number().optional().nullable(),
+  // Hours of work. The estimate is snapshotted into the task's review when the
+  // task completes, which is what makes estimate-vs-actual answerable later.
+  estimate_hours: z.coerce.number().min(0).optional().nullable(),
+  actual_hours: z.coerce.number().min(0).optional().nullable(),
   comments: z.string().trim().optional().nullable(),
 });
 
@@ -316,4 +320,37 @@ export async function saveCashflow(input: unknown) {
   await logAudit(supabase, gate.user.id, "upsert", "cashflow_months", data?.id ?? null, null, data);
   revalidateOs();
   return { success: true };
+}
+
+// ─────────────────────── Roadmap → tasks ───────────────────────
+
+/**
+ * Turns every roadmap goal into a task. Each roadmap line is a unit of work, so
+ * the goal's dates, owner, workstream and dependencies carry across and land on
+ * the calendar as scheduled work. Goals that already produced a task are left
+ * alone, so this is safe to press repeatedly.
+ */
+export async function syncRoadmapTasks() {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("bos_sync_roadmap_tasks");
+  if (error) {
+    return {
+      error: error.message.includes("bos_sync_roadmap_tasks")
+        ? "Run migration 0011 in Supabase first."
+        : error.message,
+    };
+  }
+
+  const created = typeof data === "number" ? data : 0;
+  if (created > 0) {
+    await logAudit(supabase, gate.user.id, "create", "tasks", null, null, {
+      source: "roadmap",
+      created,
+    });
+  }
+  revalidateOs();
+  return { success: true, created };
 }

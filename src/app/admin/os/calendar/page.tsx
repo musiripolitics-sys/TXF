@@ -28,7 +28,7 @@ export default async function CalendarPage() {
     supabase.from("events").select("id,title,slug,date").order("date"),
     supabase.from("content_items").select("id,topic,content_date"),
     supabase.from("campaigns").select("id,name,start_date"),
-    supabase.from("tasks").select("id,title,due_date,status"),
+    supabase.from("tasks").select("id,title,due_date,status,completed_at"),
     supabase.from("goals").select("id,objective,end_date"),
     supabase.from("legal_items").select("id,requirement,due_date,expiry_date"),
     supabase.from("hiring_plan").select("id,role,target_month"),
@@ -43,7 +43,25 @@ export default async function CalendarPage() {
   for (const e of events ?? []) push(e.date, "Event", "#f59e0b", e.title, `/events/${e.slug}`);
   for (const c of content ?? []) push(c.content_date, "Content", "#8b5cf6", c.topic ?? "Content", "/admin/os/content");
   for (const c of campaigns ?? []) push(c.start_date, "Campaign", "#ec4899", c.name, "/admin/os/campaigns");
-  for (const x of tasks ?? []) if (x.status !== "completed" && x.status !== "cancelled") push(x.due_date, "Task due", "#2563eb", x.title, "/admin/os/tasks");
+  // Tasks appear twice over their life: on the day they are due, and again on
+  // the day they were actually finished. Seeing both is the point — the gap
+  // between them is what the calendar is for.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  for (const x of tasks ?? []) {
+    if (x.status === "cancelled") continue;
+    if (x.status === "completed") {
+      push(x.completed_at ?? null, "Task done", "#22c55e", x.title, "/admin/os/tasks");
+      continue;
+    }
+    const overdue = !!x.due_date && x.due_date.slice(0, 10) < todayIso;
+    push(
+      x.due_date,
+      overdue ? "Task overdue" : "Task due",
+      overdue ? "#ef4444" : "#2563eb",
+      x.title,
+      overdue ? "/admin/os/tasks?view=overdue" : "/admin/os/tasks",
+    );
+  }
   for (const g of goals ?? []) push(g.end_date, "Goal", "#22c55e", g.objective, "/admin/os/roadmap");
   for (const l of legal ?? []) { push(l.due_date, "Legal due", "#64748b", l.requirement, "/admin/os/legal"); push(l.expiry_date, "Legal expiry", "#ef4444", `${l.requirement} expires`, "/admin/os/legal"); }
   for (const h of hiring ?? []) push(h.target_month, "Hiring", "#a855f7", h.role, "/admin/os/hiring");
@@ -62,7 +80,7 @@ export default async function CalendarPage() {
     <>
       <div className="mb-6">
         <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Business Calendar</h1>
-        <p className="text-sm text-muted">Events, content, campaigns, deadlines, hiring and renewals in one timeline.</p>
+        <p className="text-sm text-muted">Every dated record in the OS on one timeline — tasks due and done, goals, events, content, campaigns, hiring and renewals.</p>
       </div>
 
       {items.length === 0 ? (
