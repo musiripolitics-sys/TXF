@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { BarList, type BarDatum } from "@/components/os/BarList";
-import { SectionHeading } from "@/components/os/ui";
-import { inrCompact } from "@/lib/bos";
+import { SectionHeading, Panel, PanelStat, Meter } from "@/components/os/ui";
+import { inrCompact, num, pct, type DashboardSummary } from "@/lib/bos";
 
 export const metadata = { title: "Analytics · Business OS" };
 
@@ -32,6 +32,22 @@ export default async function AnalyticsPage() {
     supabase.from("content_items").select("platform,leads,reach"),
     supabase.from("users").select("id,full_name"),
   ]);
+
+  // The full statistical breakdown used to sit on the dashboard. It moved here
+  // when the dashboard was cut back to one card per section: this is the
+  // drill-down, so nothing was lost, it just stopped competing for attention.
+  const { data: summary } = await supabase.rpc("bos_dashboard_summary", {
+    p_from: `${new Date().getFullYear()}-01-01`,
+    p_to: new Date().toISOString().slice(0, 10),
+    p_owner: null,
+    p_workstream: null,
+  });
+  const d = (summary ?? {}) as DashboardSummary;
+  const netCash = (d.revenue_actual ?? 0) - (d.expenses_total ?? 0);
+  const hasTarget = (d.revenue_target ?? 0) > 0;
+  const eventProfit = (d.event_revenue ?? 0) - (d.event_cost ?? 0);
+  const FIN = "/admin/os/finance";
+  const T = "/admin/os/tasks";
 
   const C = campaigns ?? [];
   const L = leads ?? [];
@@ -106,6 +122,142 @@ export default async function AnalyticsPage() {
         <p className="text-sm text-muted">
           Which channels, campaigns, events and people are driving results — from live data only.
         </p>
+      </div>
+
+      <SectionHeading title="Full breakdown" desc="Every figure behind the dashboard cards" />
+      <div className="mb-8">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel icon="trophy" title="Business health" desc="Money in, money out, forecast and runway">
+          <div className="grid grid-cols-3 gap-1">
+            <PanelStat label="Revenue" value={inrCompact(d.revenue_actual)} tone="good" href={FIN} />
+            <PanelStat label="Expenses" value={inrCompact(d.expenses_total)} tone="warn" href={FIN} />
+            <PanelStat label="Profit / loss" value={inrCompact(netCash)} tone={netCash >= 0 ? "good" : "bad"} href={FIN} />
+            <PanelStat label="Forecast" value={inrCompact(d.revenue_forecast)} href={FIN} />
+            <PanelStat label="Monthly burn" value={inrCompact(d.monthly_burn)} tone="warn" href={FIN} />
+            <PanelStat
+              label="Runway"
+              value={d.runway_months != null ? `${d.runway_months} mo` : "No burn"}
+              tone={d.runway_months != null && d.runway_months < 3 ? "bad" : "default"}
+              href={FIN}
+            />
+          </div>
+          {hasTarget && (
+            <div className="mt-4">
+              <div className="mb-1 flex justify-between text-[11px] text-muted">
+                <span>Revenue vs target</span>
+                <span className="tabular-nums">{inrCompact(d.revenue_actual)} / {inrCompact(d.revenue_target)}</span>
+              </div>
+              <Meter actual={d.revenue_actual} target={d.revenue_target} />
+            </div>
+          )}
+        </Panel>
+
+        <Panel icon="code" title="Application" desc="Product development progress" tone="brand">
+          <div className="mb-4">
+            <div className="mb-1 flex justify-between text-[11px] text-muted">
+              <span>Dev progress</span>
+              <span className="tabular-nums">{d.app_progress ?? 0}%</span>
+            </div>
+            <Meter actual={d.app_progress ?? 0} target={100} />
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            <PanelStat label="Completed" value={num(d.app_completed)} tone="good" href="/admin/os/product" />
+            <PanelStat label="Pending" value={num(d.app_pending)} href="/admin/os/product" />
+            <PanelStat label="Blocked" value={num(d.app_blocked)} tone={d.app_blocked ? "bad" : "default"} href="/admin/os/product" />
+            <PanelStat label="Open bugs" value={num(d.app_bugs)} tone={d.app_bugs ? "warn" : "default"} href="/admin/os/product" />
+          </div>
+        </Panel>
+
+        <Panel icon="users" title="Growth & community" desc="Members, influencers, ambassadors, partners">
+          <div className="grid grid-cols-4 gap-1">
+            <PanelStat label="Members" value={num(d.members_total)} href="/admin/os/membership" />
+            <PanelStat label="Free" value={num(d.members_free)} href="/admin/os/membership" />
+            <PanelStat label="Paid" value={num(d.members_paid)} href="/admin/os/membership" />
+            <PanelStat label="Elite" value={num(d.members_elite)} href="/admin/os/membership" />
+            <PanelStat label="Influencers" value={num(d.influencers)} href="/admin/os/influencers" />
+            <PanelStat label="Ambassadors" value={num(d.ambassadors)} href="/admin/os/ambassadors" />
+            <PanelStat label="Partners" value={num(d.partners)} href="/admin/os/partnerships" />
+          </div>
+          <div className="mt-4">
+            <div className="mb-1 flex justify-between text-[11px] text-muted">
+              <span>Conversion to paid</span>
+              <span className="tabular-nums">{pct(d.member_conversion)}</span>
+            </div>
+            <Meter actual={d.member_conversion ?? 0} target={100} />
+          </div>
+        </Panel>
+
+        <Panel icon="broadcast" title="Marketing" desc="Reach, leads and spend across campaigns">
+          <div className="grid grid-cols-3 gap-1">
+            <PanelStat label="Content published" value={num(d.content_published)} href="/admin/os/content" />
+            <PanelStat label="Reach" value={num(d.mkt_reach)} href="/admin/os/campaigns" />
+            <PanelStat label="Leads" value={num(d.mkt_leads)} href="/admin/os/campaigns" />
+            <PanelStat label="Conversions" value={num(d.mkt_conversions)} href="/admin/os/campaigns" />
+            <PanelStat label="Spend" value={inrCompact(d.mkt_spend)} tone="warn" href="/admin/os/campaigns" />
+            <PanelStat
+              label="ROI"
+              value={d.mkt_spend > 0 ? `${(((d.mkt_revenue - d.mkt_spend) / d.mkt_spend) * 100).toFixed(0)}%` : "No data yet"}
+              tone={d.mkt_revenue >= d.mkt_spend ? "good" : "bad"}
+              href="/admin/os/analytics"
+            />
+          </div>
+        </Panel>
+
+        <Panel icon="calendar" title="Events" desc="Live events system + BOS financials">
+          <div className="grid grid-cols-4 gap-1">
+            <PanelStat label="Upcoming" value={num(d.events_upcoming)} href="/admin/os/events" />
+            <PanelStat label="Completed" value={num(d.events_completed)} href="/admin/os/events" />
+            <PanelStat label="Registrations" value={num(d.events_registrations)} tone="brand" href="/admin/os/events" />
+            <PanelStat label="Attendance" value={num(d.events_attendance)} href="/admin/os/events" />
+            <PanelStat label="Revenue" value={inrCompact(d.event_revenue)} tone="good" href="/admin/os/events" />
+            <PanelStat label="Cost" value={inrCompact(d.event_cost)} tone="warn" href="/admin/os/events" />
+            <PanelStat label="Profit" value={inrCompact(eventProfit)} tone={eventProfit >= 0 ? "good" : "bad"} href="/admin/os/events" />
+          </div>
+        </Panel>
+
+        <Panel icon="trophy" title="Sales pipeline" desc="Weighted = expected revenue × probability">
+          <div className="grid grid-cols-4 gap-1">
+            <PanelStat label="Leads" value={num(d.leads_total)} href="/admin/os/crm" />
+            <PanelStat label="Qualified" value={num(d.leads_qualified)} href="/admin/os/crm" />
+            <PanelStat label="Proposals" value={num(d.leads_proposal)} href="/admin/os/crm" />
+            <PanelStat label="Negotiations" value={num(d.leads_negotiation)} href="/admin/os/crm" />
+            <PanelStat label="Pipeline" value={inrCompact(d.pipeline_value)} href="/admin/os/crm" />
+            <PanelStat label="Weighted" value={inrCompact(d.weighted_pipeline)} tone="brand" href="/admin/os/crm" />
+            <PanelStat label="Won" value={num(d.deals_won)} tone="good" href="/admin/os/crm" />
+            <PanelStat label="Lost" value={num(d.deals_lost)} tone="bad" href="/admin/os/crm" />
+          </div>
+        </Panel>
+
+        <Panel icon="medal" title="People" desc="Team, hiring and KPI achievement">
+          <div className="grid grid-cols-3 gap-1">
+            <PanelStat label="Employees" value={num(d.employees)} href="/admin/os/people" />
+            <PanelStat label="Open positions" value={num(d.open_positions)} href="/admin/os/hiring" />
+            <PanelStat label="Planned hires" value={num(d.planned_hires)} href="/admin/os/hiring" />
+            <PanelStat label="Monthly payroll" value={inrCompact(d.monthly_payroll)} tone="warn" href="/admin/os/people" />
+            <PanelStat label="Hiring cost" value={inrCompact(d.hiring_cost)} href="/admin/os/hiring" />
+          </div>
+          <div className="mt-4">
+            <div className="mb-1 flex justify-between text-[11px] text-muted">
+              <span>KPI achievement</span>
+              <span className="tabular-nums">{d.emp_kpi_achievement ?? 0}%</span>
+            </div>
+            <Meter actual={d.emp_kpi_achievement ?? 0} target={100} />
+          </div>
+        </Panel>
+
+        <Panel icon="bell" title="Control center" desc="What needs attention right now" tone="warn">
+          <div className="grid grid-cols-4 gap-1">
+            <PanelStat label="Overdue tasks" value={num(d.tasks_overdue)} tone={d.tasks_overdue > 0 ? "bad" : "good"} href={`${T}?view=overdue`} />
+            <PanelStat label="Critical tasks" value={num(d.tasks_critical)} tone={d.tasks_critical > 0 ? "bad" : "default"} href={T} />
+            <PanelStat label="Blocked" value={num(d.tasks_blocked)} tone={d.tasks_blocked > 0 ? "bad" : "default"} href={`${T}?view=blocked`} />
+            <PanelStat label="Open risks" value={num(d.risks_open)} tone={d.risks_critical > 0 ? "warn" : "default"} href="/admin/os/risks" />
+            <PanelStat label="Pending approvals" value={num(d.approvals_pending)} tone={d.approvals_pending > 0 ? "warn" : "default"} href="/admin/os/approvals" />
+            <PanelStat label="Expiring contracts" value={num(d.contracts_expiring)} tone={d.contracts_expiring > 0 ? "warn" : "default"} href="/admin/os/alerts" />
+            <PanelStat label="Dependencies" value={num(d.deps_open)} href="/admin/os/dependencies" />
+            <PanelStat label="Due today" value={num(d.tasks_due_today)} tone={d.tasks_due_today > 0 ? "warn" : "default"} href="/admin/os/alerts" />
+          </div>
+        </Panel>
+      </div>
       </div>
 
       <SectionHeading title="Marketing & acquisition" />
