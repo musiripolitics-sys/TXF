@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 const support = [
   { title: "Registration & ticketing", desc: "We handle sign-ups, payments and QR check-in." },
-  { title: "Promotion", desc: "Reach 5,000+ members across email, WhatsApp, Discord and social." },
+  { title: "Promotion", desc: "Reach our members across email, WhatsApp, Discord and social." },
   { title: "Sponsors & partners", desc: "Tap into our partner network for venue, prizes and budget." },
   { title: "Analytics", desc: "Live dashboards for registrations, attendance and feedback." },
 ];

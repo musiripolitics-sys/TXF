@@ -3,6 +3,12 @@ import Razorpay from "razorpay";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ticketOrderSchema, firstError } from "@/lib/validation";
+import { razorpayErrorDetail } from "@/lib/razorpay-error";
+
+
+/** Razorpay rejects orders below one rupee. */
+const RAZORPAY_MIN_PAISE = 100;
+
 
 export async function POST(request: Request) {
   try {
@@ -97,7 +103,10 @@ export async function POST(request: Request) {
     };
 
     // A fully-discounted order needs no payment — fulfil it immediately.
-    if (total <= 0) {
+    // Razorpay's minimum charge is 100 paise, so anything under that is
+    // treated the same way: a discount landing on 50 paise would otherwise be
+    // sent to Razorpay, rejected, and surface to the buyer as a server error.
+    if (total < RAZORPAY_MIN_PAISE) {
       const { data: done, error: fulfilError } = await supabase.rpc("fulfil_order", {
         p_order_id: order_id,
         p_payment_id: null,
@@ -133,9 +142,11 @@ export async function POST(request: Request) {
       keyId: key_id,
     });
   } catch (error: any) {
-    console.error("Error creating ticket order:", error);
+    // Log the gateway's own reason — "Failed to create payment order" on its
+    // own is undiagnosable, and Razorpay hides the detail under error.error.
+    console.error("Error creating ticket order:", razorpayErrorDetail(error), error);
     return NextResponse.json(
-      { error: error?.message || "Failed to create payment order" },
+      { error: "Couldn't start the payment. Please try again." },
       { status: 500 },
     );
   }

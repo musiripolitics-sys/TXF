@@ -4,6 +4,12 @@ import { getPartners } from "@/lib/content";
 
 export async function Partners() {
   const partners = await getPartners();
+
+  // "Trusted by amazing partners" with no partners is worse than no section at
+  // all, and an empty marquee left a blank band on the homepage. Real partners
+  // come from the `partners` table; until there is one, this renders nothing.
+  if (partners.length === 0) return null;
+
   // Duplicate the list so the marquee loops seamlessly.
   const row = [...partners, ...partners];
 

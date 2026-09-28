@@ -19,12 +19,14 @@ export const brand = {
   ],
 };
 
-export const stats = [
-  { value: "5,000+", label: "Community Members" },
-  { value: "100+", label: "Events Hosted" },
-  { value: "50+", label: "Partners" },
-  { value: "20+", label: "Cities" },
-];
+/** Labels for the homepage statistics. The values come from the database
+ *  via getStats(); they used to be hardcoded claims the data did not support. */
+export const statLabels = [
+  { key: "members",  label: "Community Members" },
+  { key: "events",   label: "Events Hosted" },
+  { key: "partners", label: "Partners" },
+  { key: "cities",   label: "Cities" },
+] as const;
 
 export type EventCategory =
   | "Meetup"
@@ -425,15 +427,14 @@ export const partnerTypes = [
   "Media Partners",
 ];
 
-// Placeholder partner names rendered as logo chips.
-export const partners = [
-  "NimbusCloud", "ForgeAI", "StackHaus", "Quantyx", "ByteBazaar",
-  "Hexolabs", "Vega Ventures", "CampusOrbit", "DevMint", "PixelForge",
-  "OpenLoop", "Nexa Media",
-];
+// Partner names rendered as logo chips. Deliberately empty: this used to
+// hold twelve invented companies, which appeared on pages that take money.
+// Real partners belong in the `partners` table, which getPartners() reads;
+// the marquee hides itself when there are none.
+export const partners: string[] = [];
 
 export const activities = [
-  { title: "Monthly Meetups", desc: "Recurring city meetups across 20+ cities.", accent: "brand" },
+  { title: "Monthly Meetups", desc: "Recurring city meetups, wherever our community gathers.", accent: "brand" },
   { title: "Hackathons", desc: "Weekend build sprints with real prizes.", accent: "join" },
   { title: "Workshops", desc: "Hands-on, expert-led skill sessions.", accent: "host" },
   { title: "Startup Showcases", desc: "A stage for early teams to launch.", accent: "brand" },

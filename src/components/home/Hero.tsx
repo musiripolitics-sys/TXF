@@ -40,7 +40,7 @@ export function Hero() {
           <div className="max-w-xl">
             <span className="animate-float-up inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted backdrop-blur">
               <span className="h-1.5 w-1.5 rounded-full bg-host" />
-              5,000+ builders · 20+ cities · We Connect
+              Built by the community · We Connect
             </span>
 
             <h1 className="animate-float-up mt-5 font-display text-4xl font-bold leading-[1.05] tracking-tight text-fg sm:text-5xl lg:text-6xl text-balance">

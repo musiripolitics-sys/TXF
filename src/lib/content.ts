@@ -97,6 +97,26 @@ export const getPartners = unstable_cache(
   CACHE_OPTS,
 );
 
+/**
+ * Homepage statistics, counted from the database rather than asserted.
+ * public_stats() is a security definer RPC so the counts survive row level
+ * security without exposing any row. On an un-migrated database it returns
+ * nulls, and the band hides itself rather than inventing numbers.
+ */
+export const getStats = unstable_cache(
+  async (): Promise<Record<string, number> | null> => {
+    try {
+      const { data, error } = await publicClient().rpc("public_stats");
+      if (error || !data) return null;
+      return data as Record<string, number>;
+    } catch {
+      return null;
+    }
+  },
+  ["content:stats"],
+  CACHE_OPTS,
+);
+
 /** "What we do" activities — from `activities`, falls back to static data. */
 export const getActivities = unstable_cache(
   async (): Promise<Activity[]> => {

@@ -8,7 +8,7 @@ import { Icon } from "./Icon";
 import { NotificationBell } from "./NotificationBell";
 import { createClient } from "@/lib/supabase/client";
 
-type Role = "member" | "host" | "admin";
+type Role = "member" | "host" | "employee" | "ambassador" | "admin";
 type NavItem = { href: string; label: string; icon: string };
 
 const primary: NavItem[] = [
@@ -25,6 +25,15 @@ const hostItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "Console", icon: "sparkle" },
+  { href: "/admin/os", label: "Business OS", icon: "rocket" },
+];
+
+const workspaceItems: NavItem[] = [
+  { href: "/workspace", label: "My Workspace", icon: "home" },
+];
+
+const ambassadorItems: NavItem[] = [
+  { href: "/ambassador", label: "Ambassador", icon: "medal" },
 ];
 
 export function AppShell({
@@ -43,6 +52,8 @@ export function AppShell({
     ...primary,
     ...hostItems,
     ...adminItems,
+    ...workspaceItems,
+    ...ambassadorItems,
     { href: "/profile/edit", label: "Settings" },
     { href: "/account", label: "Account" },
   ];
@@ -94,6 +105,10 @@ export function AppShell({
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">
         <Group items={primary} />
+        {(role === "employee" || role === "admin") && (
+          <Group title="Work" items={workspaceItems} />
+        )}
+        {role === "ambassador" && <Group title="Ambassador" items={ambassadorItems} />}
         {(role === "host" || role === "admin") && (
           <Group title="Hosting" items={hostItems} />
         )}
