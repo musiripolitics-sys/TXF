@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Button } from "@/components/Button";
 import { Section, SectionHeading } from "@/components/Section";
-import { stats } from "@/lib/data";
+import { statLabels } from "@/lib/data";
+import { getStats } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -34,7 +35,8 @@ const milestones = [
   { year: "Year 3", goal: "15,000 members", note: "National presence and partner ecosystem." },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const siteStats = await getStats();
   return (
     <>
       <header className="relative overflow-hidden border-b border-line bg-ink-2">
@@ -78,15 +80,20 @@ export default function AboutPage() {
           </div>
         </div>
 
+        {/* Counted from our own records; a figure at zero is left out rather
+            than advertised. */}
         <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="bg-surface px-4 py-6 text-center">
-              <dt className="font-display text-2xl font-bold text-fg sm:text-3xl">
-                {s.value}
-              </dt>
-              <dd className="mt-1 text-xs text-muted">{s.label}</dd>
-            </div>
-          ))}
+          {statLabels
+            .map((s) => ({ ...s, value: siteStats?.[s.key] ?? 0 }))
+            .filter((s) => s.value > 0)
+            .map((s) => (
+              <div key={s.label} className="bg-surface px-4 py-6 text-center">
+                <dt className="font-display text-2xl font-bold text-fg sm:text-3xl">
+                  {s.value}
+                </dt>
+                <dd className="mt-1 text-xs text-muted">{s.label}</dd>
+              </div>
+            ))}
         </dl>
       </Section>
 
@@ -144,7 +151,7 @@ export default function AboutPage() {
               Build the future with us
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-muted text-balance">
-              Join 5,000+ builders across India. Attend events, host your own,
+              Join builders across India. Attend events, host your own,
               and grow with a community that gives before it takes.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

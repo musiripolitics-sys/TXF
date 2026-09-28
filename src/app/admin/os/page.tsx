@@ -48,6 +48,7 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     lateGoalsRes,
     approvalsRes,
     reviewsRes,
+    risksRes,
   ] = await Promise.all([
     supabase.rpc("bos_dashboard_summary", {
       p_from: from,
@@ -85,6 +86,16 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
       .select("task_id,created_at,tasks(title)")
       .eq("outcome", "pending")
       .order("created_at", { ascending: true })
+      .limit(5),
+    // Critical risks count towards "needs attention", so they have to appear in
+    // the band too — otherwise it reads "nothing is overdue" next to a 3.
+    // Threshold matches bos_dashboard_summary: risk_score >= 15.
+    supabase
+      .from("risks")
+      .select("id,risk,due_date,owner_id,risk_score")
+      .gte("risk_score", 15)
+      .not("status", "in", OPEN_STATUSES)
+      .order("risk_score", { ascending: false })
       .limit(5),
   ]);
 
@@ -162,6 +173,17 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
         };
       },
     ),
+    ...((risksRes.data as { id: string; risk: string; due_date: string | null; owner_id: string | null; risk_score: number }[] | null) ?? []).map(
+      (r): AttentionItem => ({
+        id: r.id,
+        kind: "Risk",
+        title: r.risk,
+        href: "/admin/os/risks",
+        daysLate: daysLate(r.due_date),
+        owner: r.owner_id ? ownerName.get(r.owner_id) : null,
+        note: `Score ${r.risk_score}`,
+      }),
+    ),
   ]
     // Worst first: anything with a day count outranks anything merely waiting.
     .sort((a, b) => (b.daysLate ?? -1) - (a.daysLate ?? -1))
@@ -190,7 +212,10 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
   ): SectionCard["tone"] =>
     total === 0 ? "empty" : overdue > 0 ? "action" : waiting > 0 ? "watch" : "ok";
 
+  /** Pluralises a countable noun. Words that are already past participles
+   *  ("published", "written") take no plural, so they are passed through. */
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const count = (n: number, word: string) => `${n} ${word}`;
 
   const planOverdue = overdueOf("tasks") + overdueOf("roadmap");
   const govWaiting = d.approvals_pending + d.risks_critical;
@@ -232,10 +257,10 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     {
       key: "marketing", label: "Marketing", icon: "broadcast", href: "/admin/os/campaigns",
       value: num(totalOf("content")), unit: "content items",
-      tone: light(totalOf("content") + totalOf("campaigns"), marketingDue),
+      tone: light(totalOf("content") + totalOf("campaigns"), marketingDue, d.content_published === 0 ? 1 : 0),
       state: totalOf("content") + totalOf("campaigns") === 0 ? "no campaigns yet"
         : marketingDue > 0 ? `${marketingDue} overdue`
-        : `${plural(d.content_published, "published")}`,
+        : count(d.content_published, "published"),
     },
     {
       key: "team", label: "Team", icon: "medal", href: "/admin/os/people",
@@ -264,10 +289,10 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     {
       key: "insights", label: "Insights", icon: "clock", href: "/admin/os/reviews",
       value: num(totalOf("kpis")), unit: "KPIs defined",
-      tone: light(totalOf("kpis") + totalOf("reviews"), overdueOf("task_reviews")),
+      tone: light(totalOf("kpis") + totalOf("reviews"), overdueOf("task_reviews"), totalOf("reviews") === 0 ? 1 : 0),
       state: totalOf("kpis") + totalOf("reviews") === 0 ? "not instrumented"
         : overdueOf("task_reviews") > 0 ? `${overdueOf("task_reviews")} reviews unwritten`
-        : `${plural(totalOf("reviews"), "review")} written`,
+        : `${count(totalOf("reviews"), totalOf("reviews") === 1 ? "review" : "reviews")} written`,
     },
   ];
 
