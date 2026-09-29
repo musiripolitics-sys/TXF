@@ -661,3 +661,40 @@ export async function offboardEmployee(userId: string) {
   revalidateOs();
   return { success: true };
 }
+
+// ─────────────────────── An employee's own work ───────────────────────
+
+/**
+ * Move one of your own tasks between stages.
+ *
+ * setTaskStatus() requires admin, which left an employee looking at their
+ * tasks unable to touch them. The RLS policy "owner update own task" already
+ * allows this; only the action was in the way. The owner check is repeated
+ * here so a wrong id fails with a clear message rather than silently
+ * updating nothing.
+ */
+export async function setMyTaskStatus(taskId: string, status: z.infer<typeof statusEnum>) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+  if (!statusEnum.safeParse(status).success) return { error: "Unknown status" };
+
+  const supabase = await createClient();
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id,owner_id,status")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (!task) return { error: "Task not found" };
+  if (task.owner_id !== user.id && !(await isAdmin())) {
+    return { error: "That task isn't assigned to you." };
+  }
+
+  const { error } = await supabase.from("tasks").update({ status }).eq("id", taskId);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, user.id, "update", "tasks", taskId, { status: task.status }, { status });
+  revalidateOs();
+  revalidatePath("/workspace");
+  return { success: true };
+}

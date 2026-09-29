@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { Card, EmptyState, Meter, PriorityBadge } from "@/components/os/ui";
-import { shortDate, type BosStatus, type BosPriority } from "@/lib/bos";
+import { Card, EmptyState, Meter } from "@/components/os/ui";
+import { type BosStatus, type BosPriority } from "@/lib/bos";
+import { MyKanban } from "./MyKanban";
 
 export type MyTask = {
   id: string;
@@ -56,8 +57,11 @@ const TONE: Record<string, string> = {
  *
  * The executive dashboard answers "how is the business doing", which is not a
  * question an employee opens the OS to ask. This one answers "what do I have
- * to do, and how long have I got" — so the first thing on the page is their
- * work laid out along time, nearest deadline first.
+ * to do, and how long have I got".
+ *
+ * Where they stand comes first and stays small — four numbers, their goals and
+ * their KPIs — and the board takes the rest of the page, because moving work
+ * across it is the thing they came to do rather than something to scroll to.
  */
 export function EmployeeDashboard({
   name,
@@ -81,15 +85,6 @@ export function EmployeeDashboard({
   const withDays = open
     .map((t) => ({ task: t, days: daysUntil(t.due_date) }))
     .sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
-
-  // Buckets along time, which is the axis that matters to the person doing it.
-  const buckets = [
-    { key: "late", label: "Overdue", rows: withDays.filter((r) => r.days !== null && r.days < 0) },
-    { key: "today", label: "Today", rows: withDays.filter((r) => r.days === 0) },
-    { key: "tomorrow", label: "Tomorrow", rows: withDays.filter((r) => r.days === 1) },
-    { key: "week", label: "This week", rows: withDays.filter((r) => r.days !== null && r.days > 1 && r.days <= 7) },
-    { key: "later", label: "Later", rows: withDays.filter((r) => r.days === null || r.days > 7) },
-  ].filter((b) => b.rows.length > 0);
 
   const overdue = withDays.filter((r) => r.days !== null && r.days < 0).length;
   const dueThisWeek = withDays.filter((r) => r.days !== null && r.days >= 0 && r.days <= 7).length;
@@ -120,78 +115,8 @@ export function EmployeeDashboard({
             : `${open.length} open task${open.length === 1 ? "" : "s"}, ${dueThisWeek} due within the week.`}
       </p>
 
-      {/* ── 1. Their work along time ── */}
-      {buckets.length === 0 ? (
-        <EmptyState
-          title="No open tasks"
-          hint="When an admin assigns you work it appears here, soonest deadline first."
-        />
-      ) : (
-        <div className="mb-6 overflow-x-auto">
-          <div className="flex min-w-max gap-3 pb-1">
-            {buckets.map((b) => (
-              <div key={b.key} className="w-64 shrink-0">
-                <div className="mb-1.5 flex items-baseline justify-between px-0.5">
-                  <p
-                    className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                      b.key === "late" ? "text-red-600" : b.key === "today" ? "text-amber-600" : "text-faint"
-                    }`}
-                  >
-                    {b.label}
-                  </p>
-                  <span className="text-[10px] tabular-nums text-faint">{b.rows.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {b.rows.slice(0, 6).map(({ task, days }) => {
-                    const c = countdown(days);
-                    const waiting = blockedTitles[task.id];
-                    return (
-                      <Link
-                        key={task.id}
-                        href="/admin/os/tasks"
-                        className={`block rounded-xl border p-3 transition-colors hover:border-brand/40 ${
-                          c.tone === "late" ? "border-red-200 bg-red-50/60" : "border-line bg-surface"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-mono text-[10px] text-faint">{task.code}</span>
-                          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${TONE[c.tone]}`}>
-                            {c.text}
-                          </span>
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-sm leading-snug text-fg">{task.title}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <PriorityBadge priority={task.priority} />
-                          {task.estimate_hours != null && (
-                            <span className="text-[10px] tabular-nums text-faint">
-                              {task.estimate_hours}h
-                            </span>
-                          )}
-                          <span className="ml-auto text-[10px] text-faint">{shortDate(task.due_date)}</span>
-                        </div>
-                        {waiting && (
-                          <p className="mt-1.5 flex items-start gap-1 text-[10px] text-amber-700">
-                            <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
-                            waiting on {waiting}
-                          </p>
-                        )}
-                      </Link>
-                    );
-                  })}
-                  {b.rows.length > 6 && (
-                    <Link href="/admin/os/tasks" className="block px-1 text-[11px] text-brand-soft hover:underline">
-                      +{b.rows.length - 6} more
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── 2. Their numbers ── */}
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* ── 1. Where they stand ── */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Mini label="Open tasks" value={open.length} href="/admin/os/tasks" />
         <Mini label="Overdue" value={overdue} tone={overdue > 0 ? "bad" : "good"} href="/admin/os/tasks?view=overdue" />
         <Mini label="Blocked" value={blocked} tone={blocked > 0 ? "warn" : "good"} href="/admin/os/dependencies" />
@@ -203,8 +128,8 @@ export function EmployeeDashboard({
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* ── 3. Goals they own ── */}
+      {/* ── 2. Goals and performance, compact ── */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-semibold text-fg">
             <Icon name="rocket" className="h-4 w-4 text-faint" strokeWidth={1.8} />
@@ -217,8 +142,7 @@ export function EmployeeDashboard({
               {goals.map((g) => {
                 const mine = tasks.filter((t) => t.goal_id === g.id);
                 const finished = mine.filter((t) => t.status === "completed").length;
-                const d = daysUntil(g.end_date);
-                const c = countdown(d);
+                const c = countdown(daysUntil(g.end_date));
                 return (
                   <Link key={g.id} href="/admin/os/roadmap" className="block rounded-xl border border-line p-3 hover:border-brand/40">
                     <div className="flex items-start justify-between gap-2">
@@ -243,7 +167,6 @@ export function EmployeeDashboard({
           )}
         </Card>
 
-        {/* ── 4. Their KPIs and anything waiting on them ── */}
         <Card>
           <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-semibold text-fg">
             <Icon name="medal" className="h-4 w-4 text-faint" strokeWidth={1.8} />
@@ -280,18 +203,24 @@ export function EmployeeDashboard({
               {reviewsDue} completed task{reviewsDue === 1 ? "" : "s"} waiting for your review
             </Link>
           )}
-
-          {done.length > 0 && (
-            <div className="mt-4 border-t border-line pt-3">
-              <p className="text-[11px] text-faint">
-                Recently completed:{" "}
-                {done.slice(0, 3).map((t) => t.title).join(", ")}
-                {done.length > 3 ? ` and ${done.length - 3} more` : ""}
-              </p>
-            </div>
-          )}
         </Card>
       </div>
+
+      {/* ── 3. The board ── */}
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-faint">
+          Your board
+        </h2>
+        <p className="text-[11px] text-faint">Drag a card to move it, or use the menu on it</p>
+      </div>
+      {tasks.length === 0 ? (
+        <EmptyState
+          title="No tasks yet"
+          hint="When an admin assigns you work it appears on this board."
+        />
+      ) : (
+        <MyKanban tasks={tasks} blockedTitles={blockedTitles} />
+      )}
     </>
   );
 }
