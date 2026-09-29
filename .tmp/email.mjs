@@ -22766,6 +22766,18 @@ async function sendApprovalDecision(opts) {
     )
   );
 }
+async function sendHostMessage(opts) {
+  const safe = opts.body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>");
+  await send(
+    opts.to,
+    opts.subject,
+    shell(
+      opts.subject,
+      `<div style="white-space:normal;">${safe}</div>
+       ${opts.senderName ? `<p style="margin:18px 0 0;font-size:13px;color:#8a897f;">Sent by ${opts.senderName} at Techxfluence.</p>` : ""}`
+    )
+  );
+}
 export {
   sendApprovalDecision,
   sendAttendeeBroadcast,
@@ -22773,6 +22785,7 @@ export {
   sendEmployeeWelcome,
   sendEventReminder,
   sendHostDecision,
+  sendHostMessage,
   sendHostProposalReceived,
   sendInternalAlert,
   sendMembershipRenewal,
