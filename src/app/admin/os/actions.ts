@@ -527,36 +527,135 @@ export async function setModuleAccess(userId: string, sections: string[]) {
   return { success: true };
 }
 
-const roleEnum = z.enum(["admin", "employee", "event_host", "community_member"]);
+const newEmployeeSchema = z.object({
+  full_name: z.string().trim().min(2, "Name is required"),
+  email: z.string().trim().toLowerCase().email("A valid email is required"),
+  title: z.string().trim().optional().nullable(),
+  department: z.string().trim().optional().nullable(),
+  start_date: optDate,
+  sections: z.array(z.enum(SECTION_KEYS)).default([]),
+});
 
-/** Change someone's primary role. Admins are not demotable from here. */
-export async function setEmployeeRole(userId: string, role: string) {
+/**
+ * Onboard an employee here, rather than waiting for them to sign up and then
+ * promoting them. Creates the account, marks them an employee, records their
+ * title and department, and grants their sections in one step.
+ *
+ * If the email already has an account — someone who registered as a member
+ * first — that account is promoted instead of failing, because the alternative
+ * is an admin stuck with an error and no way forward.
+ */
+export async function createEmployee(input: unknown) {
   const gate = await requireAdmin();
   if ("error" in gate) return gate;
-  if (userId === gate.user.id) return { error: "You can't change your own role." };
 
-  const parsed = roleEnum.safeParse(role);
-  if (!parsed.success) return { error: "Unknown role" };
+  const parsed = newEmployeeSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { full_name, email, title, department, start_date, sections } = parsed.data;
 
-  const supabase = await createClient();
-  const { data: before } = await supabase
-    .from("users")
-    .select("primary_role")
-    .eq("id", userId)
-    .maybeSingle();
-  if (before?.primary_role === "admin") {
-    return { error: "Demote an admin from the admin console, not here." };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    return { error: "Creating accounts isn't configured on the server (missing SUPABASE_SERVICE_ROLE_KEY)." };
   }
 
-  const { error } = await supabase
-    .from("users")
-    .update({ primary_role: parsed.data })
-    .eq("id", userId);
-  if (error) return { error: error.message };
-
-  await logAudit(supabase, gate.user.id, "update", "users", userId, before, {
-    primary_role: parsed.data,
+  const { createClient: createAdminClient } = await import("@supabase/supabase-js");
+  const admin = createAdminClient(url, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  const supabase = await createClient();
+  let userId: string | null = null;
+  let promoted = false;
+
+  // Already registered? Promote rather than fail.
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id,primary_role")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing) {
+    if (existing.primary_role === "admin") {
+      return { error: "That email belongs to an admin, who already has every section." };
+    }
+    userId = existing.id as string;
+    promoted = true;
+  } else {
+    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { full_name },
+    });
+    if (createErr || !created?.user) {
+      return { error: createErr?.message ?? "Could not create the account." };
+    }
+    userId = created.user.id;
+  }
+
+  // handle_new_user() writes the public.users row; make them an employee.
+  const { error: roleErr } = await supabase
+    .from("users")
+    .update({ primary_role: "employee", full_name })
+    .eq("id", userId);
+  if (roleErr) return { error: roleErr.message };
+
+  // Title and department live on employee_profiles, which People & Hiring reads.
+  await supabase.from("employee_profiles").upsert(
+    {
+      user_id: userId,
+      title: title || null,
+      department: department || null,
+      start_date: start_date || null,
+      status: "active",
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (sections.length > 0) {
+    const { error: accessErr } = await supabase.rpc("bos_set_module_access", {
+      p_user: userId,
+      p_sections: sections,
+    });
+    if (accessErr) {
+      return {
+        error: accessErr.message.includes("bos_set_module_access")
+          ? "Employee created, but run migration 0016 before assigning sections."
+          : accessErr.message,
+      };
+    }
+  }
+
+  await logAudit(supabase, gate.user.id, "create", "users", userId, null, {
+    full_name,
+    email,
+    primary_role: "employee",
+    sections,
+    promoted,
+  });
+  revalidateOs();
+  return { success: true, promoted };
+}
+
+/** Take someone off the team: revoke every section and mark the profile ended. */
+export async function offboardEmployee(userId: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  if (userId === gate.user.id) return { error: "You can't offboard yourself." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_set_module_access", {
+    p_user: userId,
+    p_sections: [],
+  });
+  if (error && !error.message.includes("bos_set_module_access")) {
+    return { error: error.message };
+  }
+
+  await supabase.from("employee_profiles").update({ status: "ended" }).eq("user_id", userId);
+  await supabase.from("users").update({ primary_role: "community_member" }).eq("id", userId);
+
+  await logAudit(supabase, gate.user.id, "update", "users", userId, null, { offboarded: true });
   revalidateOs();
   return { success: true };
 }
