@@ -276,7 +276,9 @@ export function RoadmapClient({
         <RoadmapTimeline
           goals={filtered}
           tasks={tasks}
+          edges={edges}
           workstreams={workstreams}
+          ownerName={ownerName}
           onOpenGoal={openEdit}
         />
       ) : (
