@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { sendApprovalDecision } from "@/lib/email";
+import { lookupUser, firstNameOf } from "@/lib/mail-recipients";
 
 /** Approve / reject an approval request via the decide_approval RPC (0009),
  * which stamps the decision and notifies the requester. Audit-logged. */
@@ -18,7 +20,7 @@ export async function decideApproval(id: string, decision: "approved" | "rejecte
   // pending forever.
   const { data: req } = await supabase
     .from("approvals")
-    .select("related_type,related_id")
+    .select("related_type,related_id,request_type,request_title,requester_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -43,6 +45,27 @@ export async function decideApproval(id: string, decision: "approved" | "rejecte
     if (taskErr) return { error: taskErr.message };
     revalidatePath("/admin/os/tasks");
     revalidatePath("/admin/os/roadmap");
+  }
+
+  // A task approval already emails through decideTaskApproval; anything else
+  // in the queue had no way of reaching the person who raised it.
+  if (req && req.related_type !== "task" && req.requester_id && decision !== "pending"
+      && req.requester_id !== user.id) {
+    try {
+      const person = await lookupUser(req.requester_id);
+      if (person?.email) {
+        await sendApprovalDecision({
+          to: person.email,
+          name: firstNameOf(person),
+          requestType: req.request_type ?? "Approval",
+          requestTitle: req.request_title ?? "Your request",
+          approved: decision === "approved",
+          comments: comments ?? null,
+        });
+      }
+    } catch {
+      // The decision stands whether or not the email got through.
+    }
   }
 
   await supabase.from("audit_log").insert({

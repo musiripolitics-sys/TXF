@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import {
   mailTaskAssigned, mailTaskDecision, mailTaskSubmitted,
 } from "@/lib/task-mail";
+import { sendEmployeeWelcome } from "@/lib/email";
+import { SECTION_LABELS } from "@/lib/os-access";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 
@@ -690,6 +692,20 @@ export async function createEmployee(input: unknown) {
     sections,
     promoted,
   });
+
+  // No password in here — the admin who set it hands it over directly, and a
+  // credential in a mailbox outlives its usefulness immediately.
+  try {
+    await sendEmployeeWelcome({
+      to: email,
+      name: full_name.split(" ")[0] || full_name,
+      title: title || null,
+      sections: sections.map((k) => SECTION_LABELS[k as keyof typeof SECTION_LABELS] ?? k),
+    });
+  } catch {
+    // An account that exists but whose welcome bounced is still an account.
+  }
+
   revalidateOs();
   return { success: true, promoted };
 }

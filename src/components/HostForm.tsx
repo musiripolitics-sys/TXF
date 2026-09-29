@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { eventCategories } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
+import { acknowledgeHostProposal } from "@/app/actions/public-email";
 
 /**
  * Turn two 24-hour inputs into the display string the rest of the app uses,
@@ -96,12 +97,18 @@ export function HostForm() {
     // tags, time and organizer_phone arrive with the event-discovery section of
     // schema.sql. If it hasn't been applied, submit without them rather than
     // failing the whole submission — losing them is better than losing the event.
-    let { error: insertError } = await supabase
+    let { data: inserted, error: insertError } = await supabase
       .from("host_submissions")
-      .insert({ ...core, ...extras });
+      .insert({ ...core, ...extras })
+      .select("id")
+      .maybeSingle();
 
     if (insertError) {
-      ({ error: insertError } = await supabase.from("host_submissions").insert(core));
+      ({ data: inserted, error: insertError } = await supabase
+        .from("host_submissions")
+        .insert(core)
+        .select("id")
+        .maybeSingle());
     }
 
     setSubmitting(false);
@@ -110,6 +117,8 @@ export function HostForm() {
       setError("Something went wrong submitting your event. Please try again.");
       return;
     }
+
+    if (inserted?.id) void acknowledgeHostProposal(inserted.id as string);
 
     setSubmitted(true);
   };

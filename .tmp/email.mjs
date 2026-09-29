@@ -22686,11 +22686,97 @@ async function sendTaskReviewed(opts) {
     )
   );
 }
+async function sendEmployeeWelcome(opts) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "Your Techxfluence Business OS account is ready",
+    shell(
+      "Welcome to the team \u{1F44B}",
+      `Hi ${opts.name}, your account for the Techxfluence Business OS is ready${opts.title ? `, as <strong>${opts.title}</strong>` : ""}.
+       ${opts.sections.length ? `<p style="margin:14px 0 0;">You have access to: <strong>${opts.sections.join(", ")}</strong>.
+              Anything else stays hidden until someone grants it.</p>` : ""}
+       <p style="margin:14px 0 0;">Sign in with this address. Whoever set your
+       account up has your password \u2014 if you do not have it, use
+       <em>Forgot password</em> on the sign-in page and set your own.</p>
+       ${button(`${site}/admin/os`, "Open the Business OS")}`
+    )
+  );
+}
+async function sendContactReceived(opts) {
+  await send(
+    opts.to,
+    "We got your message",
+    shell(
+      "Thanks for getting in touch",
+      `Hi ${opts.name}, we have your message${opts.subject ? ` about <strong>${opts.subject}</strong>` : ""} and someone will reply, usually within a couple of working days.
+       <p style="margin:14px 0 0;">No need to send it again \u2014 this is just to
+       confirm it reached us.</p>`
+    )
+  );
+}
+async function sendHostProposalReceived(opts) {
+  await send(
+    opts.to,
+    "We got your event proposal",
+    shell(
+      "Your proposal is in \u{1F3A4}",
+      `Hi ${opts.name}, thanks for proposing${opts.eventTitle ? ` <strong>${opts.eventTitle}</strong>` : " an event"}. Someone from the team reviews every proposal by hand, so give us a few
+       days \u2014 you will hear back either way.`
+    )
+  );
+}
+async function sendNewsletterWelcome(opts) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "You're subscribed to Techxfluence",
+    shell(
+      "You're on the list \u{1F4EC}",
+      `Thanks for subscribing. You will hear from us when there is something
+       worth hearing about \u2014 new events, what happened at the last one, and
+       what the community is building. Not more often than that.
+       ${button(`${site}/events`, "See what's on")}`
+    )
+  );
+}
+async function sendInternalAlert(opts) {
+  await send(
+    opts.to,
+    opts.heading,
+    shell(
+      opts.heading,
+      `Hi ${opts.name}, ${opts.what}
+       ${opts.details ? facts(opts.details) : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}${opts.href}`, opts.cta)}`
+    )
+  );
+}
+async function sendApprovalDecision(opts) {
+  await send(
+    opts.to,
+    `${opts.approved ? "Approved" : "Not approved"}: ${opts.requestTitle}`,
+    shell(
+      opts.approved ? "Your request was approved \u2705" : "Your request was not approved",
+      `Hi ${opts.name}, your ${opts.requestType.toLowerCase()} request
+       \u2014 <strong>${opts.requestTitle}</strong> \u2014 was
+       ${opts.approved ? "approved" : "declined"}.
+       ${opts.comments ? `<p style="margin:14px 0 0;"><strong>Note:</strong> ${opts.comments}</p>` : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}/admin/os/approvals`, "See the request")}`
+    )
+  );
+}
 export {
+  sendApprovalDecision,
   sendAttendeeBroadcast,
+  sendContactReceived,
+  sendEmployeeWelcome,
   sendEventReminder,
   sendHostDecision,
+  sendHostProposalReceived,
+  sendInternalAlert,
   sendMembershipRenewal,
+  sendNewsletterWelcome,
   sendPaymentReceipt,
   sendRegistrationConfirmation,
   sendSpotOpened,

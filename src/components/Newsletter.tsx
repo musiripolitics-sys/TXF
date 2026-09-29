@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { acknowledgeNewsletter } from "@/app/actions/public-email";
 
 /**
  * Newsletter signup — writes to Supabase `newsletter_subscribers`.
@@ -31,6 +32,10 @@ export function Newsletter({ compact = false }: { compact?: boolean }) {
       setError("Couldn't subscribe. Please try again.");
       return;
     }
+
+    // Only on a genuinely new row: 23505 means they were already subscribed,
+    // and welcoming somebody twice is how a list gets reported as spam.
+    if (!insertError) void acknowledgeNewsletter(email);
 
     setDone(true);
   };

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { acknowledgeContact } from "@/app/actions/public-email";
 
 const topics = [
   "General enquiry",
@@ -46,12 +47,16 @@ export function ContactForm() {
     setError(null);
 
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("contact_messages").insert({
-      name: form.name,
-      email: form.email,
-      topic: form.topic,
-      message: form.message,
-    });
+    const { data: inserted, error: insertError } = await supabase
+      .from("contact_messages")
+      .insert({
+        name: form.name,
+        email: form.email,
+        topic: form.topic,
+        message: form.message,
+      })
+      .select("id")
+      .maybeSingle();
 
     setSubmitting(false);
 
@@ -59,6 +64,11 @@ export function ContactForm() {
       setError("Couldn't send your message. Please try again.");
       return;
     }
+
+    // Acknowledge by id, not by content: the server reads the row it just
+    // wrote. Never awaited into the success path — a missing confirmation
+    // email must not make a sent message look unsent.
+    if (inserted?.id) void acknowledgeContact(inserted.id as string);
 
     setSent(true);
   };
