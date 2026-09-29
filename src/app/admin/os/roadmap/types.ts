@@ -23,3 +23,30 @@ export type Goal = {
   notes: string | null;
   created_at: string;
 };
+
+/** A task belonging to a roadmap goal, with its blocking predecessor resolved. */
+export type RoadmapTask = {
+  id: string;
+  code: string | null;
+  goal_id: string | null;
+  title: string;
+  description: string | null;
+  owner_id: string | null;
+  start_date: string | null;
+  due_date: string | null;
+  status: BosStatus;
+  priority: BosPriority;
+  dependency_id: string | null;
+  estimate_hours: number | null;
+  actual_hours: number | null;
+  completed_at: string | null;
+};
+
+/** An edge in the dependency graph: `from` waits on `to`. */
+export type TaskEdge = {
+  id: string;
+  from_id: string | null;
+  to_id: string | null;
+  note: string | null;
+  status: string;
+};

@@ -1,13 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { RoadmapClient } from "./RoadmapClient";
-import type { Goal, Workstream, OwnerOption } from "./types";
+import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
 export default async function RoadmapPage() {
   const supabase = await createClient();
 
-  const [{ data: goals }, { data: workstreams }, { data: owners }] = await Promise.all([
+  const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes] = await Promise.all([
     supabase
       .from("goals")
       .select("*")
@@ -20,6 +20,14 @@ export default async function RoadmapPage() {
       .select("id,full_name,email")
       .in("primary_role", ["admin", "employee", "event_host"])
       .order("full_name"),
+    // Tasks and the dependency graph load with the goals so expanding a row is
+    // instant and needs no second round trip.
+    supabase
+      .from("tasks")
+      .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at")
+      .not("goal_id", "is", null)
+      .order("due_date", { ascending: true, nullsFirst: false }),
+    supabase.from("dependencies").select("id,from_id,to_id,note,status"),
   ]);
 
   return (
@@ -27,6 +35,8 @@ export default async function RoadmapPage() {
       initialGoals={(goals as Goal[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
       owners={(owners as OwnerOption[]) ?? []}
+      tasks={(tasksRes.data as RoadmapTask[]) ?? []}
+      edges={(edgesRes.data as TaskEdge[]) ?? []}
     />
   );
 }
