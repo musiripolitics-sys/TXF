@@ -20,6 +20,7 @@ import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./typ
 import { GoalTasks } from "./GoalTasks";
 import { RoadmapTimeline } from "./RoadmapTimeline";
 import { TaskDetail, type TaskComment } from "./TaskDetail";
+import { GoalDetail } from "./GoalDetail";
 
 type View = "month" | "week" | "list" | "timeline";
 
@@ -64,6 +65,8 @@ export function RoadmapClient({
   // panel swaps it, so navigation stays in one place.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const openTask = openTaskId ? (tasks.find((t) => t.id === openTaskId) ?? null) : null;
+  const [openGoalId, setOpenGoalId] = useState<string | null>(null);
+  const openGoal = openGoalId ? (initialGoals.find((g) => g.id === openGoalId) ?? null) : null;
   const toggleGoal = (id: string) =>
     setOpenGoals((prev) => {
       const next = new Set(prev);
@@ -286,7 +289,7 @@ export function RoadmapClient({
           edges={edges}
           workstreams={workstreams}
           ownerName={ownerName}
-          onOpenGoal={openEdit}
+          onOpenGoal={(g) => setOpenGoalId(g.id)}
           onOpenTask={setOpenTaskId}
         />
       ) : (
@@ -321,17 +324,26 @@ export function RoadmapClient({
                       <Fragment key={g.id}>
                         <tr className="border-b border-line/60 last:border-0 hover:bg-surface-2">
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => goalTasks.length > 0 && toggleGoal(g.id)}
-                              disabled={goalTasks.length === 0}
-                              className="flex items-start gap-2 text-left disabled:cursor-default"
-                            >
-                              <span className={`mt-0.5 w-3 shrink-0 text-[10px] text-faint ${goalTasks.length === 0 ? "opacity-0" : ""}`}>
-                                {isOpen ? "▾" : "▸"}
-                              </span>
-                              <span>
-                                <span className="block font-medium text-fg">{g.objective}</span>
+                            <div className="flex items-start gap-2">
+                              {goalTasks.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGoal(g.id)}
+                                  aria-label={isOpen ? "Hide tasks" : "Show tasks"}
+                                  aria-expanded={isOpen}
+                                  className="mt-0.5 w-3 shrink-0 text-[10px] text-faint hover:text-fg"
+                                >
+                                  {isOpen ? "▾" : "▸"}
+                                </button>
+                              ) : (
+                                <span className="mt-0.5 w-3 shrink-0" />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setOpenGoalId(g.id)}
+                                className="text-left"
+                              >
+                                <span className="block font-medium text-fg hover:text-brand hover:underline">{g.objective}</span>
                                 {g.deliverable && (
                                   <span className="block text-xs text-muted">{g.deliverable}</span>
                                 )}
@@ -341,8 +353,8 @@ export function RoadmapClient({
                                     {openTasks > 0 ? ` · ${openTasks} open` : " · all done"}
                                   </span>
                                 )}
-                              </span>
-                            </button>
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3 py-3">
                             {ws ? (
@@ -463,6 +475,22 @@ export function RoadmapClient({
           </div>
         </form>
       </Modal>
+
+      {openGoal && !openTask && (
+        <GoalDetail
+          goal={openGoal}
+          tasks={tasks.filter((t) => t.goal_id === openGoal.id)}
+          edges={edges}
+          owners={owners}
+          workstreams={workstreams}
+          onClose={() => setOpenGoalId(null)}
+          onOpenTask={setOpenTaskId}
+          onEdit={(g) => {
+            setOpenGoalId(null);
+            openEdit(g);
+          }}
+        />
+      )}
 
       {/* Keyed on the task id so following a blocker remounts with a fresh draft. */}
       {openTask && (
