@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "@/components/Toast";
 import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components/os/Modal";
 import { Card, PriorityBadge, EmptyState } from "@/components/os/ui";
@@ -108,7 +109,10 @@ export function TasksClient({
 }) {
   const [view, setView] = useState<TaskView>(initialView);
   const [open, setOpen] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // A review links here as ?task=<id>; open it rather than leaving the reader
+  // to find one row among forty-six.
+  const params = useSearchParams();
+  const [detailId, setDetailId] = useState<string | null>(() => params.get("task"));
   const [editing, setEditing] = useState<Task | null>(null);
   const [form, setForm] = useState({ ...blank });
   const [pending, start] = useTransition();
