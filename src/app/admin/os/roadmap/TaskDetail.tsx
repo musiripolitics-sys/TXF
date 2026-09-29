@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
+import { useDialogChrome } from "@/components/os/useDialogChrome";
 import { toast } from "@/components/Toast";
 import { StatusBadge } from "@/components/os/ui";
 import { BOS_STATUSES, BOS_PRIORITIES, STATUS_META, shortDate } from "@/lib/bos";
@@ -46,6 +48,9 @@ export function TaskDetail({
   onClose: () => void;
   onOpenTask: (id: string) => void;
 }) {
+  // Escape closes, and the roadmap behind stops scrolling while this is up.
+  useDialogChrome(true, onClose);
+
   const [saving, start] = useTransition();
   const [title, setTitle] = useState(task.title);
   const [desc, setDesc] = useState(task.description ?? "");
@@ -90,15 +95,23 @@ export function TaskDetail({
     "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus:border-brand";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:p-8">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain p-4 sm:p-8">
+      {/* fixed, not absolute: the backdrop must cover the viewport even once
+          the panel inside has scrolled. */}
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={task.title}
-        className="relative my-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-line bg-surface shadow-soft"
-      >
+      {/* `my-auto` centres by distributing free space, and when the panel is
+          taller than the viewport that space is negative — so the auto margin
+          pushed the header above the scroll origin, where no amount of
+          scrolling reached it. A min-h-full wrapper centres a short panel and
+          lets a tall one start at the top. */}
+      <div className="relative flex min-h-full items-center justify-center">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={task.title}
+          className="w-full max-w-4xl overflow-hidden rounded-2xl border border-line bg-surface shadow-soft"
+        >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
           <div className="min-w-0 flex-1">
@@ -107,7 +120,15 @@ export function TaskDetail({
               {goal && (
                 <>
                   <span>·</span>
-                  <span className="truncate">{goal.code ?? ""} {goal.objective}</span>
+                  {/* Opened from the Tasks page this is the only route back to
+                      the objective the work belongs to, so it is a link. */}
+                  <Link
+                    href={`/admin/os/roadmap?goal=${goal.id}`}
+                    className="truncate hover:text-brand hover:underline"
+                    title={goal.objective}
+                  >
+                    {goal.code ?? ""} {goal.objective}
+                  </Link>
                 </>
               )}
             </p>
@@ -435,6 +456,7 @@ export function TaskDetail({
             </div>
           </aside>
         </div>
+      </div>
       </div>
     </div>
   );

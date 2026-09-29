@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "@/components/Toast";
 import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components/os/Modal";
 import { Card, StatusBadge, PriorityBadge, EmptyState, SectionHeading } from "@/components/os/ui";
@@ -65,7 +66,10 @@ export function RoadmapClient({
   // panel swaps it, so navigation stays in one place.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const openTask = openTaskId ? (tasks.find((t) => t.id === openTaskId) ?? null) : null;
-  const [openGoalId, setOpenGoalId] = useState<string | null>(null);
+  // A task panel elsewhere links here as ?goal=<id>; open that goal on arrival
+  // rather than dropping the reader at the top of a ten-goal list.
+  const params = useSearchParams();
+  const [openGoalId, setOpenGoalId] = useState<string | null>(() => params.get("goal"));
   const openGoal = openGoalId ? (initialGoals.find((g) => g.id === openGoalId) ?? null) : null;
   const toggleGoal = (id: string) =>
     setOpenGoals((prev) => {
