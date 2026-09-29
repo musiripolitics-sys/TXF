@@ -31,7 +31,7 @@ export default async function CheckinPage({ params }: { params: Params }) {
     supabase.from("events").select("id,title,date,venue,city,capacity").eq("id", id).maybeSingle(),
     supabase
       .from("registrations")
-      .select("id,attendee_name,attendee_email,ticket_code,status,checked_in_at,tier")
+      .select("id,attendee_name,attendee_email,ticket_code,status,checked_in_at")
       .eq("event_id", id)
       .in("status", ["registered", "attended"])
       .order("attendee_name"),

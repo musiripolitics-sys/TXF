@@ -28,7 +28,6 @@ export type Registration = {
   ticket_code: string | null;
   checked_in_at: string | null;
   registered_at: string;
-  tier: string | null;
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -207,7 +206,6 @@ export function EventDetail({
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-faint">
                   <th className="px-5 py-2.5 font-semibold">Attendee</th>
                   <th className="px-3 py-2.5 font-semibold">Ticket</th>
-                  <th className="px-3 py-2.5 font-semibold">Tier</th>
                   <th className="px-3 py-2.5 font-semibold">Booked</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
                 </tr>
@@ -220,7 +218,6 @@ export function EventDetail({
                       <p className="text-xs text-muted">{r.attendee_email}</p>
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs text-muted">{r.ticket_code ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted">{r.tier ?? "—"}</td>
                     <td className="px-3 py-2.5 text-xs text-muted">{shortDate(r.registered_at)}</td>
                     <td className="px-3 py-2.5">
                       {r.checked_in_at || r.status === "attended" ? (

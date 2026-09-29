@@ -27,7 +27,7 @@ export default async function EventPage({ params }: { params: Params }) {
     supabase.from("events").select("*").eq("id", id).maybeSingle(),
     supabase
       .from("registrations")
-      .select("id,attendee_name,attendee_email,attendee_phone,status,ticket_code,checked_in_at,registered_at,tier")
+      .select("id,attendee_name,attendee_email,attendee_phone,status,ticket_code,checked_in_at,registered_at")
       .eq("event_id", id)
       .order("registered_at", { ascending: false }),
     supabase

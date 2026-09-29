@@ -11,7 +11,6 @@ export type DoorRegistration = {
   ticket_code: string | null;
   status: string;
   checked_in_at: string | null;
-  tier: string | null;
 };
 
 type Verdict = {
@@ -177,7 +176,7 @@ export function CheckinScanner({
 
       // Answer now, reconcile after: at a door, waiting is the failure.
       markLocally(ticket);
-      show("ok", known.attendee_name ?? "Checked in", `${known.tier ? `${known.tier} · ` : ""}Let them in.`);
+      show("ok", known.attendee_name ?? "Checked in", "Let them in.");
 
       if (!navigator.onLine) {
         persistQueue([...queued, ticket]);
