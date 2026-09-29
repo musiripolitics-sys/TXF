@@ -5,7 +5,13 @@ import { DashboardFilters } from "@/components/os/DashboardFilters";
 import { AttentionBand, type AttentionItem } from "@/components/os/AttentionBand";
 import { SectionOverview, type SectionCard } from "@/components/os/SectionOverview";
 import { type SectionStatus } from "@/lib/bos-sections";
-import { getMySections } from "@/lib/os-access";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import {
+  EmployeeDashboard,
+  type MyTask,
+  type MyGoal,
+  type MyKpi,
+} from "./EmployeeDashboard";
 import {
   inrCompact,
   num,
@@ -39,11 +45,13 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
 
   const supabase = await createClient();
   const today = isoToday();
-  // Employees see their own sections only. The money figures are the sharpest
-  // edge here, so they need the Money grant specifically.
-  const mySections = await getMySections();
-  const may = (k: string) => mySections.includes(k as never);
-  const canSeeMoney = may("money");
+
+  // An employee opens the OS to ask "what do I have to do", not "how is the
+  // business doing". They get their own work along time instead of the
+  // executive view, and see nothing that is not assigned to them.
+  if (!(await isAdmin())) {
+    return <MyDashboard />;
+  }
 
   const [
     { data, error },
@@ -302,8 +310,6 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     },
   ];
 
-  const visibleCards = sectionCards.filter((c) => may(c.key));
-
   const attentionCount =
     d.tasks_overdue + d.risks_critical + d.approvals_pending + overdueOf("task_reviews");
 
@@ -317,7 +323,6 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
 
       {/* ── 2. The four numbers worth checking daily ── */}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {canSeeMoney && (
         <KpiCard
           label="Net cash movement"
           value={inrCompact(netCash)}
@@ -325,8 +330,6 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
           href={FIN}
           tone={netCash >= 0 ? "good" : "bad"}
         />
-        )}
-        {canSeeMoney && (
         <KpiCard
           label="Runway"
           value={d.runway_months != null ? `${d.runway_months} mo` : "No burn yet"}
@@ -334,15 +337,12 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
           href={FIN}
           tone={d.runway_months != null && d.runway_months < 3 ? "bad" : "default"}
         />
-        )}
-        {may("grow") && (
         <KpiCard
           label="Members"
           value={num(d.members_total)}
           sub={`${num(d.members_paid)} paid · ${pct(d.member_conversion)} converted`}
           href="/admin/os/membership"
         />
-        )}
         <KpiCard
           label="Needs attention"
           value={num(attentionCount)}
@@ -363,6 +363,72 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
       </div>
       <SectionOverview sections={sectionCards} />
     </>
+  );
+}
+
+/** The employee view: their tasks, their goals, their deadlines, nothing else. */
+async function MyDashboard() {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const [tasksRes, goalsRes, kpisRes, edgesRes, reviewsRes, profileRes] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id")
+      .eq("owner_id", user.id)
+      .order("due_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("goals")
+      .select("id,code,objective,end_date,status")
+      .eq("owner_id", user.id)
+      .order("end_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("employee_kpis")
+      .select("kpi_name,target,actual,period")
+      .eq("employee_id", user.id)
+      .order("period", { ascending: false })
+      .limit(6),
+    supabase.from("dependencies").select("from_id,to_id"),
+    supabase.from("task_reviews").select("task_id").eq("outcome", "pending"),
+    supabase.from("users").select("full_name").eq("id", user.id).maybeSingle(),
+  ]);
+
+  const tasks = (tasksRes.data as MyTask[]) ?? [];
+  const mine = new Set(tasks.map((t) => t.id));
+
+  // What each of their tasks is waiting on, but only where the blocker is
+  // still unfinished — a satisfied dependency is not worth mentioning.
+  const { data: blockers } = await supabase
+    .from("tasks")
+    .select("id,code,title,status");
+  const byId = new Map(
+    ((blockers as { id: string; code: string | null; title: string; status: string }[]) ?? []).map(
+      (t) => [t.id, t],
+    ),
+  );
+  const blockedTitles: Record<string, string> = {};
+  for (const e of (edgesRes.data as { from_id: string | null; to_id: string | null }[]) ?? []) {
+    if (!e.from_id || !e.to_id || !mine.has(e.from_id)) continue;
+    const on = byId.get(e.to_id);
+    if (on && on.status !== "completed") {
+      blockedTitles[e.from_id] = `${on.code ?? ""} ${on.title}`.trim();
+    }
+  }
+
+  const reviewsDue = ((reviewsRes.data as { task_id: string }[]) ?? []).filter((r) =>
+    mine.has(r.task_id),
+  ).length;
+
+  return (
+    <EmployeeDashboard
+      name={(profileRes.data as { full_name: string | null } | null)?.full_name ?? ""}
+      tasks={tasks}
+      goals={(goalsRes.data as MyGoal[]) ?? []}
+      kpis={(kpisRes.data as MyKpi[]) ?? []}
+      blockedTitles={blockedTitles}
+      reviewsDue={reviewsDue}
+    />
   );
 }
 
