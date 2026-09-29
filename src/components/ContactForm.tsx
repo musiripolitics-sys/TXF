@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { acknowledgeContact } from "@/app/actions/public-email";
+import { acknowledgeContact, contactWithinLimit } from "@/app/actions/public-email";
 
 const topics = [
   "General enquiry",
@@ -46,6 +46,15 @@ export function ContactForm() {
     setSubmitting(true);
     setError(null);
 
+    // Checked before the insert, so a flood costs one round trip rather than
+    // a row and an email. The database enforces its own limit by address
+    // regardless, for anyone who skips this and posts to the API directly.
+    if (!(await contactWithinLimit())) {
+      setSubmitting(false);
+      setError("That's a lot of messages from one place. Please try again later.");
+      return;
+    }
+
     const supabase = createClient();
     const { data: inserted, error: insertError } = await supabase
       .from("contact_messages")
@@ -61,7 +70,11 @@ export function ContactForm() {
     setSubmitting(false);
 
     if (insertError) {
-      setError("Couldn't send your message. Please try again.");
+      setError(
+        insertError.code === "23514"
+          ? "You've already sent us a few messages. Give us a little while to reply."
+          : "Couldn't send your message. Please try again.",
+      );
       return;
     }
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import {
   sendContactReceived,
@@ -145,4 +146,55 @@ export async function acknowledgeNewsletter(email: string) {
   } catch {
     /* as above */
   }
+}
+
+
+// ─────────────────────────── Rate limiting ───────────────────────────
+//
+// Migration 0023 limits both tables by the address given, which holds even
+// against someone posting to PostgREST directly. That is the floor. These add
+// a second limit keyed on where the request came from, which is the thing an
+// address cannot tell you: one person cycling through made-up addresses looks
+// like many people until you look at the connection.
+
+/** The caller's address, as far as any proxy in front of us will say. */
+async function callerIp(): Promise<string | null> {
+  const h = await headers();
+  // x-forwarded-for is a list, oldest first; the left-most is the client.
+  const fwd = h.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0]!.trim() || null;
+  return h.get("x-real-ip") || null;
+}
+
+/**
+ * Count one request against a bucket. Open on failure: a rate limiter that
+ * cannot reach the database must not take the contact form down with it.
+ */
+async function withinLimit(bucket: string, limit: number, seconds: number): Promise<boolean> {
+  try {
+    const ip = await callerIp();
+    if (!ip) return true;
+    const db = admin();
+    if (!db) return true;
+    const { data, error } = await db.rpc("bos_rate_limit", {
+      p_bucket: bucket,
+      p_key: ip,
+      p_limit: limit,
+      p_window: `${seconds} seconds`,
+    });
+    if (error) return true;
+    return data !== false;
+  } catch {
+    return true;
+  }
+}
+
+/** Ten contact messages an hour from one connection is already generous. */
+export async function contactWithinLimit(): Promise<boolean> {
+  return withinLimit("contact-ip", 10, 3600);
+}
+
+/** Five signups an hour from one connection. A real person needs one. */
+export async function newsletterWithinLimit(): Promise<boolean> {
+  return withinLimit("newsletter-ip", 5, 3600);
 }
