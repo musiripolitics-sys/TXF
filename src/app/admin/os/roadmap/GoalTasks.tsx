@@ -15,11 +15,13 @@ export function GoalTasks({
   edges,
   allTasks,
   ownerName,
+  onOpenTask,
 }: {
   tasks: RoadmapTask[];
   edges: TaskEdge[];
   allTasks: RoadmapTask[];
   ownerName: (id: string | null) => string;
+  onOpenTask: (id: string) => void;
 }) {
   if (tasks.length === 0) {
     return (
@@ -39,6 +41,7 @@ export function GoalTasks({
           edges={edges.filter((e) => e.from_id === t.id)}
           allTasks={allTasks}
           ownerName={ownerName}
+          onOpenTask={onOpenTask}
         />
       ))}
     </div>
@@ -50,11 +53,13 @@ function TaskRow({
   edges,
   allTasks,
   ownerName,
+  onOpenTask,
 }: {
   task: RoadmapTask;
   edges: TaskEdge[];
   allTasks: RoadmapTask[];
   ownerName: (id: string | null) => string;
+  onOpenTask: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const blocker = task.dependency_id
@@ -86,7 +91,24 @@ function TaskRow({
           {open ? "▾" : "▸"}
         </span>
         <span className="w-14 shrink-0 font-mono text-[11px] text-faint">{task.code}</span>
-        <span className="min-w-0 flex-1 truncate text-sm text-fg">{task.title}</span>
+        <span
+          role="link"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenTask(task.id);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenTask(task.id);
+            }
+          }}
+          className="min-w-0 flex-1 truncate text-sm text-fg hover:text-brand hover:underline"
+        >
+          {task.title}
+        </span>
 
         {count > 0 && (
           <span

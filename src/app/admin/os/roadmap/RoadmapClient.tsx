@@ -19,6 +19,7 @@ import { saveGoal, deleteGoal, syncRoadmapTasks } from "../actions";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 import { GoalTasks } from "./GoalTasks";
 import { RoadmapTimeline } from "./RoadmapTimeline";
+import { TaskDetail, type TaskComment } from "./TaskDetail";
 
 type View = "month" | "week" | "list" | "timeline";
 
@@ -45,18 +46,24 @@ export function RoadmapClient({
   owners,
   tasks,
   edges,
+  comments,
 }: {
   initialGoals: Goal[];
   workstreams: Workstream[];
   owners: OwnerOption[];
   tasks: RoadmapTask[];
   edges: TaskEdge[];
+  comments: TaskComment[];
 }) {
   const [view, setView] = useState<View>("month");
   const [syncing, setSyncing] = useState(false);
   // Which goals are expanded to show their tasks. Everything is already loaded,
   // so this is presentation only.
   const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
+  // The task open in the detail panel, by id. Clicking a blocker inside the
+  // panel swaps it, so navigation stays in one place.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const openTask = openTaskId ? (tasks.find((t) => t.id === openTaskId) ?? null) : null;
   const toggleGoal = (id: string) =>
     setOpenGoals((prev) => {
       const next = new Set(prev);
@@ -280,6 +287,7 @@ export function RoadmapClient({
           workstreams={workstreams}
           ownerName={ownerName}
           onOpenGoal={openEdit}
+          onOpenTask={setOpenTaskId}
         />
       ) : (
         <div className="space-y-6">
@@ -374,6 +382,7 @@ export function RoadmapClient({
                                 edges={edges}
                                 allTasks={tasks}
                                 ownerName={ownerName}
+                                onOpenTask={setOpenTaskId}
                               />
                             </td>
                           </tr>
@@ -454,6 +463,21 @@ export function RoadmapClient({
           </div>
         </form>
       </Modal>
+
+      {/* Keyed on the task id so following a blocker remounts with a fresh draft. */}
+      {openTask && (
+        <TaskDetail
+          key={openTask.id}
+          task={openTask}
+          goal={initialGoals.find((g) => g.id === openTask.goal_id) ?? null}
+          allTasks={tasks}
+          edges={edges}
+          comments={comments.filter((c) => c.task_id === openTask.id)}
+          owners={owners}
+          onClose={() => setOpenTaskId(null)}
+          onOpenTask={setOpenTaskId}
+        />
+      )}
     </>
   );
 }

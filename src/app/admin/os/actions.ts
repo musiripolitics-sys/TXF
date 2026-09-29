@@ -354,3 +354,132 @@ export async function syncRoadmapTasks() {
   revalidateOs();
   return { success: true, created };
 }
+
+// ─────────────────────── Task detail panel ───────────────────────
+
+const taskPatchSchema = z.object({
+  title: z.string().trim().min(2, "Title is required").optional(),
+  description: z.string().trim().nullable().optional(),
+  status: statusEnum.optional(),
+  priority: priorityEnum.optional(),
+  owner_id: optUuid.optional(),
+  due_date: optDate.optional(),
+  start_date: optDate.optional(),
+  estimate_hours: z.coerce.number().min(0).nullable().optional(),
+  dependency_id: optUuid.optional(),
+});
+
+/**
+ * Patch one task from the detail panel. Only the fields sent are written, so
+ * changing the status never silently clears a description somebody else just
+ * edited in another tab.
+ */
+export async function patchTask(id: string, input: unknown) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const parsed = taskPatchSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const patch = parsed.data;
+  if (Object.keys(patch).length === 0) return { success: true };
+
+  // A task that depends on itself would sit blocked forever with no way out.
+  if (patch.dependency_id && patch.dependency_id === id) {
+    return { error: "A task cannot depend on itself." };
+  }
+
+  const supabase = await createClient();
+  const { data: before } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();
+
+  // Walk the chain to make sure the new blocker does not lead back here.
+  if (patch.dependency_id) {
+    const { data: all } = await supabase.from("tasks").select("id,dependency_id");
+    const by = new Map((all ?? []).map((t) => [t.id as string, t.dependency_id as string | null]));
+    by.set(id, patch.dependency_id);
+    const seen = new Set<string>();
+    let cursor: string | null | undefined = id;
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      cursor = by.get(cursor);
+    }
+    if (cursor) return { error: "That would create a circular dependency." };
+  }
+
+  const { error } = await supabase.from("tasks").update(patch).eq("id", id);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "update", "tasks", id, before, patch);
+  revalidateOs();
+  return { success: true };
+}
+
+/** Add or clear an extra blocker in the dependency graph (beyond the critical path). */
+export async function setTaskEdge(taskId: string, blockerId: string, add: boolean) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  if (taskId === blockerId) return { error: "A task cannot depend on itself." };
+
+  const supabase = await createClient();
+  const [{ data: from }, { data: to }] = await Promise.all([
+    supabase.from("tasks").select("code,title").eq("id", taskId).maybeSingle(),
+    supabase.from("tasks").select("code,title").eq("id", blockerId).maybeSingle(),
+  ]);
+  if (!from || !to) return { error: "Task not found" };
+
+  if (!add) {
+    const { error } = await supabase
+      .from("dependencies")
+      .delete()
+      .eq("from_id", taskId)
+      .eq("to_id", blockerId);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from("dependencies").insert({
+      from_type: `${from.code ?? ""} · ${from.title}`,
+      from_id: taskId,
+      to_type: `${to.code ?? ""} · ${to.title}`,
+      to_id: blockerId,
+      status: "open",
+    });
+    if (error) return { error: error.message };
+  }
+
+  await logAudit(supabase, gate.user.id, add ? "create" : "delete", "dependencies", taskId, null, {
+    blocker: blockerId,
+  });
+  revalidateOs();
+  return { success: true };
+}
+
+/** Post a comment on a task. The author is always the signed-in user. */
+export async function addTaskComment(taskId: string, body: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  const text = body.trim();
+  if (!text) return { error: "Write something first." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("task_comments")
+    .insert({ task_id: taskId, author_id: gate.user.id, body: text });
+  if (error) {
+    return {
+      error: error.message.includes("task_comments")
+        ? "Run migration 0015 in Supabase first."
+        : error.message,
+    };
+  }
+  revalidateOs();
+  return { success: true };
+}
+
+/** Remove a comment. RLS already limits this to the author or an admin. */
+export async function deleteTaskComment(id: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  const supabase = await createClient();
+  const { error } = await supabase.from("task_comments").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidateOs();
+  return { success: true };
+}

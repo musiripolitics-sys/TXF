@@ -49,6 +49,7 @@ export function RoadmapTimeline({
   workstreams,
   ownerName,
   onOpenGoal,
+  onOpenTask,
 }: {
   goals: Goal[];
   tasks: RoadmapTask[];
@@ -56,6 +57,7 @@ export function RoadmapTimeline({
   workstreams: Workstream[];
   ownerName: (id: string | null) => string;
   onOpenGoal: (g: Goal) => void;
+  onOpenTask: (id: string) => void;
 }) {
   const [zoom, setZoom] = useState<Zoom>("week");
   const [open, setOpen] = useState<Set<string>>(() => new Set(goals.slice(0, 1).map((g) => g.id)));
@@ -171,6 +173,17 @@ export function RoadmapTimeline({
   // ── Dependency connectors between visible bars ──────────────────────────
   const visibleTaskY = new Map<string, number>();
   for (const r of rows) if (r.kind === "task") visibleTaskY.set(r.task.id, r.y);
+
+  // A blocker inside a collapsed goal has nowhere for a line to land. Rather
+  // than draw into empty space, the bar carries a marker saying how many
+  // blockers are hidden, so the dependency is never silently invisible.
+  const hiddenBlockers = new Map<string, number>();
+  for (const e of edges) {
+    if (!e.from_id || !e.to_id) continue;
+    if (visibleTaskY.has(e.from_id) && !visibleTaskY.has(e.to_id)) {
+      hiddenBlockers.set(e.from_id, (hiddenBlockers.get(e.from_id) ?? 0) + 1);
+    }
+  }
 
   const connectors = edges
     .map((e) => {
@@ -423,9 +436,11 @@ export function RoadmapTimeline({
                 const b = barOf(r.task.start_date, r.task.due_date);
                 if (!b) return null;
                 const isLate = late(r.task.due_date, r.task.status);
+                const hidden = hiddenBlockers.get(r.task.id) ?? 0;
                 return (
-                  <div
+                  <button
                     key={r.task.id}
+                    onClick={() => onOpenTask(r.task.id)}
                     onMouseEnter={(e) =>
                       setHover({
                         x: e.clientX,
@@ -440,11 +455,14 @@ export function RoadmapTimeline({
                             .filter(Boolean)
                             .join(" · "),
                           ownerName(r.task.owner_id),
-                        ],
+                          hidden > 0
+                            ? `${hidden} blocker${hidden === 1 ? "" : "s"} in a collapsed goal`
+                            : null,
+                        ].filter(Boolean) as string[],
                       })
                     }
                     onMouseLeave={() => setHover(null)}
-                    className="absolute z-20 rounded"
+                    className="absolute z-20 rounded transition-opacity hover:opacity-80"
                     style={{
                       left: b.x,
                       width: b.w,
@@ -453,7 +471,16 @@ export function RoadmapTimeline({
                       background: FILL[r.task.status],
                       outline: isLate ? "2px solid #ef4444" : undefined,
                     }}
-                  />
+                  >
+                    {hidden > 0 && (
+                      <span
+                        className="absolute -left-1.5 top-1/2 grid h-3 w-3 -translate-x-full -translate-y-1/2 place-items-center rounded-full bg-amber-500 text-[7px] font-bold leading-none text-white"
+                        title={`${hidden} blocker${hidden === 1 ? "" : "s"} hidden in a collapsed goal`}
+                      >
+                        {hidden}
+                      </span>
+                    )}
+                  </button>
                 );
               })}
 

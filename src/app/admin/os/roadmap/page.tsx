@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { RoadmapClient } from "./RoadmapClient";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
+import type { TaskComment } from "./TaskDetail";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
 export default async function RoadmapPage() {
   const supabase = await createClient();
 
-  const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes] = await Promise.all([
+  const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes, commentsRes] = await Promise.all([
     supabase
       .from("goals")
       .select("*")
@@ -28,6 +29,11 @@ export default async function RoadmapPage() {
       .not("goal_id", "is", null)
       .order("due_date", { ascending: true, nullsFirst: false }),
     supabase.from("dependencies").select("id,from_id,to_id,note,status"),
+    // Added by migration 0015; an un-migrated database simply shows no thread.
+    supabase
+      .from("task_comments")
+      .select("id,task_id,author_id,body,created_at")
+      .order("created_at", { ascending: true }),
   ]);
 
   return (
@@ -37,6 +43,7 @@ export default async function RoadmapPage() {
       owners={(owners as OwnerOption[]) ?? []}
       tasks={(tasksRes.data as RoadmapTask[]) ?? []}
       edges={(edgesRes.data as TaskEdge[]) ?? []}
+      comments={(commentsRes.data as TaskComment[]) ?? []}
     />
   );
 }
