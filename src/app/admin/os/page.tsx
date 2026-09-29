@@ -5,6 +5,7 @@ import { DashboardFilters } from "@/components/os/DashboardFilters";
 import { AttentionBand, type AttentionItem } from "@/components/os/AttentionBand";
 import { SectionOverview, type SectionCard } from "@/components/os/SectionOverview";
 import { type SectionStatus } from "@/lib/bos-sections";
+import { getMySections } from "@/lib/os-access";
 import {
   inrCompact,
   num,
@@ -38,6 +39,11 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
 
   const supabase = await createClient();
   const today = isoToday();
+  // Employees see their own sections only. The money figures are the sharpest
+  // edge here, so they need the Money grant specifically.
+  const mySections = await getMySections();
+  const may = (k: string) => mySections.includes(k as never);
+  const canSeeMoney = may("money");
 
   const [
     { data, error },
@@ -296,6 +302,8 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
     },
   ];
 
+  const visibleCards = sectionCards.filter((c) => may(c.key));
+
   const attentionCount =
     d.tasks_overdue + d.risks_critical + d.approvals_pending + overdueOf("task_reviews");
 
@@ -309,6 +317,7 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
 
       {/* ── 2. The four numbers worth checking daily ── */}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {canSeeMoney && (
         <KpiCard
           label="Net cash movement"
           value={inrCompact(netCash)}
@@ -316,6 +325,8 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
           href={FIN}
           tone={netCash >= 0 ? "good" : "bad"}
         />
+        )}
+        {canSeeMoney && (
         <KpiCard
           label="Runway"
           value={d.runway_months != null ? `${d.runway_months} mo` : "No burn yet"}
@@ -323,12 +334,15 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
           href={FIN}
           tone={d.runway_months != null && d.runway_months < 3 ? "bad" : "default"}
         />
+        )}
+        {may("grow") && (
         <KpiCard
           label="Members"
           value={num(d.members_total)}
           sub={`${num(d.members_paid)} paid · ${pct(d.member_conversion)} converted`}
           href="/admin/os/membership"
         />
+        )}
         <KpiCard
           label="Needs attention"
           value={num(attentionCount)}
