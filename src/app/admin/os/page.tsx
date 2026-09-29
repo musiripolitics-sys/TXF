@@ -172,11 +172,12 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
         note: "Pending",
       }),
     ),
-    // PostgREST types an embedded relation as an array even when the foreign
-    // key makes it at most one row, so the task comes back as tasks[0].
-    ...((reviewsRes.data as { task_id: string; tasks: { title: string }[] | null }[] | null) ?? []).map(
+    // PostgREST embeds a to-one foreign key as an object, not an array, so
+    // indexing [0] left every one of these reading "Review a completed task"
+    // instead of naming it. Accept either shape.
+    ...((reviewsRes.data as { task_id: string; tasks: { title: string } | { title: string }[] | null }[] | null) ?? []).map(
       (r): AttentionItem => {
-        const taskTitle = r.tasks?.[0]?.title;
+        const taskTitle = (Array.isArray(r.tasks) ? r.tasks[0] : r.tasks)?.title;
         return {
         id: r.task_id,
         kind: "Review",

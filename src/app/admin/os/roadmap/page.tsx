@@ -3,6 +3,7 @@ import { RoadmapClient } from "./RoadmapClient";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 import type { TaskComment } from "./TaskDetail";
 import { requireSection, scopeToMe } from "@/lib/os-access";
+import { loadDirectory } from "@/lib/os-directory";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
@@ -28,7 +29,7 @@ export default async function RoadmapPage() {
   }
   const supabase = await createClient();
 
-  const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes, commentsRes] = await Promise.all([
+  const [{ data: goals }, { data: workstreams }, owners, tasksRes, edgesRes, commentsRes] = await Promise.all([
     (goalIds
       ? supabase.from("goals").select("*").in("id", goalIds.length ? goalIds : ["-"])
       : supabase.from("goals").select("*")
@@ -37,11 +38,7 @@ export default async function RoadmapPage() {
       .order("week", { ascending: true, nullsFirst: true })
       .order("created_at", { ascending: true }),
     supabase.from("workstreams").select("id,key,name,color").order("sort_order"),
-    supabase
-      .from("users")
-      .select("id,full_name,email")
-      .in("primary_role", ["admin", "employee", "event_host"])
-      .order("full_name"),
+    loadDirectory(supabase),
     // Tasks and the dependency graph load with the goals so expanding a row is
     // instant and needs no second round trip.
     supabase
@@ -61,7 +58,7 @@ export default async function RoadmapPage() {
     <RoadmapClient
       initialGoals={(goals as Goal[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
-      owners={(owners as OwnerOption[]) ?? []}
+      owners={owners as OwnerOption[]}
       tasks={(tasksRes.data as RoadmapTask[]) ?? []}
       edges={(edgesRes.data as TaskEdge[]) ?? []}
       comments={(commentsRes.data as TaskComment[]) ?? []}

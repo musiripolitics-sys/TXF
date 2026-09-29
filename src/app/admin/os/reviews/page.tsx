@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ReviewsClient, type ReviewMetrics, type ReviewNotes } from "./ReviewsClient";
 import { TaskReviewsClient, type TaskReview } from "./TaskReviewsClient";
 import { requireSection } from "@/lib/os-access";
+import { isAdmin } from "@/lib/auth";
 
 export const metadata = { title: "Reviews · Business OS" };
 
@@ -26,8 +27,9 @@ function monthEnd(firstOfMonth: string) {
 }
 
 /** Two kinds of review live here: the period retro, and one per completed task. */
-function Tabs({ tab }: { tab: "period" | "tasks" }) {
+function Tabs({ tab, admin }: { tab: "period" | "tasks"; admin: boolean }) {
   const base = "rounded-full px-4 py-1.5 text-sm font-medium transition-colors";
+  if (!admin) return null;
   return (
     <div className="mb-4 flex gap-2">
       <Link
@@ -48,9 +50,14 @@ function Tabs({ tab }: { tab: "period" | "tasks" }) {
 
 export default async function ReviewsPage({ searchParams }: { searchParams: SP }) {
   await requireSection("plan");
+  const admin = await isAdmin();
   const sp = await searchParams;
 
-  if (sp.tab === "tasks") {
+  // The period retro is built from spend, revenue and company KPIs — all of
+  // them admin-only at the database. An employee asking for it would get a
+  // page of zeroes presented as fact, and a Save button that can only answer
+  // "Not authorised". So for them the section IS their own task reviews.
+  if (sp.tab === "tasks" || !admin) {
     const supabase = await createClient();
     // task_reviews arrives with migration 0011; an un-migrated database shows
     // the empty state rather than an error.
@@ -60,13 +67,17 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
       .order("created_at", { ascending: false })
       .limit(200);
 
+    // PostgREST embeds a to-one foreign key as an object and a to-many as an
+    // array. task_reviews.task_id is to-one, so this arrives as an object —
+    // indexing [0] silently produced "Untitled task" for every row. Accept
+    // either shape rather than depending on which side of that line it lands.
+    const one = (t: TaskReviewRow["tasks"]) => (Array.isArray(t) ? t[0] : t) ?? null;
+
     const rows = ((data as TaskReviewRow[] | null) ?? []).map(
       (r): TaskReview => ({
         task_id: r.task_id,
-        // PostgREST returns an embedded relation as an array even for a
-        // to-one foreign key.
-        title: r.tasks?.[0]?.title ?? "Untitled task",
-        completed_at: r.tasks?.[0]?.completed_at ?? null,
+        title: one(r.tasks)?.title ?? "Untitled task",
+        completed_at: one(r.tasks)?.completed_at ?? null,
         outcome: r.outcome,
         estimate_hours: r.estimate_hours,
         actual_hours: r.actual_hours,
@@ -83,10 +94,12 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
         <div className="mb-1">
           <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Reviews</h1>
           <p className="text-sm text-muted">
-            One review per completed task — estimated hours against what it actually took.
+            {admin
+              ? "One review per completed task — estimated hours against what it actually took."
+              : "Your completed work, reviewed — what you estimated against what it actually took."}
           </p>
         </div>
-        <Tabs tab="tasks" />
+        <Tabs tab="tasks" admin={admin} />
         <TaskReviewsClient reviews={rows} />
       </>
     );
@@ -136,7 +149,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
 
   return (
     <>
-      <Tabs tab="period" />
+      <Tabs tab="period" admin={admin} />
       <ReviewsClient
       type={type}
       start={start}
@@ -148,6 +161,8 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
   );
 }
 
+type TaskRef = { title: string; completed_at: string | null };
+
 type TaskReviewRow = {
   task_id: string;
   outcome: TaskReview["outcome"];
@@ -158,5 +173,5 @@ type TaskReviewRow = {
   what_worked: string | null;
   what_failed: string | null;
   learning: string | null;
-  tasks: { title: string; completed_at: string | null }[] | null;
+  tasks: TaskRef | TaskRef[] | null;
 };

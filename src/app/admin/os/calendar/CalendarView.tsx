@@ -49,9 +49,16 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function CalendarView({ items, months }: { items: CalItem[]; months: string[] }) {
   const today = iso(new Date());
   const firstWithData = months[0] ?? today.slice(0, 7);
+  const [view, setView] = useState<"month" | "week">("month");
   const [cursor, setCursor] = useState(() =>
     months.includes(today.slice(0, 7)) ? today.slice(0, 7) : firstWithData,
   );
+  // Week mode needs a day, not a month: the Monday of the week on show.
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return iso(d);
+  });
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
 
@@ -79,9 +86,49 @@ export function CalendarView({ items, months }: { items: CalItem[]; months: stri
   const rows = cells[35] && cells[35].getMonth() === mo - 1 ? 6 : 5;
 
   const shift = (n: number) => {
+    if (view === "week") {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + n * 7);
+      setWeekStart(iso(d));
+      return;
+    }
     const d = new Date(y, mo - 1 + n, 1);
     setCursor(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   };
+
+  const jumpToToday = () => {
+    const d = new Date();
+    setCursor(today.slice(0, 7));
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    setWeekStart(iso(d));
+  };
+
+  const switchTo = (v: "month" | "week") => {
+    if (v === view) return;
+    if (v === "week") {
+      // Land on the week the month view was showing: this week if it falls in
+      // that month, otherwise the month's first week.
+      const inMonth = today.slice(0, 7) === cursor;
+      const d = inMonth ? new Date() : new Date(y, mo - 1, 1);
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      setWeekStart(iso(d));
+    } else {
+      // A week can straddle two months; the one holding the Thursday is the
+      // week's month by ISO reckoning, and the one a reader means.
+      const thu = new Date(weekStart);
+      thu.setDate(thu.getDate() + 3);
+      setCursor(`${thu.getFullYear()}-${String(thu.getMonth() + 1).padStart(2, "0")}`);
+    }
+    setView(v);
+  };
+
+  // The seven days of the week on show.
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const weekTitle = `${weekDays[0].toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${weekDays[6].toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`;
 
   const monthName = first.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const inMonth = (d: Date) => d.getMonth() === mo - 1;
@@ -97,17 +144,30 @@ export function CalendarView({ items, months }: { items: CalItem[]; months: stri
             className="grid h-8 w-8 place-items-center rounded-lg border border-line text-muted hover:border-brand hover:text-brand">
             ‹
           </button>
-          <h2 className="min-w-[10rem] px-2 text-center font-display text-base font-bold text-fg">
-            {monthName}
+          <h2 className="min-w-[13rem] px-2 text-center font-display text-base font-bold text-fg">
+            {view === "week" ? weekTitle : monthName}
           </h2>
           <button onClick={() => shift(1)} aria-label="Next month"
             className="grid h-8 w-8 place-items-center rounded-lg border border-line text-muted hover:border-brand hover:text-brand">
             ›
           </button>
-          <button onClick={() => setCursor(today.slice(0, 7))}
+          <button onClick={jumpToToday}
             className="ml-2 rounded-full border border-line px-3 py-1 text-xs font-medium text-muted hover:border-brand hover:text-brand">
             Today
           </button>
+          <div className="ml-2 flex rounded-full border border-line p-0.5">
+            {(["month", "week"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => switchTo(v)}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${
+                  view === v ? "bg-brand text-white" : "text-muted hover:text-fg"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Legend doubles as a filter — the quickest way to cut density. */}
@@ -140,7 +200,66 @@ export function CalendarView({ items, months }: { items: CalItem[]; months: stri
         </div>
       </div>
 
-      {/* ── Grid ── */}
+      {/* ── Week: taller columns, nothing hidden behind a "+N more" ── */}
+      {view === "week" ? (
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+          <div className="grid min-w-[56rem] grid-cols-7">
+            {weekDays.map((d) => {
+              const key = iso(d);
+              const list = byDate.get(key) ?? [];
+              const isToday = key === today;
+              return (
+                <div key={key} className="min-h-[24rem] border-r border-line/70 last:border-r-0">
+                  <div
+                    className={`border-b border-line px-2 py-2 text-center ${
+                      isToday ? "bg-brand/10" : "bg-surface-2"
+                    }`}
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+                      {d.toLocaleDateString("en-IN", { weekday: "short" })}
+                    </p>
+                    <p
+                      className={`mx-auto mt-0.5 grid h-6 w-6 place-items-center rounded-full text-sm tabular-nums ${
+                        isToday ? "bg-brand font-bold text-white" : "font-semibold text-fg"
+                      }`}
+                    >
+                      {d.getDate()}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-1.5">
+                    {list.length === 0 ? (
+                      <p className="px-1 py-4 text-center text-[10px] text-faint">—</p>
+                    ) : (
+                      list.map((it, n) => {
+                        const st = styleOf(it.type);
+                        return (
+                          <Link
+                            key={n}
+                            href={it.href}
+                            className="block rounded-lg border-l-[3px] p-1.5 transition-opacity hover:opacity-80"
+                            style={{ background: st.bg, borderColor: st.color }}
+                          >
+                            <span
+                              className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide"
+                              style={{ color: st.color }}
+                            >
+                              <Icon name={st.icon} className="h-2.5 w-2.5" strokeWidth={2.4} />
+                              {st.short}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] leading-snug text-fg">
+                              {it.label}
+                            </span>
+                          </Link>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         <div className="grid grid-cols-7 border-b border-line bg-surface-2">
           {WEEKDAYS.map((d) => (
@@ -202,6 +321,8 @@ export function CalendarView({ items, months }: { items: CalItem[]; months: stri
           })}
         </div>
       </div>
+
+      )}
 
       {/* ── A day, in full ── */}
       {openDay && (

@@ -64,13 +64,23 @@ const taskReviewSchema = z.object({
 export async function saveTaskReview(input: unknown) {
   const user = await getCurrentUser();
   if (!user) return { error: "Not signed in" };
-  if (!(await isAdmin())) return { error: "Not authorised" };
 
   const parsed = taskReviewSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { task_id, ...fields } = parsed.data;
 
   const supabase = await createClient();
+  // The retro on a piece of work belongs to whoever did it. An admin may
+  // review anything; anyone else, only the tasks they own.
+  if (!(await isAdmin())) {
+    const { data: owned } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("id", task_id)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (!owned) return { error: "Not authorised" };
+  }
   const { error } = await supabase
     .from("task_reviews")
     .update({

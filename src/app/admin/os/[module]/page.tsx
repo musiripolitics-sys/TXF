@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MODULES } from "@/lib/os-modules";
 import { ModuleTable, type RefOptions } from "@/components/os/ModuleTable";
 import { requireSection, sectionForPath, scopeToMe } from "@/lib/os-access";
+import { loadDirectory } from "@/lib/os-directory";
 
 type Params = Promise<{ module: string }>;
 
@@ -41,8 +42,10 @@ export default async function ModulePage({ params }: { params: Params }) {
       ? supabase.from(config.table).select("*").eq("owner_id", mine)
       : supabase.from(config.table).select("*")
     ).order(config.order?.col ?? "created_at", { ascending: config.order?.asc ?? false, nullsFirst: false }),
-    // Always load users (owners) — needed by nearly every module and cheap at startup scale.
-    supabase.from("users").select("id,full_name,email").order("full_name").limit(500),
+    // Always load users (owners) — needed by nearly every module. Through the
+    // directory, because a direct select on users returns only the caller's own
+    // row to an employee, leaving every owner column blank.
+    loadDirectory(supabase, { staffOnly: false }),
     refs.includes("workstream")
       ? supabase.from("workstreams").select("id,name,color").order("sort_order")
       : Promise.resolve({ data: [] }),
@@ -66,7 +69,7 @@ export default async function ModulePage({ params }: { params: Params }) {
   }
 
   const options: RefOptions = {
-    owners: (owners.data as RefOptions["owners"]) ?? [],
+    owners: owners as RefOptions["owners"],
     workstreams: ws,
     events: (events.data as RefOptions["events"]) ?? [],
     goals: (goals.data as RefOptions["goals"]) ?? [],
