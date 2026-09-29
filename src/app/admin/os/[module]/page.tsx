@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MODULES } from "@/lib/os-modules";
 import { ModuleTable, type RefOptions } from "@/components/os/ModuleTable";
-import { requireSection, sectionForPath } from "@/lib/os-access";
+import { requireSection, sectionForPath, scopeToMe } from "@/lib/os-access";
 
 type Params = Promise<{ module: string }>;
 
@@ -25,11 +25,22 @@ export default async function ModulePage({ params }: { params: Params }) {
   const supabase = await createClient();
   const refs = config.refs ?? [];
 
+  // Registry modules that carry an owner are scoped to the signed-in employee;
+  // admins see everything. Dependencies has no owner column, so it is narrowed
+  // afterwards to the edges that touch their tasks.
+  const mine = await scopeToMe();
+  const OWNED = new Set([
+    "tasks", "goals", "risks", "legal_items", "sops", "assets",
+    "leads", "partnerships", "influencers", "ambassadors", "campaigns",
+    "content_items", "app_modules", "hiring_plan", "vendors",
+  ]);
+  const scoped = mine && OWNED.has(config.table);
+
   const [{ data: rows }, owners, workstreams, events, goals, campaigns] = await Promise.all([
-    supabase
-      .from(config.table)
-      .select("*")
-      .order(config.order?.col ?? "created_at", { ascending: config.order?.asc ?? false, nullsFirst: false }),
+    (scoped
+      ? supabase.from(config.table).select("*").eq("owner_id", mine)
+      : supabase.from(config.table).select("*")
+    ).order(config.order?.col ?? "created_at", { ascending: config.order?.asc ?? false, nullsFirst: false }),
     // Always load users (owners) — needed by nearly every module and cheap at startup scale.
     supabase.from("users").select("id,full_name,email").order("full_name").limit(500),
     refs.includes("workstream")
@@ -62,10 +73,21 @@ export default async function ModulePage({ params }: { params: Params }) {
     campaigns: (campaigns.data as RefOptions["campaigns"]) ?? [],
   };
 
+  // Dependencies are edges, not owned records, so they are filtered by whether
+  // either end is one of this employee's tasks.
+  let visibleRows = (rows as Record<string, unknown>[]) ?? [];
+  if (mine && config.table === "dependencies") {
+    const { data: myTasks } = await supabase.from("tasks").select("id").eq("owner_id", mine);
+    const ids = new Set(((myTasks as { id: string }[]) ?? []).map((t) => t.id));
+    visibleRows = visibleRows.filter(
+      (r) => ids.has(String(r.from_id ?? "")) || ids.has(String(r.to_id ?? "")),
+    );
+  }
+
   return (
     <ModuleTable
       config={config}
-      rows={((rows as (Record<string, unknown> & { id: string })[]) ?? [])}
+      rows={visibleRows as (Record<string, unknown> & { id: string })[]}
       options={options}
     />
   );

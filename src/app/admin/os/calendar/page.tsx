@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/os/ui";
 import { shortDate } from "@/lib/bos";
-import { requireSection } from "@/lib/os-access";
+import { requireSection, scopeToMe } from "@/lib/os-access";
 
 export const metadata = { title: "Calendar · Business OS" };
 
@@ -15,6 +15,9 @@ const monthLabel = (ym: string) => {
 
 export default async function CalendarPage() {
   await requireSection("plan");
+  // An employee's calendar is their own dates. The company-wide entries —
+  // campaigns, content, hiring, legal renewals — belong to whoever owns them.
+  const mine = await scopeToMe();
   const supabase = await createClient();
 
   const [
@@ -28,13 +31,17 @@ export default async function CalendarPage() {
     { data: podcast },
   ] = await Promise.all([
     supabase.from("events").select("id,title,slug,date").order("date"),
-    supabase.from("content_items").select("id,topic,content_date"),
-    supabase.from("campaigns").select("id,name,start_date"),
-    supabase.from("tasks").select("id,title,due_date,status,completed_at"),
-    supabase.from("goals").select("id,objective,end_date"),
-    supabase.from("legal_items").select("id,requirement,due_date,expiry_date"),
-    supabase.from("hiring_plan").select("id,role,target_month"),
-    supabase.from("podcast_episodes").select("id,title,recording_date"),
+    mine ? Promise.resolve({ data: [] }) : supabase.from("content_items").select("id,topic,content_date"),
+    mine ? Promise.resolve({ data: [] }) : supabase.from("campaigns").select("id,name,start_date"),
+    mine
+      ? supabase.from("tasks").select("id,title,due_date,status,completed_at").eq("owner_id", mine)
+      : supabase.from("tasks").select("id,title,due_date,status,completed_at"),
+    mine
+      ? supabase.from("goals").select("id,objective,end_date").eq("owner_id", mine)
+      : supabase.from("goals").select("id,objective,end_date"),
+    mine ? Promise.resolve({ data: [] }) : supabase.from("legal_items").select("id,requirement,due_date,expiry_date"),
+    mine ? Promise.resolve({ data: [] }) : supabase.from("hiring_plan").select("id,role,target_month"),
+    mine ? Promise.resolve({ data: [] }) : supabase.from("podcast_episodes").select("id,title,recording_date"),
   ]);
 
   const items: Item[] = [];

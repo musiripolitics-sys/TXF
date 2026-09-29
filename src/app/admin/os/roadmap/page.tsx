@@ -2,18 +2,37 @@ import { createClient } from "@/lib/supabase/server";
 import { RoadmapClient } from "./RoadmapClient";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 import type { TaskComment } from "./TaskDetail";
-import { requireSection } from "@/lib/os-access";
+import { requireSection, scopeToMe } from "@/lib/os-access";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
 export default async function RoadmapPage() {
   await requireSection("plan");
+  const mine = await scopeToMe();
+
+  const supabaseForScope = await createClient();
+  // An employee's roadmap is the goals they own plus the goals their tasks
+  // hang off — a task without its goal has no context.
+  let goalIds: string[] | null = null;
+  if (mine) {
+    const [{ data: ownTasks }, { data: ownGoals }] = await Promise.all([
+      supabaseForScope.from("tasks").select("goal_id").eq("owner_id", mine),
+      supabaseForScope.from("goals").select("id").eq("owner_id", mine),
+    ]);
+    goalIds = [
+      ...new Set([
+        ...((ownTasks as { goal_id: string | null }[]) ?? []).map((t) => t.goal_id).filter(Boolean),
+        ...((ownGoals as { id: string }[]) ?? []).map((g) => g.id),
+      ]),
+    ] as string[];
+  }
   const supabase = await createClient();
 
   const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes, commentsRes] = await Promise.all([
-    supabase
-      .from("goals")
-      .select("*")
+    (goalIds
+      ? supabase.from("goals").select("*").in("id", goalIds.length ? goalIds : ["-"])
+      : supabase.from("goals").select("*")
+    )
       .order("month", { ascending: true, nullsFirst: true })
       .order("week", { ascending: true, nullsFirst: true })
       .order("created_at", { ascending: true }),

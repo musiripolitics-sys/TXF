@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TasksClient } from "./TasksClient";
 import type { Task, TaskView } from "./types";
 import type { Workstream, OwnerOption } from "../roadmap/types";
-import { requireSection } from "@/lib/os-access";
+import { requireSection, scopeToMe } from "@/lib/os-access";
 
 export const metadata = { title: "Tasks · Business OS" };
 
@@ -12,6 +12,7 @@ const V: TaskView[] = ["today", "week", "month", "overdue", "upcoming", "complet
 
 export default async function TasksPage({ searchParams }: { searchParams: SP }) {
   await requireSection("plan");
+  const mine = await scopeToMe();
   const sp = await searchParams;
   const raw = typeof sp.view === "string" ? sp.view : "all";
   const view: TaskView = (V as string[]).includes(raw) ? (raw as TaskView) : "all";
@@ -19,7 +20,11 @@ export default async function TasksPage({ searchParams }: { searchParams: SP }) 
   const supabase = await createClient();
   const [{ data: tasks }, { data: workstreams }, { data: goals }, { data: owners }] =
     await Promise.all([
-      supabase.from("tasks").select("*").order("due_date", { ascending: true, nullsFirst: false }),
+      // An employee sees the work assigned to them, not the whole plan.
+      (mine
+        ? supabase.from("tasks").select("*").eq("owner_id", mine)
+        : supabase.from("tasks").select("*")
+      ).order("due_date", { ascending: true, nullsFirst: false }),
       supabase.from("workstreams").select("id,key,name,color").order("sort_order"),
       supabase.from("goals").select("id,objective").order("created_at"),
       supabase

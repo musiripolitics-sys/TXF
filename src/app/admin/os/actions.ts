@@ -357,6 +357,33 @@ export async function syncRoadmapTasks() {
 
 // ─────────────────────── Task detail panel ───────────────────────
 
+/**
+ * Admin, or the person this task is assigned to.
+ *
+ * An employee owns the work, so they own the record: they may retitle it,
+ * describe it, move its dates, change its estimate and adjust what it waits
+ * on. They may not hand it to somebody else — reassignment stays with whoever
+ * planned the work.
+ */
+async function requireTaskAccess(taskId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" as const };
+
+  const supabase = await createClient();
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id,owner_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (!task) return { error: "Task not found" as const };
+
+  const admin = await isAdmin();
+  if (!admin && task.owner_id !== user.id) {
+    return { error: "That task isn't assigned to you." as const };
+  }
+  return { user, admin };
+}
+
 const taskPatchSchema = z.object({
   title: z.string().trim().min(2, "Title is required").optional(),
   description: z.string().trim().nullable().optional(),
@@ -375,13 +402,18 @@ const taskPatchSchema = z.object({
  * edited in another tab.
  */
 export async function patchTask(id: string, input: unknown) {
-  const gate = await requireAdmin();
+  const gate = await requireTaskAccess(id);
   if ("error" in gate) return gate;
 
   const parsed = taskPatchSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const patch = parsed.data;
   if (Object.keys(patch).length === 0) return { success: true };
+
+  // Reassignment is a planning decision, not the assignee's to make.
+  if (!gate.admin && "owner_id" in patch) {
+    return { error: "Only an admin can reassign a task." };
+  }
 
   // A task that depends on itself would sit blocked forever with no way out.
   if (patch.dependency_id && patch.dependency_id === id) {
@@ -415,7 +447,7 @@ export async function patchTask(id: string, input: unknown) {
 
 /** Add or clear an extra blocker in the dependency graph (beyond the critical path). */
 export async function setTaskEdge(taskId: string, blockerId: string, add: boolean) {
-  const gate = await requireAdmin();
+  const gate = await requireTaskAccess(taskId);
   if ("error" in gate) return gate;
   if (taskId === blockerId) return { error: "A task cannot depend on itself." };
 
@@ -453,8 +485,11 @@ export async function setTaskEdge(taskId: string, blockerId: string, add: boolea
 
 /** Post a comment on a task. The author is always the signed-in user. */
 export async function addTaskComment(taskId: string, body: string) {
-  const gate = await requireAdmin();
-  if ("error" in gate) return gate;
+  // Commenting is not editing: anyone who can see the task may say something
+  // about it, which is the point of a thread.
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+  const gate = { user };
   const text = body.trim();
   if (!text) return { error: "Write something first." };
 
@@ -475,8 +510,9 @@ export async function addTaskComment(taskId: string, body: string) {
 
 /** Remove a comment. RLS already limits this to the author or an admin. */
 export async function deleteTaskComment(id: string) {
-  const gate = await requireAdmin();
-  if ("error" in gate) return gate;
+  // RLS already limits this to the author or an admin.
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
   const supabase = await createClient();
   const { error } = await supabase.from("task_comments").delete().eq("id", id);
   if (error) return { error: error.message };
