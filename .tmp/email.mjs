@@ -22391,14 +22391,32 @@ function shell(heading, bodyHtml) {
     </td></tr>
   </table>`;
 }
+async function sendViaResend(to, subject, html) {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ from: FROM, to, subject, html })
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`);
+  }
+}
 async function send(to, subject, html) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn(`[email] SMTP_HOST is unset \u2014 skipping "${subject}" to ${to}`);
+  const viaResend = Boolean(process.env.RESEND_API_KEY);
+  const transporter = viaResend ? null : getTransporter();
+  if (!viaResend && !transporter) {
+    console.warn(
+      `[email] neither RESEND_API_KEY nor SMTP_HOST is set \u2014 skipping "${subject}" to ${to}`
+    );
     return;
   }
   try {
-    await transporter.sendMail({ from: FROM, to, subject, html });
+    if (viaResend) await sendViaResend(to, subject, html);
+    else await transporter.sendMail({ from: FROM, to, subject, html });
   } catch (err) {
     console.error(`[email] failed to send "${subject}" to ${to}:`, err);
     await recordFailure(to, subject, err);
