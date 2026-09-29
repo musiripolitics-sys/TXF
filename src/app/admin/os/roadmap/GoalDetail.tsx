@@ -135,29 +135,35 @@ export function GoalDetail({
                       t.status !== "cancelled";
                     const waiting = blockerCount(t.id);
                     return (
-                      <div key={t.id} className="flex items-center gap-3 px-3 py-2">
-                        <span className="w-12 shrink-0 font-mono text-[10px] text-faint">{t.code}</span>
+                      <div key={t.id} className="flex items-start gap-3 px-3 py-2.5">
+                        <span className="mt-0.5 w-12 shrink-0 font-mono text-[10px] text-faint">{t.code}</span>
                         <button
                           onClick={() => onOpenTask(t.id)}
-                          className="min-w-0 flex-1 truncate text-left text-sm text-fg hover:text-brand hover:underline"
+                          className="min-w-0 flex-1 text-left text-sm leading-snug text-fg hover:text-brand hover:underline"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
                         >
                           {t.title}
                         </button>
                         {waiting > 0 && (
-                          <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                          <span className="mt-0.5 shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                             waits on {waiting}
                           </span>
                         )}
-                        <span className="hidden w-24 shrink-0 truncate text-[11px] text-muted sm:inline">
+                        <span className="mt-0.5 hidden w-24 shrink-0 truncate text-[11px] text-muted sm:inline">
                           {ownerName(t.owner_id)}
                         </span>
                         {t.estimate_hours != null && (
-                          <span className="hidden w-8 shrink-0 text-right text-[11px] tabular-nums text-faint sm:inline">
+                          <span className="mt-0.5 hidden w-8 shrink-0 text-right text-[11px] tabular-nums text-faint sm:inline">
                             {t.estimate_hours}h
                           </span>
                         )}
                         <span
-                          className={`hidden w-20 shrink-0 text-[11px] tabular-nums md:inline ${
+                          className={`mt-0.5 hidden w-20 shrink-0 text-[11px] tabular-nums md:inline ${
                             late ? "font-semibold text-red-600" : "text-muted"
                           }`}
                         >

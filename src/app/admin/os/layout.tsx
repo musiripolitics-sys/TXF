@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { OsShell } from "@/components/os/OsShell";
 
 export const metadata = { title: "Business OS" };
@@ -29,5 +30,35 @@ export default async function OsLayout({
     );
   }
 
-  return <OsShell email={user.email ?? ""}>{children}</OsShell>;
+  // Badge counts for the top bar. A badge that is always there stops being a
+  // signal, so both are omitted at zero; a failed count shows nothing rather
+  // than a wrong number.
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [approvals, overdueTasks, criticalRisks] = await Promise.all([
+    supabase
+      .from("approvals")
+      .select("id", { count: "exact", head: true })
+      .eq("decision", "pending"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .lt("due_date", today)
+      .not("status", "in", "(completed,cancelled)"),
+    supabase
+      .from("risks")
+      .select("id", { count: "exact", head: true })
+      .gte("risk_score", 15)
+      .not("status", "in", "(completed,cancelled)"),
+  ]);
+
+  return (
+    <OsShell
+      email={user.email ?? ""}
+      approvalCount={approvals.count ?? 0}
+      alertCount={(overdueTasks.count ?? 0) + (criticalRisks.count ?? 0)}
+    >
+      {children}
+    </OsShell>
+  );
 }
