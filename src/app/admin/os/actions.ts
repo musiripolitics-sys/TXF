@@ -2,6 +2,9 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import {
+  mailTaskAssigned, mailTaskDecision, mailTaskSubmitted,
+} from "@/lib/task-mail";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 
@@ -159,10 +162,16 @@ export async function saveTask(id: string | null, input: unknown) {
     const { data, error } = await supabase.from("tasks").update(parsed.data).eq("id", id).select().maybeSingle();
     if (error) return { error: error.message };
     await logAudit(supabase, gate.user.id, "update", "tasks", id, before, data);
+    // Only a change of hands is news. Editing the budget on a task somebody
+    // already owns is not worth an email.
+    if (data && data.owner_id && data.owner_id !== before?.owner_id) {
+      await mailTaskAssigned(data, gate.user.id);
+    }
   } else {
     const { data, error } = await supabase.from("tasks").insert(parsed.data).select().maybeSingle();
     if (error) return { error: error.message };
     await logAudit(supabase, gate.user.id, "insert", "tasks", data?.id ?? null, null, data);
+    if (data?.owner_id) await mailTaskAssigned(data, gate.user.id);
   }
   revalidateOs();
   return { success: true };
@@ -441,6 +450,16 @@ export async function patchTask(id: string, input: unknown) {
   if (error) return { error: error.message };
 
   await logAudit(supabase, gate.user.id, "update", "tasks", id, before, patch);
+
+  if ("owner_id" in patch && patch.owner_id && patch.owner_id !== before?.owner_id) {
+    const { data: after } = await supabase
+      .from("tasks")
+      .select("id,code,title,description,due_date,priority,owner_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (after) await mailTaskAssigned(after, gate.user.id);
+  }
+
   revalidateOs();
   return { success: true };
 }
@@ -757,6 +776,14 @@ export async function submitTaskForApproval(taskId: string) {
   await logAudit(supabase, gate.user.id, "update", "tasks", taskId, null, {
     approval_state: "pending",
   });
+
+  const { data: submitted } = await supabase
+    .from("tasks")
+    .select("id,code,title,owner_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (submitted) await mailTaskSubmitted(submitted, gate.user.id);
+
   revalidateOs();
   return { success: true };
 }
@@ -798,6 +825,16 @@ export async function decideTaskApproval(
     approval_state: decision,
     decision_note: trimmed || null,
   });
+
+  const { data: decided } = await supabase
+    .from("tasks")
+    .select("id,code,title,owner_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (decided) {
+    await mailTaskDecision(decided, decision === "approved", trimmed || null, gate.user.id);
+  }
+
   revalidateOs();
   revalidatePath("/admin/os/approvals");
   return { success: true };

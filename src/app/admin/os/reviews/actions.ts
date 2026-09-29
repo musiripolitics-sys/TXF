@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { mailTaskReviewed } from "@/lib/task-mail";
 
 const schema = z.object({
   period_type: z.enum(["week", "month"]),
@@ -110,6 +111,16 @@ export async function saveTaskReview(input: unknown) {
     entity_id: task_id,
     after: fields,
   });
+
+  if (fields.outcome !== "pending") {
+    await mailTaskReviewed({
+      taskId: task_id,
+      outcome: fields.outcome,
+      quality: fields.quality ?? null,
+      learning: fields.learning ?? null,
+      byId: user.id,
+    });
+  }
 
   revalidatePath("/admin/os/reviews");
   revalidatePath("/admin/os");
