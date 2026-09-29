@@ -125,12 +125,12 @@ export function TasksClient({
 
   const rows = initialTasks.filter((t) => matchesView(t, view));
 
-  // Prefer the page's own row, which carries every column; fall back to the
-  // wider list so a blocker outside this view — or outside this employee's own
-  // work — still opens.
+  // allTasks first: it is the wider list, so a blocker outside this view — or
+  // outside this employee's own work — still opens, and it is the one that
+  // carries a sane approval_state on a database without 0020.
   const detailTask: RoadmapTask | null = detailId
-    ? (initialTasks.find((t) => t.id === detailId) ??
-       allTasks.find((t) => t.id === detailId) ??
+    ? (allTasks.find((t) => t.id === detailId) ??
+       initialTasks.find((t) => t.id === detailId) ??
        null)
     : null;
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { readTasks } from "@/lib/os-tasks";
 import { KpiCard, EmptyState } from "@/components/os/ui";
 import { DashboardFilters } from "@/components/os/DashboardFilters";
 import { AttentionBand, type AttentionItem } from "@/components/os/AttentionBand";
@@ -373,12 +374,16 @@ async function MyDashboard() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const [tasksRes, goalsRes, kpisRes, edgesRes, reviewsRes, profileRes] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select("id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id,approval_state")
-      .eq("owner_id", user.id)
-      .order("due_date", { ascending: true, nullsFirst: false }),
+  const [myTasks, goalsRes, kpisRes, edgesRes, reviewsRes, profileRes] = await Promise.all([
+    readTasks<MyTask>(
+      (cols) =>
+        supabase
+          .from("tasks")
+          .select(cols)
+          .eq("owner_id", user.id)
+          .order("due_date", { ascending: true, nullsFirst: false }),
+      "id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id",
+    ),
     supabase
       .from("goals")
       .select("id,code,objective,end_date,status")
@@ -395,7 +400,7 @@ async function MyDashboard() {
     supabase.from("users").select("full_name").eq("id", user.id).maybeSingle(),
   ]);
 
-  const tasks = (tasksRes.data as MyTask[]) ?? [];
+  const tasks = myTasks;
   const mine = new Set(tasks.map((t) => t.id));
 
   // What each of their tasks is waiting on, but only where the blocker is

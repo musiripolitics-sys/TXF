@@ -5,6 +5,7 @@ import type { TaskComment } from "./TaskDetail";
 import { requireSection, scopeToMe } from "@/lib/os-access";
 import { isAdmin } from "@/lib/auth";
 import { loadDirectory } from "@/lib/os-directory";
+import { readTasks } from "@/lib/os-tasks";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
@@ -31,7 +32,7 @@ export default async function RoadmapPage() {
   }
   const supabase = await createClient();
 
-  const [{ data: goals }, { data: workstreams }, owners, tasksRes, edgesRes, commentsRes] = await Promise.all([
+  const [{ data: goals }, { data: workstreams }, owners, roadmapTasks, edgesRes, commentsRes] = await Promise.all([
     (goalIds
       ? supabase.from("goals").select("*").in("id", goalIds.length ? goalIds : ["-"])
       : supabase.from("goals").select("*")
@@ -43,11 +44,15 @@ export default async function RoadmapPage() {
     loadDirectory(supabase),
     // Tasks and the dependency graph load with the goals so expanding a row is
     // instant and needs no second round trip.
-    supabase
-      .from("tasks")
-      .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at,approval_state,decision_note")
-      .not("goal_id", "is", null)
-      .order("due_date", { ascending: true, nullsFirst: false }),
+    readTasks<RoadmapTask>(
+      (cols) =>
+        supabase
+          .from("tasks")
+          .select(cols)
+          .not("goal_id", "is", null)
+          .order("due_date", { ascending: true, nullsFirst: false }),
+      "id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at",
+    ),
     supabase.from("dependencies").select("id,from_id,to_id,note,status"),
     // Added by migration 0015; an un-migrated database simply shows no thread.
     supabase
@@ -62,7 +67,7 @@ export default async function RoadmapPage() {
       initialGoals={(goals as Goal[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
       owners={owners as OwnerOption[]}
-      tasks={(tasksRes.data as RoadmapTask[]) ?? []}
+      tasks={roadmapTasks}
       edges={(edgesRes.data as TaskEdge[]) ?? []}
       comments={(commentsRes.data as TaskComment[]) ?? []}
     />
