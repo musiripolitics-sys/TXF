@@ -4,7 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { toast } from "@/components/Toast";
 import { PriorityBadge } from "@/components/os/ui";
 import { shortDate, type BosStatus } from "@/lib/bos";
-import { setMyTaskStatus } from "./actions";
+import { setMyTaskStatus, submitTaskForApproval } from "./actions";
 import type { MyTask } from "./EmployeeDashboard";
 
 /** The stages an employee actually moves work through. */
@@ -60,6 +60,22 @@ export function MyKanban({
   const move = (id: string, status: BosStatus) => {
     const task = moved.find((t) => t.id === id);
     if (!task || columnOf(task) === status) return;
+
+    // Finishing your own work is not your call. Dropping a card in Completed
+    // asks an admin to approve it; the card stays where it is until they do.
+    if (status === "completed") {
+      if (task.approval_state === "pending") {
+        toast("Already waiting on an admin to approve this.", "error");
+        return;
+      }
+      start(async () => {
+        const res = await submitTaskForApproval(id);
+        if ("error" in res && res.error) toast(res.error, "error");
+        else toast("Sent for approval", "success");
+      });
+      return;
+    }
+
     start(async () => {
       setMoved({ id, status });
       const res = await setMyTaskStatus(id, status);
@@ -108,6 +124,7 @@ export function MyKanban({
                   const c = countdown(t.due_date);
                   const waiting = blockedTitles[t.id];
                   const done = t.status === "completed";
+                  const waitingApproval = t.approval_state === "pending";
                   return (
                     <div
                       key={t.id}
@@ -119,7 +136,12 @@ export function MyKanban({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="font-mono text-[10px] text-faint">{t.code}</span>
-                        {c && !done && (
+                        {waitingApproval && (
+                          <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                            Awaiting approval
+                          </span>
+                        )}
+                        {c && !done && !waitingApproval && (
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${c.cls}`}>
                             {c.text}
                           </span>

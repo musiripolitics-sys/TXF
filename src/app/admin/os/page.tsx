@@ -376,7 +376,7 @@ async function MyDashboard() {
   const [tasksRes, goalsRes, kpisRes, edgesRes, reviewsRes, profileRes] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id")
+      .select("id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id,approval_state")
       .eq("owner_id", user.id)
       .order("due_date", { ascending: true, nullsFirst: false }),
     supabase

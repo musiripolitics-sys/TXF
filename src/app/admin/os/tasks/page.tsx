@@ -4,6 +4,7 @@ import type { Task, TaskView } from "./types";
 import type { Workstream, OwnerOption, Goal, RoadmapTask, TaskEdge } from "../roadmap/types";
 import type { TaskComment } from "../roadmap/TaskDetail";
 import { requireSection, scopeToMe } from "@/lib/os-access";
+import { isAdmin } from "@/lib/auth";
 import { loadDirectory } from "@/lib/os-directory";
 
 export const metadata = { title: "Tasks · Business OS" };
@@ -15,6 +16,7 @@ const V: TaskView[] = ["today", "week", "month", "overdue", "upcoming", "complet
 export default async function TasksPage({ searchParams }: { searchParams: SP }) {
   await requireSection("plan");
   const mine = await scopeToMe();
+  const admin = await isAdmin();
   const sp = await searchParams;
   const raw = typeof sp.view === "string" ? sp.view : "all";
   const view: TaskView = (V as string[]).includes(raw) ? (raw as TaskView) : "all";
@@ -37,7 +39,7 @@ export default async function TasksPage({ searchParams }: { searchParams: SP }) 
       // something". RLS already limits this to what they may see.
       supabase
         .from("tasks")
-        .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at")
+        .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at,approval_state,decision_note")
         .order("due_date", { ascending: true, nullsFirst: false }),
       supabase.from("dependencies").select("id,from_id,to_id,note,status"),
       supabase
@@ -48,6 +50,7 @@ export default async function TasksPage({ searchParams }: { searchParams: SP }) 
 
   return (
     <TasksClient
+      isAdmin={admin}
       initialTasks={(tasks as Task[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
       goals={(goals as Goal[]) ?? []}

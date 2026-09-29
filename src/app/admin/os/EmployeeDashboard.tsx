@@ -15,6 +15,7 @@ export type MyTask = {
   priority: BosPriority;
   estimate_hours: number | null;
   dependency_id: string | null;
+  approval_state: "none" | "pending" | "approved" | "rejected";
 };
 export type MyGoal = {
   id: string;

@@ -93,6 +93,7 @@ export function TasksClient({
   allTasks,
   edges,
   comments,
+  isAdmin,
   initialView,
 }: {
   initialTasks: Task[];
@@ -102,6 +103,7 @@ export function TasksClient({
   allTasks: RoadmapTask[];
   edges: TaskEdge[];
   comments: TaskComment[];
+  isAdmin: boolean;
   initialView: TaskView;
 }) {
   const [view, setView] = useState<TaskView>(initialView);
@@ -402,6 +404,7 @@ export function TasksClient({
           edges={edges}
           comments={comments.filter((c) => c.task_id === detailTask.id)}
           owners={owners}
+          isAdmin={isAdmin}
           onClose={() => setDetailId(null)}
           onOpenTask={setDetailId}
         />

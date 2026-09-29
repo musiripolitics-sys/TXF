@@ -734,3 +734,71 @@ export async function setMyTaskStatus(taskId: string, status: z.infer<typeof sta
   revalidatePath("/workspace");
   return { success: true };
 }
+
+// ───────────────────────── Task approval ─────────────────────────
+//
+// Completing a task is not the assignee's call. They submit it and an admin
+// approves; approving is what completes it. Migration 0020 enforces all of
+// this in a trigger, so these actions mostly exist to carry its message back
+// to the person rather than to do the checking themselves.
+
+/** Put a finished task up for approval. Needs an assignee and a comment. */
+export async function submitTaskForApproval(taskId: string) {
+  const gate = await requireTaskAccess(taskId);
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ approval_state: "pending", decision_note: null })
+    .eq("id", taskId);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "update", "tasks", taskId, null, {
+    approval_state: "pending",
+  });
+  revalidateOs();
+  return { success: true };
+}
+
+/**
+ * Approve the work, which completes it, or send it back with a reason.
+ *
+ * Approving writes the status in the same update: the trigger reads the new
+ * approval_state, so one statement satisfies the gate where two would have to
+ * be ordered carefully.
+ */
+export async function decideTaskApproval(
+  taskId: string,
+  decision: "approved" | "rejected",
+  note?: string,
+) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  if (decision !== "approved" && decision !== "rejected") {
+    return { error: "Unknown decision" };
+  }
+  const trimmed = (note ?? "").trim();
+  if (decision === "rejected" && !trimmed) {
+    return { error: "Say why it is going back, so the work can be fixed." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .update({
+      approval_state: decision,
+      decision_note: trimmed || null,
+      ...(decision === "approved" ? { status: "completed" } : {}),
+    })
+    .eq("id", taskId);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "update", "tasks", taskId, null, {
+    approval_state: decision,
+    decision_note: trimmed || null,
+  });
+  revalidateOs();
+  revalidatePath("/admin/os/approvals");
+  return { success: true };
+}

@@ -3,6 +3,7 @@ import { RoadmapClient } from "./RoadmapClient";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 import type { TaskComment } from "./TaskDetail";
 import { requireSection, scopeToMe } from "@/lib/os-access";
+import { isAdmin } from "@/lib/auth";
 import { loadDirectory } from "@/lib/os-directory";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
@@ -10,6 +11,7 @@ export const metadata = { title: "90-Day Roadmap · Business OS" };
 export default async function RoadmapPage() {
   await requireSection("plan");
   const mine = await scopeToMe();
+  const admin = await isAdmin();
 
   const supabaseForScope = await createClient();
   // An employee's roadmap is the goals they own plus the goals their tasks
@@ -43,7 +45,7 @@ export default async function RoadmapPage() {
     // instant and needs no second round trip.
     supabase
       .from("tasks")
-      .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at")
+      .select("id,code,goal_id,title,description,owner_id,start_date,due_date,status,priority,dependency_id,estimate_hours,actual_hours,completed_at,approval_state,decision_note")
       .not("goal_id", "is", null)
       .order("due_date", { ascending: true, nullsFirst: false }),
     supabase.from("dependencies").select("id,from_id,to_id,note,status"),
@@ -56,6 +58,7 @@ export default async function RoadmapPage() {
 
   return (
     <RoadmapClient
+      isAdmin={admin}
       initialGoals={(goals as Goal[]) ?? []}
       workstreams={(workstreams as Workstream[]) ?? []}
       owners={owners as OwnerOption[]}

@@ -49,6 +49,7 @@ export function RoadmapClient({
   tasks,
   edges,
   comments,
+  isAdmin,
 }: {
   initialGoals: Goal[];
   workstreams: Workstream[];
@@ -56,6 +57,7 @@ export function RoadmapClient({
   tasks: RoadmapTask[];
   edges: TaskEdge[];
   comments: TaskComment[];
+  isAdmin: boolean;
 }) {
   const [view, setView] = useState<View>("month");
   const [syncing, setSyncing] = useState(false);
@@ -506,6 +508,7 @@ export function RoadmapClient({
           edges={edges}
           comments={comments.filter((c) => c.task_id === openTask.id)}
           owners={owners}
+          isAdmin={isAdmin}
           onClose={() => setOpenTaskId(null)}
           onOpenTask={setOpenTaskId}
         />

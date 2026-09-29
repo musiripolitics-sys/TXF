@@ -1,4 +1,5 @@
 import type { BosStatus, BosPriority, BosFrequency } from "@/lib/bos";
+import type { ApprovalState } from "../roadmap/types";
 
 export type TaskView =
   | "today"
@@ -33,4 +34,6 @@ export type Task = {
   actual: number | null;
   comments: string | null;
   created_at: string;
+  approval_state: ApprovalState;
+  decision_note: string | null;
 };

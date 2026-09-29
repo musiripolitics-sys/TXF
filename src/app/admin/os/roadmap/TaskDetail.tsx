@@ -7,7 +7,8 @@ import { toast } from "@/components/Toast";
 import { StatusBadge } from "@/components/os/ui";
 import { BOS_STATUSES, BOS_PRIORITIES, STATUS_META, shortDate } from "@/lib/bos";
 import type { BosStatus, BosPriority } from "@/lib/bos";
-import { patchTask, setTaskEdge, addTaskComment, deleteTaskComment } from "../actions";
+import { patchTask, setTaskEdge, addTaskComment, deleteTaskComment,
+  submitTaskForApproval, decideTaskApproval } from "../actions";
 import type { RoadmapTask, TaskEdge, OwnerOption, Goal } from "./types";
 
 export type TaskComment = {
@@ -36,6 +37,7 @@ export function TaskDetail({
   edges,
   comments,
   owners,
+  isAdmin,
   onClose,
   onOpenTask,
 }: {
@@ -45,6 +47,7 @@ export function TaskDetail({
   edges: TaskEdge[];
   comments: TaskComment[];
   owners: OwnerOption[];
+  isAdmin: boolean;
   onClose: () => void;
   onOpenTask: (id: string) => void;
 }) {
@@ -57,6 +60,18 @@ export function TaskDetail({
   const [editing, setEditing] = useState(false);
   const [comment, setComment] = useState("");
   const [picker, setPicker] = useState(false);
+  const [note, setNote] = useState("");
+
+  // What migration 0020 will refuse, worked out here so the panel can say so
+  // before the person clicks rather than after.
+  const blocker =
+    !task.owner_id
+      ? "Assign this task to someone first."
+      : comments.length === 0
+        ? "Leave a comment saying what was done."
+        : null;
+  const pending = task.approval_state === "pending";
+  const approved = task.approval_state === "approved";
 
   const ownerName = (id: string | null) => {
     const o = owners.find((x) => x.id === id);
@@ -364,11 +379,91 @@ export function TaskDetail({
                 className={field}
               >
                 {BOS_STATUSES.map((s) => (
-                  <option key={s} value={s}>
+                  <option
+                    key={s}
+                    value={s}
+                    // Completing is not a status you pick; it is the outcome of
+                    // an approval. The control below is the way there.
+                    disabled={s === "completed" && !approved}
+                  >
                     {STATUS_META[s].label}
+                    {s === "completed" && !approved ? " — needs approval" : ""}
                   </option>
                 ))}
               </select>
+            </Prop>
+
+            <Prop label="Completion">
+              {task.status === "completed" ? (
+                <p className="text-xs text-muted">
+                  Approved and closed.
+                </p>
+              ) : pending ? (
+                <div className="space-y-2">
+                  <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+                    Waiting on an admin to approve this.
+                  </p>
+                  {isAdmin && (
+                    <>
+                      <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        rows={2}
+                        placeholder="Reason, if sending it back…"
+                        className={field}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          disabled={saving}
+                          onClick={() =>
+                            run(() => decideTaskApproval(task.id, "approved", note), "Approved")
+                          }
+                          className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          disabled={saving || !note.trim()}
+                          title={note.trim() ? undefined : "Give a reason first"}
+                          className="flex-1 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted hover:text-fg disabled:opacity-40"
+                          onClick={() =>
+                            run(() => decideTaskApproval(task.id, "rejected", note), "Sent back")
+                          }
+                        >
+                          Send back
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {task.approval_state === "rejected" && task.decision_note && (
+                    <p className="rounded-lg bg-red-500/10 px-2.5 py-2 text-xs text-red-600">
+                      Sent back: {task.decision_note}
+                    </p>
+                  )}
+                  <button
+                    disabled={saving || !!blocker}
+                    title={blocker ?? undefined}
+                    onClick={() =>
+                      run(
+                        () =>
+                          isAdmin
+                            // The admin closing it IS the approval; there is no
+                            // one for them to file a request with.
+                            ? decideTaskApproval(task.id, "approved")
+                            : submitTaskForApproval(task.id),
+                        isAdmin ? "Completed" : "Sent for approval",
+                      )
+                    }
+                    className="w-full rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                  >
+                    {isAdmin ? "Approve and complete" : "Submit for approval"}
+                  </button>
+                  {blocker && <p className="text-[11px] text-faint">{blocker}</p>}
+                </div>
+              )}
             </Prop>
 
             <Prop label="Assignee">

@@ -1,5 +1,8 @@
 import type { BosStatus, BosPriority } from "@/lib/bos";
 
+/** Where a task sits in the completion gate added by migration 0020. */
+export type ApprovalState = "none" | "pending" | "approved" | "rejected";
+
 export type Workstream = { id: string; key: string; name: string; color: string | null };
 export type OwnerOption = { id: string; full_name: string | null; email: string | null };
 
@@ -40,6 +43,8 @@ export type RoadmapTask = {
   estimate_hours: number | null;
   actual_hours: number | null;
   completed_at: string | null;
+  approval_state: ApprovalState;
+  decision_note: string | null;
 };
 
 /** An edge in the dependency graph: `from` waits on `to`. */
