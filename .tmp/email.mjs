@@ -22349,17 +22349,22 @@ var FROM = process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
 var _transporter = null;
 function getTransporter() {
   const host = process.env.SMTP_HOST;
+  if (!host) return null;
+  if (_transporter) return _transporter;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  if (_transporter) return _transporter;
   const port = Number(process.env.SMTP_PORT || 465);
   _transporter = nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
-    // 465 = SSL, 587 = STARTTLS
-    auth: { user, pass }
+    // 465 = SSL, 587 and 25 = STARTTLS
+    // Relay by IP sends no AUTH at all. Passing an empty auth object would
+    // make nodemailer try anyway and the relay would reject the session.
+    ...user && pass ? { auth: { user, pass } } : {},
+    // Insist on STARTTLS against a real server, but not against the loopback
+    // sink the template tests speak to, which is plain TCP by design.
+    requireTLS: port !== 465 && !/^(127\.|localhost$|::1$)/.test(host)
   });
   return _transporter;
 }
@@ -22389,7 +22394,7 @@ function shell(heading, bodyHtml) {
 async function send(to, subject, html) {
   const transporter = getTransporter();
   if (!transporter) {
-    console.warn(`[email] SMTP not configured \u2014 skipping "${subject}" to ${to}`);
+    console.warn(`[email] SMTP_HOST is unset \u2014 skipping "${subject}" to ${to}`);
     return;
   }
   try {
