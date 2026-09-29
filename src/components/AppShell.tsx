@@ -25,6 +25,11 @@ const hostItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "Console", icon: "sparkle" },
+];
+
+// The OS is no longer admin-only, so it is not an admin item. Anyone holding
+// a section grant gets this, and the OS turns away anyone who does not.
+const osItems: NavItem[] = [
   { href: "/admin/os", label: "Business OS", icon: "rocket" },
 ];
 
@@ -38,9 +43,11 @@ const ambassadorItems: NavItem[] = [
 
 export function AppShell({
   role,
+  hasOsAccess = false,
   children,
 }: {
   role: Role;
+  hasOsAccess?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -52,6 +59,7 @@ export function AppShell({
     ...primary,
     ...hostItems,
     ...adminItems,
+    ...osItems,
     ...workspaceItems,
     ...ambassadorItems,
     { href: "/profile/edit", label: "Settings" },
@@ -106,7 +114,7 @@ export function AppShell({
       <nav className="flex-1 space-y-1 overflow-y-auto px-3">
         <Group items={primary} />
         {(role === "employee" || role === "admin") && (
-          <Group title="Work" items={workspaceItems} />
+          <Group title="Work" items={hasOsAccess ? [...workspaceItems, ...osItems] : workspaceItems} />
         )}
         {role === "ambassador" && <Group title="Ambassador" items={ambassadorItems} />}
         {(role === "host" || role === "admin") && (

@@ -24,10 +24,13 @@ const APP_PREFIXES = [
 
 export function Chrome({
   role,
+  hasOsAccess = false,
   authed,
   children,
 }: {
   role: Role;
+  /** True when this person has at least one Business OS section. */
+  hasOsAccess?: boolean;
   authed: boolean;
   children: React.ReactNode;
 }) {
@@ -44,7 +47,11 @@ export function Chrome({
     authed && APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p));
 
   if (isApp) {
-    return <AppShell role={role}>{children}</AppShell>;
+    return (
+      <AppShell role={role} hasOsAccess={hasOsAccess}>
+        {children}
+      </AppShell>
+    );
   }
 
   return (

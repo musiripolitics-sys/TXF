@@ -180,6 +180,7 @@ function AddEmployee({
   const [form, setForm] = useState({
     full_name: "",
     email: "",
+    password: "",
     title: "",
     department: "",
     start_date: "",
@@ -195,6 +196,7 @@ function AddEmployee({
         {([
           ["full_name", "Full name", "text"],
           ["email", "Work email", "email"],
+          ["password", "Initial password", "text"],
           ["title", "Job title", "text"],
           ["department", "Department", "text"],
           ["start_date", "Start date", "date"],
@@ -237,10 +239,10 @@ function AddEmployee({
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
-          disabled={saving || !form.full_name.trim() || !form.email.trim()}
+          disabled={saving || !form.full_name.trim() || !form.email.trim() || form.password.length < 6}
           onClick={() =>
             onSubmit({ ...form, sections }, () => {
-              setForm({ full_name: "", email: "", title: "", department: "", start_date: "" });
+              setForm({ full_name: "", email: "", password: "", title: "", department: "", start_date: "" });
               setSections([]);
               onDone();
             })

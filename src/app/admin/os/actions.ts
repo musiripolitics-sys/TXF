@@ -530,6 +530,7 @@ export async function setModuleAccess(userId: string, sections: string[]) {
 const newEmployeeSchema = z.object({
   full_name: z.string().trim().min(2, "Name is required"),
   email: z.string().trim().toLowerCase().email("A valid email is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
   title: z.string().trim().optional().nullable(),
   department: z.string().trim().optional().nullable(),
   start_date: optDate,
@@ -551,7 +552,7 @@ export async function createEmployee(input: unknown) {
 
   const parsed = newEmployeeSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const { full_name, email, title, department, start_date, sections } = parsed.data;
+  const { full_name, email, password, title, department, start_date, sections } = parsed.data;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -584,6 +585,7 @@ export async function createEmployee(input: unknown) {
   } else {
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
+      password,
       email_confirm: true,
       user_metadata: { full_name },
     });
