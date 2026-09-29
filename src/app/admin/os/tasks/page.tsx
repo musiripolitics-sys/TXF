@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TasksClient } from "./TasksClient";
 import type { Task, TaskView } from "./types";
 import type { Workstream, OwnerOption } from "../roadmap/types";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Tasks · Business OS" };
 
@@ -10,6 +11,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 const V: TaskView[] = ["today", "week", "month", "overdue", "upcoming", "completed", "blocked", "all"];
 
 export default async function TasksPage({ searchParams }: { searchParams: SP }) {
+  await requireSection("plan");
   const sp = await searchParams;
   const raw = typeof sp.view === "string" ? sp.view : "all";
   const view: TaskView = (V as string[]).includes(raw) ? (raw as TaskView) : "all";

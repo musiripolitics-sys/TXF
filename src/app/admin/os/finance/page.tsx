@@ -2,10 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { FinanceClient } from "./FinanceClient";
 import type { Expense, RevenueEntry, CashflowMonth } from "./types";
 import type { Workstream } from "../roadmap/types";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Finance · Business OS" };
 
 export default async function FinancePage() {
+  await requireSection("money");
   const supabase = await createClient();
 
   const [

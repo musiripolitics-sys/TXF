@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { EventsClient, type EventRow, type EventOps } from "./EventsClient";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Events · Business OS" };
 
 export default async function EventsBosPage() {
+  await requireSection("events");
   const supabase = await createClient();
 
   const [{ data: events }, { data: ops }, { data: regs }, { data: payments }, { data: campaigns }, { data: owners }] =

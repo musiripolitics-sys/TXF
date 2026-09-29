@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MODULES } from "@/lib/os-modules";
 import { ModuleTable, type RefOptions } from "@/components/os/ModuleTable";
+import { requireSection, sectionForPath } from "@/lib/os-access";
 
 type Params = Promise<{ module: string }>;
 
@@ -15,6 +16,11 @@ export default async function ModulePage({ params }: { params: Params }) {
   const { module } = await params;
   const config = MODULES[module];
   if (!config) notFound();
+
+  // This one route serves 23 modules, so the section is resolved from the
+  // path against the nav rather than listed a second time here.
+  const section = sectionForPath(`/admin/os/${module}`);
+  if (section) await requireSection(section);
 
   const supabase = await createClient();
   const refs = config.refs ?? [];

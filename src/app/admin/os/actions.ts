@@ -483,3 +483,80 @@ export async function deleteTaskComment(id: string) {
   revalidateOs();
   return { success: true };
 }
+
+// ─────────────────────── People and access ───────────────────────
+
+const SECTION_KEYS = [
+  "plan", "events", "money", "grow", "marketing",
+  "team", "product", "govern", "insights",
+] as const;
+
+/**
+ * Replace a person's section grants. Delegates to bos_set_module_access,
+ * which re-checks admin in the database and refuses to let an admin edit
+ * their own access — so a mistake here cannot lock the OS.
+ */
+export async function setModuleAccess(userId: string, sections: string[]) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const clean = [...new Set(sections)].filter((s) =>
+    (SECTION_KEYS as readonly string[]).includes(s),
+  );
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_set_module_access", {
+    p_user: userId,
+    p_sections: clean,
+  });
+  if (error) {
+    if (error.message.includes("CANNOT_EDIT_OWN_ACCESS")) {
+      return { error: "You can't change your own access." };
+    }
+    return {
+      error: error.message.includes("bos_set_module_access")
+        ? "Run migration 0016 in Supabase first."
+        : error.message,
+    };
+  }
+
+  await logAudit(supabase, gate.user.id, "update", "employee_module_access", userId, null, {
+    sections: clean,
+  });
+  revalidateOs();
+  return { success: true };
+}
+
+const roleEnum = z.enum(["admin", "employee", "event_host", "community_member"]);
+
+/** Change someone's primary role. Admins are not demotable from here. */
+export async function setEmployeeRole(userId: string, role: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+  if (userId === gate.user.id) return { error: "You can't change your own role." };
+
+  const parsed = roleEnum.safeParse(role);
+  if (!parsed.success) return { error: "Unknown role" };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("users")
+    .select("primary_role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (before?.primary_role === "admin") {
+    return { error: "Demote an admin from the admin console, not here." };
+  }
+
+  const { error } = await supabase
+    .from("users")
+    .update({ primary_role: parsed.data })
+    .eq("id", userId);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "update", "users", userId, before, {
+    primary_role: parsed.data,
+  });
+  revalidateOs();
+  return { success: true };
+}

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { ReviewsClient, type ReviewMetrics, type ReviewNotes } from "./ReviewsClient";
 import { TaskReviewsClient, type TaskReview } from "./TaskReviewsClient";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Reviews · Business OS" };
 
@@ -46,6 +47,7 @@ function Tabs({ tab }: { tab: "period" | "tasks" }) {
 }
 
 export default async function ReviewsPage({ searchParams }: { searchParams: SP }) {
+  await requireSection("plan");
   const sp = await searchParams;
 
   if (sp.tab === "tasks") {

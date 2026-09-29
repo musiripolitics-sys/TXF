@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { BarList, type BarDatum } from "@/components/os/BarList";
 import { SectionHeading, Panel, PanelStat, Meter } from "@/components/os/ui";
 import { inrCompact, num, pct, type DashboardSummary } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Analytics · Business OS" };
 
@@ -9,6 +10,7 @@ const top = (arr: BarDatum[], n = 8) =>
   arr.filter((d) => d.value > 0).sort((a, b) => b.value - a.value).slice(0, n);
 
 export default async function AnalyticsPage() {
+  await requireSection("insights");
   const supabase = await createClient();
 
   const [

@@ -2,10 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { RoadmapClient } from "./RoadmapClient";
 import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
 import type { TaskComment } from "./TaskDetail";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "90-Day Roadmap · Business OS" };
 
 export default async function RoadmapPage() {
+  await requireSection("plan");
   const supabase = await createClient();
 
   const [{ data: goals }, { data: workstreams }, { data: owners }, tasksRes, edgesRes, commentsRes] = await Promise.all([

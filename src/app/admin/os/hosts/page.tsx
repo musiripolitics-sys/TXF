@@ -2,10 +2,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState, KpiCard } from "@/components/os/ui";
 import { inr, num, shortDate } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Hosts · Business OS" };
 
 export default async function HostsPage() {
+  await requireSection("events");
   const supabase = await createClient();
 
   const [{ data: hosts }, { data: submissions }, { data: events }, { data: earnings }] = await Promise.all([

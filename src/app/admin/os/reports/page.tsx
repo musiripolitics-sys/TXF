@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ReportsClient, type Report } from "./ReportsClient";
 import { paiseToRupees } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Reports · Business OS" };
 
@@ -8,6 +9,7 @@ const d = (s: string | null | undefined) => (s ? String(s).slice(0, 10) : "");
 const r = (paise: number | null | undefined) => paiseToRupees(Number(paise ?? 0));
 
 export default async function ReportsPage() {
+  await requireSection("insights");
   const supabase = await createClient();
 
   const [

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { getMySections } from "@/lib/os-access";
 import { createClient } from "@/lib/supabase/server";
 import { OsShell } from "@/components/os/OsShell";
 
@@ -18,13 +19,18 @@ export default async function OsLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/admin/os");
 
-  if (!(await isAdmin())) {
+  // The OS is no longer admin-only: an employee granted any section may use
+  // it. Someone with no grants at all still has nothing to open, so they are
+  // told rather than shown an empty shell.
+  const admin = await isAdmin();
+  const sections = await getMySections();
+  if (!admin && sections.length === 0) {
     return (
       <div className="mx-auto max-w-md px-5 py-24 text-center">
-        <h1 className="font-display text-2xl font-bold text-fg">Not authorised</h1>
+        <h1 className="font-display text-2xl font-bold text-fg">No access yet</h1>
         <p className="mt-2 text-sm text-muted">
-          You&apos;re signed in as {user.email}, but the Business OS is
-          admin-only. Ask an existing admin to grant your role.
+          You&apos;re signed in as {user.email}, but no Business OS sections have
+          been assigned to you. Ask an admin to grant the ones you need.
         </p>
       </div>
     );
@@ -55,6 +61,8 @@ export default async function OsLayout({
   return (
     <OsShell
       email={user.email ?? ""}
+      isAdmin={admin}
+      sections={sections}
       approvalCount={approvals.count ?? 0}
       alertCount={(overdueTasks.count ?? 0) + (criticalRisks.count ?? 0)}
     >

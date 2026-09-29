@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState } from "@/components/os/ui";
 import { shortDate } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Calendar · Business OS" };
 
@@ -13,6 +14,7 @@ const monthLabel = (ym: string) => {
 };
 
 export default async function CalendarPage() {
+  await requireSection("plan");
   const supabase = await createClient();
 
   const [
