@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "@/components/Toast";
 import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components/os/Modal";
 import { Card, KpiCard, EmptyState, SectionHeading } from "@/components/os/ui";
+import { MoneyFlow, CumulativeNet, Breakdown, FlowTable, type FlowPoint, type Slice } from "./FinanceCharts";
 import { inr, inrCompact, shortDate, rupeesToPaise, paiseToRupees } from "@/lib/bos";
 import { saveExpense, deleteExpense, saveRevenue, deleteRevenue, saveCashflow } from "../actions";
 import {
@@ -82,6 +83,36 @@ export function FinanceClient({
     };
   }, [expenses, revenue, payments, cashflow]);
 
+  const flow: FlowPoint[] = useMemo(
+    () => agg.months.map((m) => ({
+      month: m,
+      inAmt: agg.revByMonth.get(m) ?? 0,
+      outAmt: agg.expByMonth.get(m) ?? 0,
+    })),
+    [agg],
+  );
+
+  const spendByCategory: Slice[] = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of expenses) m.set(e.category || "Uncategorised", (m.get(e.category || "Uncategorised") ?? 0) + e.amount);
+    return [...m].map(([label, value]) => ({ label, value }));
+  }, [expenses]);
+
+  const incomeBySource: Slice[] = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of revenue) m.set(r.source || "Other", (m.get(r.source || "Other") ?? 0) + r.amount);
+    // Payments carry their own stream, and they are real income too.
+    for (const p of payments) {
+      const k = p.stream ? p.stream.replace(/_/g, " ") : "Payments";
+      m.set(k, (m.get(k) ?? 0) + p.amount);
+    }
+    return [...m].map(([label, value]) => ({ label, value }));
+  }, [revenue, payments]);
+
+  // Research is consistent that runway is the number a small business acts on,
+  // and that the thresholds are 12 / 6 / 3 months rather than a single line.
+  const runwayTone = agg.burn <= 0 ? "good" : agg.runway >= 12 ? "good" : agg.runway >= 6 ? "default" : agg.runway >= 3 ? "warn" : "bad";
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "expenses", label: "Expenses" },
@@ -127,43 +158,47 @@ export function FinanceClient({
             <KpiCard
               label="Runway"
               value={agg.burn > 0 ? `${agg.runway.toFixed(1)} mo` : "No burn"}
-              tone={agg.runway < 3 && agg.burn > 0 ? "bad" : "default"}
+              tone={runwayTone}
+              hint={agg.burn > 0 ? (agg.runway < 3 ? "Under 3 months" : agg.runway < 6 ? "Under 6 months" : undefined) : undefined}
             />
           </div>
 
-          <SectionHeading title="Month by month" desc="Revenue vs expenses (all sources)" />
           {agg.months.length === 0 ? (
-            <EmptyState title="No financial data yet" hint="Log revenue and expenses to see monthly trends." />
+            <EmptyState title="No financial data yet" hint="Log revenue and expenses and the flow appears here." />
           ) : (
-            <Card className="overflow-x-auto p-0">
-              <table className="w-full min-w-[520px] text-sm">
-                <thead>
-                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-faint">
-                    <th className="px-4 py-3 font-semibold">Month</th>
-                    <th className="px-3 py-3 text-right font-semibold">Revenue</th>
-                    <th className="px-3 py-3 text-right font-semibold">Expenses</th>
-                    <th className="px-3 py-3 text-right font-semibold">Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agg.months.map((m) => {
-                    const rev = agg.revByMonth.get(m) ?? 0;
-                    const exp = agg.expByMonth.get(m) ?? 0;
-                    const net = rev - exp;
-                    return (
-                      <tr key={m} className="border-b border-line/60 last:border-0">
-                        <td className="px-4 py-3 font-medium text-fg">{m}</td>
-                        <td className="px-3 py-3 text-right tabular-nums text-green-600">{inr(rev)}</td>
-                        <td className="px-3 py-3 text-right tabular-nums text-amber-600">{inr(exp)}</td>
-                        <td className={`px-3 py-3 text-right tabular-nums font-medium ${net >= 0 ? "text-green-600" : "text-red-600"}`}>
-                          {inr(net)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </Card>
+            <>
+              <SectionHeading
+                title="Money in, money out"
+                desc="Above the line arrived, below it left. The line through them is what was left over."
+              />
+              <Card className="mb-6">
+                <MoneyFlow data={flow} />
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs text-muted hover:text-fg">
+                    Show the numbers
+                  </summary>
+                  <div className="mt-2">
+                    <FlowTable data={flow} />
+                  </div>
+                </details>
+              </Card>
+
+              <SectionHeading title="Where it has got to" desc="Every month of net, added up" />
+              <Card className="mb-6">
+                <CumulativeNet data={flow} />
+              </Card>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <SectionHeading title="Where the money goes" desc="Spend by category" />
+                  <Card><Breakdown rows={spendByCategory} hue="orange" /></Card>
+                </div>
+                <div>
+                  <SectionHeading title="Where it comes from" desc="Income by source" />
+                  <Card><Breakdown rows={incomeBySource} hue="blue" /></Card>
+                </div>
+              </div>
+            </>
           )}
         </>
       )}

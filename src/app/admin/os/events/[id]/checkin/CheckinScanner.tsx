@@ -321,7 +321,7 @@ export function CheckinScanner({
       </div>
 
       {(!online || queued.length > 0) && (
-        <p className="mb-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <p className="mb-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
           {online
             ? `Catching up on ${queued.length} scan${queued.length === 1 ? "" : "s"} taken while offline.`
             : `Offline — still scanning. ${queued.length} waiting to sync, and nothing is lost.`}

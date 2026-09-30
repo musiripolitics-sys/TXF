@@ -192,7 +192,7 @@ export function HostPipeline({
                             </span>
                           )}
                           {idle && (
-                            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                               {stale}d untouched
                             </span>
                           )}

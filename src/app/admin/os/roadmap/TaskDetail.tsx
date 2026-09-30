@@ -400,7 +400,7 @@ export function TaskDetail({
                 </p>
               ) : pending ? (
                 <div className="space-y-2">
-                  <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700">
                     Waiting on an admin to approve this.
                   </p>
                   {isAdmin && (

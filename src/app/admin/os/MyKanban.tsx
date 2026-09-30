@@ -137,7 +137,7 @@ export function MyKanban({
                       <div className="flex items-start justify-between gap-2">
                         <span className="font-mono text-[10px] text-faint">{t.code}</span>
                         {waitingApproval && (
-                          <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                             Awaiting approval
                           </span>
                         )}

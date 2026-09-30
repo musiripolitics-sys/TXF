@@ -235,7 +235,7 @@ function FieldForm({
         </div>
 
         {personal && !form.retention_days && (
-          <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
             Personal data with no retention period is kept forever. That is a decision — make it
             deliberately, or set an end date.
           </p>
