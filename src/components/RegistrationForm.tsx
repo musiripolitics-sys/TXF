@@ -1,5 +1,7 @@
 "use client";
 
+import type { RazorpayHandlerResponse } from "@/types/razorpay";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
@@ -148,7 +150,7 @@ export function RegistrationForm({
           contact: attendee.attendee_phone,
         },
         theme: { color: "#ff5a1f" },
-        handler: async (response: any) => {
+        handler: async (response: RazorpayHandlerResponse) => {
           setLoading(true);
           try {
             const verifyRes = await fetch("/api/payments/ticket-verify", {
@@ -180,7 +182,9 @@ export function RegistrationForm({
         modal: { ondismiss: () => setLoading(false) },
       };
 
-      const rzp = new (window as any).Razorpay(options);
+      const Checkout = window.Razorpay;
+      if (!Checkout) throw new Error("The payment window did not load. Please try again.");
+      const rzp = new Checkout(options);
       rzp.open();
     } catch {
       setError("Failed to connect to the payment gateway.");

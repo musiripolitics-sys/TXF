@@ -1,5 +1,7 @@
 "use client";
 
+import type { RazorpayHandlerResponse } from "@/types/razorpay";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
@@ -65,7 +67,7 @@ export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
         name: "Techxfluence",
         description: `${tierName} Plan Subscription`,
         order_id: orderId,
-        handler: async (response: any) => {
+        handler: async (response: RazorpayHandlerResponse) => {
           setLoadingPlan(tierName);
           try {
             // 4. Verify payment signature on the server
@@ -109,7 +111,9 @@ export function MembershipTiers({ tiers }: { tiers: Tier[] }) {
         },
       };
 
-      const rzp = new (window as any).Razorpay(options);
+      const Checkout = window.Razorpay;
+      if (!Checkout) throw new Error("The payment window did not load. Please try again.");
+      const rzp = new Checkout(options);
       rzp.open();
     } catch (err) {
       console.error("Initiate checkout failed:", err);
