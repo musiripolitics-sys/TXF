@@ -144,10 +144,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, tier });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Payment verification failed:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to verify payment" },
+      { error: error instanceof Error ? error.message : "Failed to verify payment" },
       { status: 500 }
     );
   }

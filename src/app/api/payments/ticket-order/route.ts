@@ -141,7 +141,7 @@ export async function POST(request: Request) {
       discount,
       keyId: key_id,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Log the gateway's own reason — "Failed to create payment order" on its
     // own is undiagnosable, and Razorpay hides the detail under error.error.
     console.error("Error creating ticket order:", razorpayErrorDetail(error), error);

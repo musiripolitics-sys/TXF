@@ -21,7 +21,15 @@ for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
   const t = line.trim();
   if (t.includes("=") && !t.startsWith("#")) {
     const i = t.indexOf("=");
-    env[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+    let v = t.slice(i + 1).trim();
+    // Next.js strips matching surrounding quotes when it loads .env, so this
+    // must too — otherwise EMAIL_FROM arrives with literal quote characters
+    // and nodemailer reads the whole thing as one malformed address, which
+    // looks exactly like a server-side rejection.
+    if (v.length > 1 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) {
+      v = v.slice(1, -1);
+    }
+    env[t.slice(0, i).trim()] = v;
   }
 }
 
@@ -29,22 +37,83 @@ const { SMTP_HOST: host, SMTP_USER: user, SMTP_PASS: pass } = env;
 const from = env.EMAIL_FROM || user;
 const port = Number(env.SMTP_PORT || 465);
 
-const missing = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"].filter((k) => !env[k]);
-if (missing.length) {
-  console.error("Missing in " + envPath + ": " + missing.join(", "));
+// A provider key beats SMTP, matching src/lib/email.ts.
+if (env.RESEND_API_KEY) {
+  const to = process.argv[2];
+  const from = env.EMAIL_FROM || "onboarding@resend.dev";
+  console.log("provider  Resend (HTTPS API — no SMTP, no IP allowlist)");
+  console.log(`from      ${from}`);
+  console.log(`key       ${env.RESEND_API_KEY.length} chars` +
+    (env.RESEND_API_KEY.startsWith("re_") ? "  (valid shape)" : "  ⚠️  a Resend key starts with re_"));
+  console.log("");
+
+  if (!to) {
+    // Listing domains proves the key without sending anything.
+    const r = await fetch("https://api.resend.com/domains", {
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}` },
+    });
+    const body = await r.text();
+    if (!r.ok) {
+      console.error(`❌ Resend rejected the key: ${r.status} ${body.slice(0, 200)}`);
+      process.exit(2);
+    }
+    const domains = (JSON.parse(body).data ?? []).map((d) => `${d.name} (${d.status})`);
+    console.log("✅ Key accepted.");
+    console.log(domains.length ? `   Domains: ${domains.join(", ")}` : "   No domains verified yet.");
+    console.log("\nPass an address to send a real test: npm run check:smtp you@example.com");
+    process.exit(0);
+  }
+
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to,
+      subject: "Techxfluence OS — email is working",
+      html: "<p>If you are reading this, the Business OS can send email.</p>",
+    }),
+  });
+  const body = await r.text();
+  if (!r.ok) {
+    console.error(`❌ Send refused: ${r.status} ${body.slice(0, 300)}`);
+    if (body.includes("domain")) {
+      console.error("\n  The sending domain is not verified yet. Add the DNS records Resend\n" +
+        "  gives you for techxfluence.com, then try again.");
+    }
+    process.exit(3);
+  }
+  console.log(`✅ Sent to ${to} — ${JSON.parse(body).id}`);
+  process.exit(0);
+}
+
+if (!host) {
+  console.error("Missing in " + envPath + ": SMTP_HOST or RESEND_API_KEY");
   process.exit(1);
 }
 
-const redact = (s) => String(s).split(pass).join("«hidden»");
+// smtp-relay.gmail.com can authenticate by IP alone, so a configuration with
+// no credentials is valid rather than incomplete.
+const relay = /smtp-relay\.gmail\.com/i.test(host);
+const authenticating = Boolean(user && pass);
+
+if (!relay && !authenticating) {
+  console.error("Missing in " + envPath + ": SMTP_USER and SMTP_PASS are required for " + host);
+  process.exit(1);
+}
+
+const redact = (s) => (pass ? String(s).split(pass).join("«hidden»") : String(s));
 
 console.log(`host  ${host}:${port}`);
-console.log(`user  ${user}`);
+console.log(`user  ${user || "(none — relay authenticates by IP)"}`);
 console.log(`from  ${from}`);
 console.log(
-  `pass  ${pass.length} chars` +
-    (/^[a-z]{16}$/.test(pass)
-      ? "  (valid App Password shape)"
-      : "  ⚠️  a Google App Password is exactly 16 lowercase letters"),
+  authenticating
+    ? `pass  ${pass.length} chars` +
+        (/^[a-z]{16}$/.test(pass)
+          ? "  (valid App Password shape)"
+          : "  ⚠️  a Google App Password is exactly 16 lowercase letters")
+    : "pass  none — this host must allowlist your sending IP",
 );
 console.log("");
 
@@ -52,7 +121,8 @@ const transporter = nodemailer.createTransport({
   host,
   port,
   secure: port === 465,
-  auth: { user, pass },
+  ...(authenticating ? { auth: { user, pass } } : {}),
+  requireTLS: port !== 465,
   connectionTimeout: 15000,
   greetingTimeout: 15000,
 });
@@ -66,7 +136,7 @@ try {
 
   if (String(e.message).includes("535")) {
     console.log(`
-Google rejected the credential. In order of likelihood:
+Google rejected the connection. In order of likelihood:
 
   1. The App Password was revoked. They die whenever the account password
      changes. Generate a fresh one and paste it into SMTP_PASS.

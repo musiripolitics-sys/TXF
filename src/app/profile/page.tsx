@@ -126,8 +126,13 @@ export default async function ProfilePage() {
     }
   }
 
-  const membershipPlan = membershipData?.membership_plans as any;
-  const perks = membershipPlan?.plan_benefits || [];
+  // PostgREST embeds a to-one relation as an object and a to-many as an
+  // array; the plan is to-one and its benefits are to-many.
+  type Perk = { perk_text: string | null };
+  type Plan = { name?: string | null; tagline?: string | null; plan_benefits?: Perk[] | null };
+  const raw = membershipData?.membership_plans as Plan | Plan[] | null | undefined;
+  const membershipPlan = (Array.isArray(raw) ? raw[0] : raw) ?? null;
+  const perks: Perk[] = membershipPlan?.plan_benefits ?? [];
 
   // Directory eligibility: 100 points, or Elite (always).
   const points = profile?.points ?? 0;
@@ -341,7 +346,7 @@ export default async function ProfilePage() {
                 <h4 className="font-semibold text-fg mb-4">Your Perks</h4>
                 {perks.length > 0 ? (
                   <ul className="space-y-3">
-                    {perks.map((p: any, i: number) => (
+                    {perks.map((p, i) => (
                       <li key={i} className="flex gap-3 text-sm text-fg">
                         <Icon name="check" className="h-5 w-5 shrink-0 text-brand" />
                         <span className="leading-snug">{p.perk_text}</span>

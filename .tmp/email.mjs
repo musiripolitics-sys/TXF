@@ -22349,17 +22349,22 @@ var FROM = process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
 var _transporter = null;
 function getTransporter() {
   const host = process.env.SMTP_HOST;
+  if (!host) return null;
+  if (_transporter) return _transporter;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  if (_transporter) return _transporter;
   const port = Number(process.env.SMTP_PORT || 465);
   _transporter = nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
-    // 465 = SSL, 587 = STARTTLS
-    auth: { user, pass }
+    // 465 = SSL, 587 and 25 = STARTTLS
+    // Relay by IP sends no AUTH at all. Passing an empty auth object would
+    // make nodemailer try anyway and the relay would reject the session.
+    ...user && pass ? { auth: { user, pass } } : {},
+    // Insist on STARTTLS against a real server, but not against the loopback
+    // sink the template tests speak to, which is plain TCP by design.
+    requireTLS: port !== 465 && !/^(127\.|localhost$|::1$)/.test(host)
   });
   return _transporter;
 }
@@ -22386,14 +22391,32 @@ function shell(heading, bodyHtml) {
     </td></tr>
   </table>`;
 }
+async function sendViaResend(to, subject, html) {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ from: FROM, to, subject, html })
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`);
+  }
+}
 async function send(to, subject, html) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn(`[email] SMTP not configured \u2014 skipping "${subject}" to ${to}`);
+  const viaResend = Boolean(process.env.RESEND_API_KEY);
+  const transporter = viaResend ? null : getTransporter();
+  if (!viaResend && !transporter) {
+    console.warn(
+      `[email] neither RESEND_API_KEY nor SMTP_HOST is set \u2014 skipping "${subject}" to ${to}`
+    );
     return;
   }
   try {
-    await transporter.sendMail({ from: FROM, to, subject, html });
+    if (viaResend) await sendViaResend(to, subject, html);
+    else await transporter.sendMail({ from: FROM, to, subject, html });
   } catch (err) {
     console.error(`[email] failed to send "${subject}" to ${to}:`, err);
     await recordFailure(to, subject, err);
@@ -22588,14 +22611,192 @@ async function sendHostDecision(opts) {
     );
   }
 }
+var osUrl = (path) => `${process.env.NEXT_PUBLIC_SITE_URL || ""}${path}`;
+function button(href, label, colour = "#ff5a1f") {
+  return `<p style="margin:18px 0 0;">
+    <a href="${href}" style="display:inline-block;background:${colour};color:#fff;text-decoration:none;
+       font-weight:600;padding:11px 22px;border-radius:9999px;">${label}</a>
+  </p>`;
+}
+function facts(rows) {
+  const body = rows.filter(([, v]) => v).map(
+    ([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:#8a897f;white-space:nowrap;">${k}</td><td>${v}</td></tr>`
+  ).join("");
+  return body ? `<table style="margin-top:14px;font-size:14px;color:#0e0e0c;">${body}</table>` : "";
+}
+var taskLabel = (code, title) => `${code ? `${code} \xB7 ` : ""}${title}`;
+async function sendTaskAssigned(opts) {
+  await send(
+    opts.to,
+    `Assigned to you: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "You have a new task \u{1F4CB}",
+      `Hi ${opts.name}, ${opts.assignedBy ? `${opts.assignedBy} assigned` : "you have been assigned"}
+       <strong>${opts.title}</strong>.
+       ${opts.description ? `<p style="margin:14px 0 0;">${opts.description}</p>` : ""}
+       ${facts([
+        ["Due", opts.dueDate],
+        ["Priority", opts.priority],
+        ["Goal", opts.goal]
+      ])}
+       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Open the task")}`
+    )
+  );
+}
+async function sendTaskDecision(opts) {
+  await send(
+    opts.to,
+    `${opts.approved ? "Approved" : "Sent back"}: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      opts.approved ? "Your work was approved \u2705" : "Your work came back",
+      opts.approved ? `Hi ${opts.name}, <strong>${opts.title}</strong> was approved${opts.decidedBy ? ` by ${opts.decidedBy}` : ""} and the task is now complete. Nothing more to do.
+           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "See the task", "#16a34a")}` : `Hi ${opts.name}, <strong>${opts.title}</strong> was sent back${opts.decidedBy ? ` by ${opts.decidedBy}` : ""} and needs another look.
+           ${opts.note ? `<p style="margin:14px 0 0;"><strong>Reason:</strong> ${opts.note}</p>` : ""}
+           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Pick it back up")}`
+    )
+  );
+}
+async function sendTaskSubmitted(opts) {
+  await send(
+    opts.to,
+    `Needs your approval: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "A task is waiting on you",
+      `Hi ${opts.name}, ${opts.submittedBy ?? "Someone"} has finished
+       <strong>${opts.title}</strong> and submitted it for approval. It stays open
+       until you approve it.
+       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Review it")}`
+    )
+  );
+}
+async function sendTaskReviewed(opts) {
+  const verdict = { met: "Met the goal", partial: "Partially met", missed: "Missed" }[opts.outcome];
+  await send(
+    opts.to,
+    `Reviewed: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "Your work was reviewed",
+      `Hi ${opts.name}, <strong>${opts.title}</strong> has been reviewed${opts.reviewedBy ? ` by ${opts.reviewedBy}` : ""}.
+       ${facts([
+        ["Outcome", verdict],
+        ["Quality", opts.quality != null ? `${opts.quality} of 5` : null]
+      ])}
+       ${opts.learning ? `<p style="margin:16px 0 0;"><strong>Carry forward:</strong> ${opts.learning}</p>` : ""}
+       ${button(osUrl("/admin/os/reviews?tab=tasks"), "Read the review")}`
+    )
+  );
+}
+async function sendEmployeeWelcome(opts) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "Your Techxfluence Business OS account is ready",
+    shell(
+      "Welcome to the team \u{1F44B}",
+      `Hi ${opts.name}, your account for the Techxfluence Business OS is ready${opts.title ? `, as <strong>${opts.title}</strong>` : ""}.
+       ${opts.sections.length ? `<p style="margin:14px 0 0;">You have access to: <strong>${opts.sections.join(", ")}</strong>.
+              Anything else stays hidden until someone grants it.</p>` : ""}
+       <p style="margin:14px 0 0;">Sign in with this address. Whoever set your
+       account up has your password \u2014 if you do not have it, use
+       <em>Forgot password</em> on the sign-in page and set your own.</p>
+       ${button(`${site}/admin/os`, "Open the Business OS")}`
+    )
+  );
+}
+async function sendContactReceived(opts) {
+  await send(
+    opts.to,
+    "We got your message",
+    shell(
+      "Thanks for getting in touch",
+      `Hi ${opts.name}, we have your message${opts.subject ? ` about <strong>${opts.subject}</strong>` : ""} and someone will reply, usually within a couple of working days.
+       <p style="margin:14px 0 0;">No need to send it again \u2014 this is just to
+       confirm it reached us.</p>`
+    )
+  );
+}
+async function sendHostProposalReceived(opts) {
+  await send(
+    opts.to,
+    "We got your event proposal",
+    shell(
+      "Your proposal is in \u{1F3A4}",
+      `Hi ${opts.name}, thanks for proposing${opts.eventTitle ? ` <strong>${opts.eventTitle}</strong>` : " an event"}. Someone from the team reviews every proposal by hand, so give us a few
+       days \u2014 you will hear back either way.`
+    )
+  );
+}
+async function sendNewsletterWelcome(opts) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "You're subscribed to Techxfluence",
+    shell(
+      "You're on the list \u{1F4EC}",
+      `Thanks for subscribing. You will hear from us when there is something
+       worth hearing about \u2014 new events, what happened at the last one, and
+       what the community is building. Not more often than that.
+       ${button(`${site}/events`, "See what's on")}`
+    )
+  );
+}
+async function sendInternalAlert(opts) {
+  await send(
+    opts.to,
+    opts.heading,
+    shell(
+      opts.heading,
+      `Hi ${opts.name}, ${opts.what}
+       ${opts.details ? facts(opts.details) : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}${opts.href}`, opts.cta)}`
+    )
+  );
+}
+async function sendApprovalDecision(opts) {
+  await send(
+    opts.to,
+    `${opts.approved ? "Approved" : "Not approved"}: ${opts.requestTitle}`,
+    shell(
+      opts.approved ? "Your request was approved \u2705" : "Your request was not approved",
+      `Hi ${opts.name}, your ${opts.requestType.toLowerCase()} request
+       \u2014 <strong>${opts.requestTitle}</strong> \u2014 was
+       ${opts.approved ? "approved" : "declined"}.
+       ${opts.comments ? `<p style="margin:14px 0 0;"><strong>Note:</strong> ${opts.comments}</p>` : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}/admin/os/approvals`, "See the request")}`
+    )
+  );
+}
+async function sendHostMessage(opts) {
+  const safe = opts.body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>");
+  await send(
+    opts.to,
+    opts.subject,
+    shell(
+      opts.subject,
+      `<div style="white-space:normal;">${safe}</div>
+       ${opts.senderName ? `<p style="margin:18px 0 0;font-size:13px;color:#8a897f;">Sent by ${opts.senderName} at Techxfluence.</p>` : ""}`
+    )
+  );
+}
 export {
+  sendApprovalDecision,
   sendAttendeeBroadcast,
+  sendContactReceived,
+  sendEmployeeWelcome,
   sendEventReminder,
   sendHostDecision,
+  sendHostMessage,
+  sendHostProposalReceived,
+  sendInternalAlert,
   sendMembershipRenewal,
+  sendNewsletterWelcome,
   sendPaymentReceipt,
   sendRegistrationConfirmation,
   sendSpotOpened,
+  sendTaskAssigned,
+  sendTaskDecision,
+  sendTaskReviewed,
+  sendTaskSubmitted,
   sendWaitlistJoined,
   sendWaitlistPromoted
 };

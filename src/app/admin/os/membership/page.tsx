@@ -2,10 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { KpiCard, SectionHeading } from "@/components/os/ui";
 import { BarList, type BarDatum } from "@/components/os/BarList";
 import { num, inrCompact, pct } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
 
 export const metadata = { title: "Membership · Business OS" };
 
 export default async function MembershipPage() {
+  await requireSection("grow");
   const supabase = await createClient();
   const [{ data: memberships }, { data: payments }] = await Promise.all([
     supabase.from("memberships").select("tier,status,started_at,source"),

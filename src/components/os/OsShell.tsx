@@ -1,139 +1,448 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { OS_SECTIONS } from "@/lib/os-modules";
+import { NotificationBell } from "@/components/NotificationBell";
+import { OS_SECTIONS, type NavSection } from "@/lib/os-modules";
 
 /**
  * The Business OS shell.
  *
- * It used to render inside AppShell, so every page carried two navigations at
- * once — the app sidebar, then a wall of ~30 pills in ten rows underneath it.
- * That's why nothing was findable. This is a single, persistent left sidebar
- * with the groups laid out vertically, which is the shape that actually scales
- * to this many destinations.
+ * The sidebar used to list every one of ~35 destinations at once, which meant
+ * scrolling to reach anything past Marketing. It now shows the Dashboard and
+ * the nine sections by name — ten rows, which fit any screen without
+ * scrolling — and each section reveals its own items on hover.
+ *
+ * Alerts, approvals, the signed-in account and the way out sit top right,
+ * because they are about the session rather than about navigating the plan.
  */
 export function OsShell({
   email,
+  isAdmin = false,
+  sections,
+  alertCount = 0,
+  approvalCount = 0,
   children,
 }: {
   email: string;
+  isAdmin?: boolean;
+  /** Section keys this user may open. Admins receive all nine. */
+  sections: string[];
+  alertCount?: number;
+  approvalCount?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [drawer, setDrawer] = useState(false);
+  // The panel is positioned fixed rather than absolute. The sidebar scrolls,
+  // and an absolutely positioned child of a scrolling box is clipped into it
+  // — which is why hovering a section used to make the sidebar scroll
+  // sideways instead of floating the list over the page.
+  const [flyout, setFlyout] = useState<{ label: string; x: number; y: number } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
+  const openFlyout = useCallback((label: string, el: HTMLElement) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    const r = el.getBoundingClientRect();
+    setFlyout({ label, x: r.right + 8, y: r.top });
+  }, []);
+  // A grace period, so crossing the gap to the panel does not close it.
+  const scheduleClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setFlyout(null), 140);
+  }, []);
 
   const isActive = (href: string) =>
-    href === "/admin/os"
-      ? pathname === "/admin/os"
-      : pathname === href || pathname.startsWith(href + "/");
+    href === "/admin/os" ? pathname === "/admin/os" : pathname === href || pathname.startsWith(href + "/");
 
+  // "Today" holds the dashboard plus the two things that moved to the top bar,
+  // so the rail shows the nine planning sections and nothing else.
+  // The nav shows only what the grant allows, so an employee never sees a
+  // door they cannot open. "Today" is ungated.
+  const allowed = new Set(sections);
+  // An admin has ~35 destinations, so their sections stay collapsed behind a
+  // hover. An employee usually holds two or three, which fit expanded — and a
+  // section header that only reacts to hover reads as broken when clicked.
+  const expandAll = !isAdmin;
+
+  const railSections = OS_SECTIONS.filter(
+    (s) => s.label !== "Today" && allowed.has(s.label.toLowerCase()),
+  );
+  // Pages reached from the top bar are not in the nav, so they need naming
+  // here or the title bar keeps saying "Dashboard".
+  const OFF_NAV: Record<string, string> = { "/admin/os/team/access": "Team & Access" };
   const current =
     OS_SECTIONS.flatMap((s) => s.items).find((i) => isActive(i.href))?.label ??
-    "Business OS";
-
-  const sidebar = (
-    <nav className="flex h-full flex-col gap-5 overflow-y-auto p-4">
-      {OS_SECTIONS.map((section) => (
-        <div key={section.label}>
-          <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
-            {section.label}
-          </p>
-          <div className="flex flex-col gap-0.5">
-            {section.items.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                    active
-                      ? "bg-brand/10 font-semibold text-brand-soft"
-                      : "text-muted hover:bg-surface-2 hover:text-fg"
-                  }`}
-                >
-                  <span
-                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition-colors ${
-                      active ? "bg-brand text-white" : "text-faint"
-                    }`}
-                  >
-                    <Icon name={item.icon} className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  </span>
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </nav>
-  );
+    Object.entries(OFF_NAV).find(([href]) => isActive(href))?.[1] ??
+    "Dashboard";
+  const activeSection = railSections.find((s) => s.items.some((i) => isActive(i.href)));
 
   return (
     <div className="flex min-h-screen bg-ink">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-line bg-surface lg:block">
-        <div className="flex h-14 items-center gap-2 border-b border-line px-4">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand text-xs font-bold text-white">
+      {/* ── Rail ── */}
+      {/* Sticky to the viewport: the sidebar is the fixed frame you navigate
+          from, so it must not scroll away with the page under it. h-screen
+          plus overflow-y-auto keeps it usable on a very short window too. */}
+      <aside className="sticky top-0 z-40 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface lg:flex">
+        <Link href="/admin/os" className="flex h-14 items-center gap-2.5 border-b border-line px-4">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand text-[11px] font-bold text-white">
             OS
           </span>
           <span className="font-display text-sm font-bold text-fg">Business OS</span>
-        </div>
-        <div className="h-[calc(100vh-3.5rem)]">{sidebar}</div>
+        </Link>
+
+        <Link
+          href="/admin/os"
+          aria-current={pathname === "/admin/os" ? "page" : undefined}
+          className={`mx-2 mt-3 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+            pathname === "/admin/os"
+              ? "bg-brand/10 font-semibold text-brand-soft"
+              : "text-muted hover:bg-surface-2 hover:text-fg"
+          }`}
+        >
+          <Icon name="home" className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
+          Dashboard
+        </Link>
+
+        <div className="mx-4 my-2.5 h-px bg-line" />
+
+        <nav className="flex flex-col gap-0.5 overflow-y-auto px-2 pb-4">
+          {railSections.map((section) => (
+            expandAll ? (
+              <ExpandedSection key={section.label} section={section} isActive={isActive} />
+            ) : (
+              <RailItem
+                key={section.label}
+                section={section}
+                active={activeSection?.label === section.label}
+                open={flyout?.label === section.label}
+                onOpen={openFlyout}
+                onLeave={scheduleClose}
+                onDismiss={() => setFlyout(null)}
+              />
+            )
+          ))}
+        </nav>
       </aside>
 
-      {/* Mobile drawer */}
-      {open && (
+      {/* ── Mobile drawer ── */}
+      {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             aria-label="Close menu"
-            onClick={() => setOpen(false)}
+            onClick={() => setDrawer(false)}
             className="absolute inset-0 cursor-default bg-black/50"
           />
-          <aside className="absolute inset-y-0 left-0 w-64 border-r border-line bg-surface">
+          <aside className="absolute inset-y-0 left-0 w-72 overflow-y-auto border-r border-line bg-surface">
             <div className="flex h-14 items-center justify-between border-b border-line px-4">
               <span className="font-display text-sm font-bold text-fg">Business OS</span>
-              <button onClick={() => setOpen(false)} className="text-sm text-faint">
+              <button onClick={() => setDrawer(false)} className="text-sm text-faint">
                 Close
               </button>
             </div>
-            <div className="h-[calc(100vh-3.5rem)]">{sidebar}</div>
+            <nav className="flex flex-col gap-5 p-4">
+              {OS_SECTIONS.filter(
+                (s) => s.label === "Today" || allowed.has(s.label.toLowerCase()),
+              ).map((section) => (
+                <div key={section.label}>
+                  <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                    {section.label}
+                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {section.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setDrawer(false)}
+                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm ${
+                          isActive(item.href)
+                            ? "bg-brand/10 font-semibold text-brand-soft"
+                            : "text-muted hover:bg-surface-2 hover:text-fg"
+                        }`}
+                      >
+                        <Icon name={item.icon} className="h-4 w-4 shrink-0 text-faint" strokeWidth={1.8} />
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
           </aside>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* ── Top bar ── */}
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur md:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
-              onClick={() => setOpen(true)}
+              onClick={() => setDrawer(true)}
               aria-label="Open menu"
               className="rounded-lg border border-line p-1.5 text-muted lg:hidden"
             >
               <Icon name="settings" className="h-4 w-4" />
             </button>
-            <span className="truncate font-display text-base font-bold text-fg">
-              {current}
-            </span>
+            <span className="truncate font-display text-base font-bold text-fg">{current}</span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden text-xs text-faint sm:inline">{email}</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Approvals and reviews are decided by somebody else and land
+                here; without this an employee had no way of hearing about it. */}
+            <NotificationBell />
+            <TopAction
+              href="/admin/os/approvals"
+              icon="check"
+              label="Approvals"
+              count={approvalCount}
+              active={isActive("/admin/os/approvals")}
+            />
+            <TopAction
+              href="/admin/os/alerts"
+              icon="warning"
+              label="Alerts"
+              count={alertCount}
+              tone="warn"
+              active={isActive("/admin/os/alerts")}
+            />
+            {isAdmin && (
+              <TopAction
+                href="/admin/os/team/access"
+                icon="users"
+                label="People and access"
+                count={0}
+                active={isActive("/admin/os/team/access")}
+              />
+            )}
+            <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
+            <span className="hidden max-w-[14rem] truncate text-xs text-faint sm:inline">{email}</span>
             <Link
               href="/admin"
+              title="Exit to admin"
               className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand"
             >
-              Exit to admin
+              Exit
             </Link>
           </div>
         </header>
 
         <main className="min-w-0 flex-1 px-4 py-6 md:px-6 lg:px-8">{children}</main>
       </div>
+
+      {flyout && (
+        <SectionFlyout
+          section={OS_SECTIONS.find((sec) => sec.label === flyout.label)!}
+          x={flyout.x}
+          y={flyout.y}
+          isActive={isActive}
+          onEnter={cancelClose}
+          onLeave={scheduleClose}
+        />
+      )}
     </div>
+  );
+}
+
+/** A section with its destinations listed inline, for people who hold few. */
+function ExpandedSection({
+  section,
+  isActive,
+}: {
+  section: NavSection;
+  isActive: (href: string) => boolean;
+}) {
+  const hasActive = section.items.some((i) => isActive(i.href));
+  // Null means "follow the route", so the section you are actually in is open
+  // on arrival. Clicking the header takes that decision over until you click
+  // it again.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? hasActive;
+
+  return (
+    <div className="mb-1">
+      <button
+        type="button"
+        onClick={() => setManual(!open)}
+        aria-expanded={open}
+        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors hover:bg-surface-2 ${
+          hasActive ? "text-brand-soft" : "text-faint hover:text-fg"
+        }`}
+      >
+        <Icon name={section.icon} className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+        <span className="min-w-0 flex-1">{section.label}</span>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden
+          className={`h-3 w-3 shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-0.5 pb-1">
+          {section.items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isActive(item.href) ? "page" : undefined}
+              className={`flex items-start gap-2.5 rounded-lg py-1.5 pl-7 pr-2.5 text-sm transition-colors ${
+                isActive(item.href)
+                  ? "bg-brand/10 font-semibold text-brand-soft"
+                  : "text-muted hover:bg-surface-2 hover:text-fg"
+              }`}
+            >
+              <Icon name={item.icon} className="mt-0.5 h-4 w-4 shrink-0 text-faint" strokeWidth={1.8} />
+              {/* A name cut to "Competitor Tra…" is no use as a label; let it
+                  take a second line instead. */}
+              <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A section row. Hovering it asks the shell to float its list beside it. */
+function RailItem({
+  section,
+  active,
+  open,
+  onOpen,
+  onLeave,
+  onDismiss,
+}: {
+  section: NavSection;
+  active: boolean;
+  open: boolean;
+  onOpen: (label: string, el: HTMLElement) => void;
+  onLeave: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onMouseEnter={(e) => onOpen(section.label, e.currentTarget)}
+      onFocus={(e) => onOpen(section.label, e.currentTarget)}
+      onMouseLeave={onLeave}
+      onKeyDown={(e) => e.key === "Escape" && onDismiss()}
+      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+        active
+          ? "bg-brand/10 font-semibold text-brand-soft"
+          : open
+            ? "bg-surface-2 text-fg"
+            : "text-muted hover:bg-surface-2 hover:text-fg"
+      }`}
+    >
+      <Icon name={section.icon} className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
+      <span className="flex-1 text-left">{section.label}</span>
+      <span className="text-[9px] text-faint">{section.items.length}</span>
+    </button>
+  );
+}
+
+/**
+ * A section's destinations, floating above the page.
+ *
+ * Fixed, so no scrolling ancestor can clip it, and nudged up when it would
+ * otherwise run off the bottom of the window.
+ */
+function SectionFlyout({
+  section,
+  x,
+  y,
+  isActive,
+  onEnter,
+  onLeave,
+}: {
+  section: NavSection;
+  x: number;
+  y: number;
+  isActive: (href: string) => boolean;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
+  const estimated = 44 + section.items.length * 34;
+  const top =
+    typeof window === "undefined"
+      ? y
+      : Math.max(8, Math.min(y, window.innerHeight - estimated - 8));
+
+  return (
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={{ position: "fixed", left: x, top }}
+      className="z-[200] w-56 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+    >
+      <p className="border-b border-line px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+        {section.label}
+      </p>
+      <div className="p-1">
+        {section.items.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${
+              isActive(item.href)
+                ? "bg-brand/10 font-semibold text-brand-soft"
+                : "text-muted hover:bg-surface-2 hover:text-fg"
+            }`}
+          >
+            <Icon name={item.icon} className="h-4 w-4 shrink-0 text-faint" strokeWidth={1.8} />
+            <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Alerts and approvals: an icon, and a count only when there is something to see. */
+function TopAction({
+  href,
+  icon,
+  label,
+  count,
+  tone = "default",
+  active,
+}: {
+  href: string;
+  icon: string;
+  label: string;
+  count: number;
+  tone?: "default" | "warn";
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      title={count > 0 ? `${label} — ${count} waiting` : label}
+      aria-label={count > 0 ? `${label}, ${count} waiting` : label}
+      className={`relative grid h-9 w-9 place-items-center rounded-lg transition-colors ${
+        active ? "bg-brand/10 text-brand-soft" : "text-muted hover:bg-surface-2 hover:text-fg"
+      }`}
+    >
+      <Icon name={icon} className="h-[18px] w-[18px]" strokeWidth={1.8} />
+      {count > 0 && (
+        <span
+          className={`absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold text-white ${
+            tone === "warn" ? "bg-red-500" : "bg-brand"
+          }`}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
   );
 }

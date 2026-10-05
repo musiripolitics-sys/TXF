@@ -1,18 +1,48 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyState, KpiCard } from "@/components/os/ui";
 import { inr, num, shortDate } from "@/lib/bos";
+import { requireSection } from "@/lib/os-access";
+import { loadDirectory } from "@/lib/os-directory";
+import { HostPipeline, type HostRequest, type HostMessage, type Template } from "./HostPipeline";
 
 export const metadata = { title: "Hosts · Business OS" };
 
 export default async function HostsPage() {
+  await requireSection("events");
   const supabase = await createClient();
 
-  const [{ data: hosts }, { data: submissions }, { data: events }, { data: earnings }] = await Promise.all([
+  const [
+    { data: hosts },
+    { data: submissions },
+    { data: events },
+    { data: earnings },
+    { data: requests },
+    { data: messages },
+    { data: templates },
+    { data: eventOptions },
+    directory,
+  ] = await Promise.all([
     supabase.from("users").select("id,full_name,email,host_status,created_at").eq("primary_role", "event_host").order("full_name"),
     supabase.from("host_submissions").select("organizer_id,status"),
     supabase.from("events").select("host_id,status"),
     supabase.rpc("get_all_host_earnings"),
+    // The pipeline. Ordered oldest-first within a stage so the thing that has
+    // been waiting longest is the first card you see.
+    supabase
+      .from("host_submissions")
+      .select("id,title,category,date,city,venue,description,organizer_email,organizer_id,status,stage,owner_id,event_id,next_step,next_step_on,stage_changed_at,submitted_at")
+      .order("submitted_at", { ascending: true }),
+    supabase
+      .from("host_messages")
+      .select("id,submission_id,author_id,kind,subject,body,to_email,created_at")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("email_templates")
+      .select("id,name,purpose,subject,body,stage")
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase.from("events").select("id,title,date").order("date", { ascending: false }).limit(200),
+    loadDirectory(supabase),
   ]);
 
   const proposed = new Map<string, number>();
@@ -37,30 +67,61 @@ export default async function HostsPage() {
     revenue: gross.get(h.id) ?? 0,
   }));
 
-  const pendingApps = (submissions ?? []).filter((s) => s.status === "pending").length;
   const totalRevenue = rows.reduce((a, r) => a + r.revenue, 0);
+
+  // A proposal carries an email but not a name; the name is on the account
+  // when the proposer was signed in.
+  const nameOf = (id: string | null) => directory.find((d) => d.id === id)?.full_name ?? null;
+
+  const pipeline: HostRequest[] = ((requests as Record<string, unknown>[]) ?? []).map((r) => ({
+    ...(r as unknown as HostRequest),
+    organizer_name: nameOf((r.organizer_id as string) ?? null),
+  }));
+
+  const thread: HostMessage[] = ((messages as Record<string, unknown>[]) ?? []).map((m) => ({
+    ...(m as unknown as HostMessage),
+    author_name: nameOf((m.author_id as string) ?? null),
+  }));
+
+  const openRequests = pipeline.filter((r) => r.stage !== "done" && r.stage !== "declined").length;
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Host Management</h1>
-          <p className="text-sm text-muted">
-            Third-party hosts and their performance. Approvals happen in the{" "}
-            <Link href="/admin" className="text-brand-soft hover:underline">admin console</Link>.
+          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Hosts</h1>
+          <p className="max-w-3xl text-sm text-muted">
+            Every proposal from the Host an event form, worked from left to right, with the whole
+            conversation kept against it. Below that, the hosts who have run something for us.
           </p>
         </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <KpiCard label="Active hosts" value={num(rows.length)} />
-        <KpiCard label="Pending applications" value={num(pendingApps)} href="/admin" tone={pendingApps ? "warn" : "default"} />
+        <KpiCard label="Open requests" value={num(openRequests)} tone={openRequests ? "warn" : "default"} />
         <KpiCard label="Events completed" value={num(rows.reduce((a, r) => a + r.completed, 0))} />
         <KpiCard label="Host revenue (gross)" value={inr(totalRevenue)} tone="good" />
       </div>
 
+      <section className="mb-8">
+        <h2 className="mb-2 font-display text-sm font-bold uppercase tracking-wider text-faint">
+          Requests
+        </h2>
+        <HostPipeline
+          requests={pipeline}
+          messages={thread}
+          templates={(templates as Template[]) ?? []}
+          owners={directory}
+          events={(eventOptions as { id: string; title: string; date: string }[]) ?? []}
+        />
+      </section>
+
+      <h2 className="mb-2 font-display text-sm font-bold uppercase tracking-wider text-faint">
+        Hosts
+      </h2>
       {rows.length === 0 ? (
-        <EmptyState title="No hosts yet" hint="Approved hosts from the admin console appear here." />
+        <EmptyState title="No hosts yet" hint="Somebody becomes a host once they have run an event." />
       ) : (
         <Card className="overflow-x-auto p-0">
           <table className="w-full min-w-[760px] text-sm">

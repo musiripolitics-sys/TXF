@@ -1,10 +1,23 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
 
-// Google Workspace / Gmail SMTP. Requires an App Password on the sending
-// account (2-Step Verification must be on). All vars come from env.
-// Falls back to the authenticated mailbox rather than a fixed address: you can
-// always send as yourself, but sending as anyone else needs Gmail's
+// Outbound mail, in either of the two shapes Google Workspace offers.
+//
+//   smtp.gmail.com       authenticates as a mailbox with an App Password.
+//                        Needs 2-Step Verification on that account, and the
+//                        password belongs to that account alone.
+//
+//   smtp-relay.gmail.com authenticates by IP instead. The sending host is
+//                        allowlisted in the Admin console under Apps > Gmail >
+//                        Routing > SMTP relay service, and no credential is
+//                        used at all. That means it only works from a host
+//                        with a fixed address.
+//
+// So credentials are optional: a relay with no SMTP_USER/SMTP_PASS is a valid
+// configuration, not a broken one. Only the host is required.
+//
+// FROM falls back to the authenticated mailbox rather than a fixed address:
+// you can always send as yourself, but sending as anyone else needs Gmail's
 // "Send mail as" verification, and a wrong default fails at delivery time.
 const FROM =
   process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
@@ -12,16 +25,23 @@ const FROM =
 let _transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   const host = process.env.SMTP_HOST;
+  if (!host) return null;
+  if (_transporter) return _transporter;
+
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  if (_transporter) return _transporter;
   const port = Number(process.env.SMTP_PORT || 465);
+
   _transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // 465 = SSL, 587 = STARTTLS
-    auth: { user, pass },
+    secure: port === 465, // 465 = SSL, 587 and 25 = STARTTLS
+    // Relay by IP sends no AUTH at all. Passing an empty auth object would
+    // make nodemailer try anyway and the relay would reject the session.
+    ...(user && pass ? { auth: { user, pass } } : {}),
+    // Insist on STARTTLS against a real server, but not against the loopback
+    // sink the template tests speak to, which is plain TCP by design.
+    requireTLS: port !== 465 && !/^(127\.|localhost$|::1$)/.test(host),
   });
   return _transporter;
 }
@@ -51,14 +71,45 @@ function shell(heading: string, bodyHtml: string): string {
   </table>`;
 }
 
+/**
+ * Hand the message to Resend over HTTPS.
+ *
+ * An HTTP API rather than SMTP is the whole point: there is no connection to
+ * authenticate, no IP to allowlist and no App Password to expire, so it works
+ * the same from a laptop on a rotating consumer address and from a serverless
+ * function with no fixed egress at all.
+ */
+async function sendViaResend(to: string, subject: string, html: string): Promise<void> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from: FROM, to, subject, html }),
+  });
+  if (!res.ok) {
+    // Resend puts the useful part in the body; the status alone says little.
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`);
+  }
+}
+
 async function send(to: string, subject: string, html: string): Promise<void> {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn(`[email] SMTP not configured — skipping "${subject}" to ${to}`);
+  // The provider wins where it is configured. SMTP stays behind it so an
+  // existing deployment keeps working without being touched.
+  const viaResend = Boolean(process.env.RESEND_API_KEY);
+  const transporter = viaResend ? null : getTransporter();
+
+  if (!viaResend && !transporter) {
+    console.warn(
+      `[email] neither RESEND_API_KEY nor SMTP_HOST is set — skipping "${subject}" to ${to}`,
+    );
     return;
   }
   try {
-    await transporter.sendMail({ from: FROM, to, subject, html });
+    if (viaResend) await sendViaResend(to, subject, html);
+    else await transporter!.sendMail({ from: FROM, to, subject, html });
   } catch (err) {
     // Best-effort: never let an email failure break the main flow — but
     // record it, because a silent failure is how a dead SMTP password goes
@@ -334,4 +385,316 @@ export async function sendHostDecision(opts: {
       ),
     );
   }
+}
+
+// ─────────────────────────── Business OS: tasks ───────────────────────────
+//
+// Work changes hands inside the OS, but people do not live in the OS. The
+// notification bell (0021) reaches whoever happens to open it; these reach
+// them where they actually are.
+
+const osUrl = (path: string) => `${process.env.NEXT_PUBLIC_SITE_URL || ""}${path}`;
+
+function button(href: string, label: string, colour = "#ff5a1f"): string {
+  return `<p style="margin:18px 0 0;">
+    <a href="${href}" style="display:inline-block;background:${colour};color:#fff;text-decoration:none;
+       font-weight:600;padding:11px 22px;border-radius:9999px;">${label}</a>
+  </p>`;
+}
+
+/** Facts table shared by the task emails, so they read the same way. */
+function facts(rows: [string, string | null | undefined][]): string {
+  const body = rows
+    .filter(([, v]) => v)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 16px 4px 0;color:#8a897f;white-space:nowrap;">${k}</td><td>${v}</td></tr>`,
+    )
+    .join("");
+  return body ? `<table style="margin-top:14px;font-size:14px;color:#0e0e0c;">${body}</table>` : "";
+}
+
+const taskLabel = (code: string | null, title: string) =>
+  `${code ? `${code} · ` : ""}${title}`;
+
+export async function sendTaskAssigned(opts: {
+  to: string;
+  name: string;
+  code: string | null;
+  title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  priority?: string | null;
+  goal?: string | null;
+  assignedBy?: string | null;
+  taskId: string;
+}): Promise<void> {
+  await send(
+    opts.to,
+    `Assigned to you: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "You have a new task 📋",
+      `Hi ${opts.name}, ${opts.assignedBy ? `${opts.assignedBy} assigned` : "you have been assigned"}
+       <strong>${opts.title}</strong>.
+       ${opts.description ? `<p style="margin:14px 0 0;">${opts.description}</p>` : ""}
+       ${facts([
+         ["Due", opts.dueDate],
+         ["Priority", opts.priority],
+         ["Goal", opts.goal],
+       ])}
+       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Open the task")}`,
+    ),
+  );
+}
+
+export async function sendTaskDecision(opts: {
+  to: string;
+  name: string;
+  code: string | null;
+  title: string;
+  approved: boolean;
+  note?: string | null;
+  decidedBy?: string | null;
+  taskId: string;
+}): Promise<void> {
+  await send(
+    opts.to,
+    `${opts.approved ? "Approved" : "Sent back"}: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      opts.approved ? "Your work was approved ✅" : "Your work came back",
+      opts.approved
+        ? `Hi ${opts.name}, <strong>${opts.title}</strong> was approved${
+            opts.decidedBy ? ` by ${opts.decidedBy}` : ""
+          } and the task is now complete. Nothing more to do.
+           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "See the task", "#16a34a")}`
+        : `Hi ${opts.name}, <strong>${opts.title}</strong> was sent back${
+            opts.decidedBy ? ` by ${opts.decidedBy}` : ""
+          } and needs another look.
+           ${opts.note ? `<p style="margin:14px 0 0;"><strong>Reason:</strong> ${opts.note}</p>` : ""}
+           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Pick it back up")}`,
+    ),
+  );
+}
+
+export async function sendTaskSubmitted(opts: {
+  to: string;
+  name: string;
+  code: string | null;
+  title: string;
+  submittedBy: string | null;
+  taskId: string;
+}): Promise<void> {
+  await send(
+    opts.to,
+    `Needs your approval: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "A task is waiting on you",
+      `Hi ${opts.name}, ${opts.submittedBy ?? "Someone"} has finished
+       <strong>${opts.title}</strong> and submitted it for approval. It stays open
+       until you approve it.
+       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Review it")}`,
+    ),
+  );
+}
+
+export async function sendTaskReviewed(opts: {
+  to: string;
+  name: string;
+  code: string | null;
+  title: string;
+  outcome: "met" | "partial" | "missed";
+  quality?: number | null;
+  learning?: string | null;
+  reviewedBy?: string | null;
+}): Promise<void> {
+  const verdict = { met: "Met the goal", partial: "Partially met", missed: "Missed" }[opts.outcome];
+  await send(
+    opts.to,
+    `Reviewed: ${taskLabel(opts.code, opts.title)}`,
+    shell(
+      "Your work was reviewed",
+      `Hi ${opts.name}, <strong>${opts.title}</strong> has been reviewed${
+        opts.reviewedBy ? ` by ${opts.reviewedBy}` : ""
+      }.
+       ${facts([
+         ["Outcome", verdict],
+         ["Quality", opts.quality != null ? `${opts.quality} of 5` : null],
+       ])}
+       ${opts.learning ? `<p style="margin:16px 0 0;"><strong>Carry forward:</strong> ${opts.learning}</p>` : ""}
+       ${button(osUrl("/admin/os/reviews?tab=tasks"), "Read the review")}`,
+    ),
+  );
+}
+
+// ───────────────────── Onboarding, forms and approvals ─────────────────────
+
+/**
+ * A new employee has an account.
+ *
+ * Deliberately no password. An admin sets one when creating the account and
+ * hands it over directly; putting it in an email would leave the credential
+ * sitting in two mailboxes forever. The reset link covers anyone who was not
+ * told, or who forgets.
+ */
+export async function sendEmployeeWelcome(opts: {
+  to: string;
+  name: string;
+  title?: string | null;
+  sections: string[];
+}): Promise<void> {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "Your Techxfluence Business OS account is ready",
+    shell(
+      "Welcome to the team 👋",
+      `Hi ${opts.name}, your account for the Techxfluence Business OS is ready${
+        opts.title ? `, as <strong>${opts.title}</strong>` : ""
+      }.
+       ${
+         opts.sections.length
+           ? `<p style="margin:14px 0 0;">You have access to: <strong>${opts.sections.join(", ")}</strong>.
+              Anything else stays hidden until someone grants it.</p>`
+           : ""
+       }
+       <p style="margin:14px 0 0;">Sign in with this address. Whoever set your
+       account up has your password — if you do not have it, use
+       <em>Forgot password</em> on the sign-in page and set your own.</p>
+       ${button(`${site}/admin/os`, "Open the Business OS")}`,
+    ),
+  );
+}
+
+/** Someone used the contact form. Sent to them, so they know it arrived. */
+export async function sendContactReceived(opts: {
+  to: string;
+  name: string;
+  subject?: string | null;
+}): Promise<void> {
+  await send(
+    opts.to,
+    "We got your message",
+    shell(
+      "Thanks for getting in touch",
+      `Hi ${opts.name}, we have your message${
+        opts.subject ? ` about <strong>${opts.subject}</strong>` : ""
+      } and someone will reply, usually within a couple of working days.
+       <p style="margin:14px 0 0;">No need to send it again — this is just to
+       confirm it reached us.</p>`,
+    ),
+  );
+}
+
+/** Someone proposed an event. Sent to them. */
+export async function sendHostProposalReceived(opts: {
+  to: string;
+  name: string;
+  eventTitle?: string | null;
+}): Promise<void> {
+  await send(
+    opts.to,
+    "We got your event proposal",
+    shell(
+      "Your proposal is in 🎤",
+      `Hi ${opts.name}, thanks for proposing${
+        opts.eventTitle ? ` <strong>${opts.eventTitle}</strong>` : " an event"
+      }. Someone from the team reviews every proposal by hand, so give us a few
+       days — you will hear back either way.`,
+    ),
+  );
+}
+
+export async function sendNewsletterWelcome(opts: { to: string }): Promise<void> {
+  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  await send(
+    opts.to,
+    "You're subscribed to Techxfluence",
+    shell(
+      "You're on the list 📬",
+      `Thanks for subscribing. You will hear from us when there is something
+       worth hearing about — new events, what happened at the last one, and
+       what the community is building. Not more often than that.
+       ${button(`${site}/events`, "See what's on")}`,
+    ),
+  );
+}
+
+/** Something needs a decision. Sent to whoever can make it. */
+export async function sendInternalAlert(opts: {
+  to: string;
+  name: string;
+  heading: string;
+  what: string;
+  details?: [string, string | null | undefined][];
+  href: string;
+  cta: string;
+}): Promise<void> {
+  await send(
+    opts.to,
+    opts.heading,
+    shell(
+      opts.heading,
+      `Hi ${opts.name}, ${opts.what}
+       ${opts.details ? facts(opts.details) : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}${opts.href}`, opts.cta)}`,
+    ),
+  );
+}
+
+/** A request in the approvals queue was decided. Sent to whoever raised it. */
+export async function sendApprovalDecision(opts: {
+  to: string;
+  name: string;
+  requestType: string;
+  requestTitle: string;
+  approved: boolean;
+  comments?: string | null;
+}): Promise<void> {
+  await send(
+    opts.to,
+    `${opts.approved ? "Approved" : "Not approved"}: ${opts.requestTitle}`,
+    shell(
+      opts.approved ? "Your request was approved ✅" : "Your request was not approved",
+      `Hi ${opts.name}, your ${opts.requestType.toLowerCase()} request
+       — <strong>${opts.requestTitle}</strong> — was
+       ${opts.approved ? "approved" : "declined"}.
+       ${opts.comments ? `<p style="margin:14px 0 0;"><strong>Note:</strong> ${opts.comments}</p>` : ""}
+       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}/admin/os/approvals`, "See the request")}`,
+    ),
+  );
+}
+
+/**
+ * A message someone in the team wrote and sent from the host pipeline.
+ *
+ * Unlike every other template here, the body is the author's own words, not
+ * ours: no greeting bolted on the front and no call to action on the end,
+ * because they have already written both. All this adds is the shell, so it
+ * looks like it came from Techxfluence rather than from a form.
+ */
+export async function sendHostMessage(opts: {
+  to: string;
+  subject: string;
+  body: string;
+  senderName?: string | null;
+}): Promise<void> {
+  const safe = opts.body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br/>");
+
+  await send(
+    opts.to,
+    opts.subject,
+    shell(
+      opts.subject,
+      `<div style="white-space:normal;">${safe}</div>
+       ${
+         opts.senderName
+           ? `<p style="margin:18px 0 0;font-size:13px;color:#8a897f;">Sent by ${opts.senderName} at Techxfluence.</p>`
+           : ""
+       }`,
+    ),
+  );
 }

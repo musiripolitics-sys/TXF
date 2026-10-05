@@ -6,6 +6,8 @@ import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components
 import { Card, EmptyState } from "@/components/os/ui";
 import { inr, pct, shortDate, rupeesToPaise, paiseToRupees } from "@/lib/bos";
 import { saveEventOps } from "./actions";
+import { EventForm } from "./EventForm";
+import Link from "next/link";
 
 export type EventRow = {
   id: string;
@@ -99,19 +101,30 @@ export function EventsClient({
   };
 
   const ownerName = (id: string | null) => owners.find((o) => o.id === id)?.full_name || "—";
+  // The event itself is edited here now, not only in the old console.
+  const [creating, setCreating] = useState(false);
 
   return (
     <>
-      <div className="mb-4">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Events</h1>
-        <p className="text-sm text-muted">
-          Live events with BOS financials. Registrations, attendance and revenue come from the real
-          system; add cost, target, client, partners and campaign per event. Profit &amp; ROI compute automatically.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Events</h1>
+          <p className="max-w-3xl text-sm text-muted">
+            Every event on the website is written here. Open one to edit what the public page
+            shows, see tickets sold against capacity, and run the door. Cost, target, client and
+            campaign are OS-only — profit and ROI compute from them.
+          </p>
+        </div>
+        <button
+          onClick={() => setCreating(true)}
+          className="shrink-0 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white"
+        >
+          + New event
+        </button>
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState title="No events yet" hint="Events created in the main app appear here." />
+        <EmptyState title="No events yet" hint="Create the first one and publish it to the website." />
       ) : (
         <Card className="overflow-x-auto p-0">
           <table className="w-full min-w-[960px] text-sm">
@@ -140,7 +153,12 @@ export function EventsClient({
                 return (
                   <tr key={e.id} className="border-b border-line/60 last:border-0 hover:bg-surface-2">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-fg">{e.title}</p>
+                      <Link
+                        href={`/admin/os/events/${e.id}`}
+                        className="font-medium text-fg hover:text-brand hover:underline"
+                      >
+                        {e.title}
+                      </Link>
                       <p className="text-xs text-muted">
                         {e.status}{o?.is_client_event ? ` · Client${o.client_name ? `: ${o.client_name}` : ""}` : " · Owned"}
                         {o?.owner_id ? ` · ${ownerName(o.owner_id)}` : ""}
@@ -161,7 +179,8 @@ export function EventsClient({
                     <td className={`px-3 py-3 text-right tabular-nums font-medium ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>{inr(profit)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-muted">{roi != null ? `${roi.toFixed(0)}%` : "—"}</td>
                     <td className="px-3 py-3 text-right">
-                      <button onClick={() => edit(e)} className="text-xs font-medium text-brand-soft hover:underline">Edit ops</button>
+                      <Link href={`/admin/os/events/${e.id}`} className="text-xs font-medium text-brand-soft hover:underline">Open</Link>
+                      <button onClick={() => edit(e)} className="ml-3 text-xs font-medium text-muted hover:text-fg hover:underline">Ops</button>
                     </td>
                   </tr>
                 );
@@ -206,6 +225,8 @@ export function EventsClient({
           <div className="sm:col-span-2"><FormActions onCancel={() => setOpen(false)} saving={pending} submitLabel="Save event ops" /></div>
         </form>
       </Modal>
+
+      <EventForm open={creating} onClose={() => setCreating(false)} event={null} owners={owners} />
     </>
   );
 }

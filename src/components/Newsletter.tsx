@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { acknowledgeNewsletter, newsletterWithinLimit } from "@/app/actions/public-email";
 
 /**
  * Newsletter signup — writes to Supabase `newsletter_subscribers`.
@@ -19,6 +20,12 @@ export function Newsletter({ compact = false }: { compact?: boolean }) {
     setSubmitting(true);
     setError(null);
 
+    if (!(await newsletterWithinLimit())) {
+      setSubmitting(false);
+      setError("Too many signups from here just now. Please try again later.");
+      return;
+    }
+
     const supabase = createClient();
     const { error: insertError } = await supabase
       .from("newsletter_subscribers")
@@ -28,9 +35,17 @@ export function Newsletter({ compact = false }: { compact?: boolean }) {
 
     // 23505 = unique violation → already subscribed, treat as success.
     if (insertError && insertError.code !== "23505") {
-      setError("Couldn't subscribe. Please try again.");
+      setError(
+        insertError.code === "23514"
+          ? "That address is already subscribed."
+          : "Couldn't subscribe. Please try again.",
+      );
       return;
     }
+
+    // Only on a genuinely new row: 23505 means they were already subscribed,
+    // and welcoming somebody twice is how a list gets reported as spam.
+    if (!insertError) void acknowledgeNewsletter(email);
 
     setDone(true);
   };

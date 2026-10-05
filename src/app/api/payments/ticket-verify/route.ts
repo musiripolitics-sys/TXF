@@ -185,10 +185,10 @@ export async function POST(request: Request) {
     ]);
 
     return NextResponse.json({ success: true, ticketCode, ticketCodes });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Ticket payment verification failed:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to verify payment" },
+      { error: error instanceof Error ? error.message : "Failed to verify payment" },
       { status: 500 },
     );
   }

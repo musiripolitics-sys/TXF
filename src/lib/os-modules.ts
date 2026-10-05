@@ -455,26 +455,34 @@ export const MODULES: Record<string, ModuleConfig> = {
 
   risks: {
     key: "risks", table: "risks", title: "Risks & Issues",
-    desc: "Risk register. Score = impact × likelihood (auto).",
+    desc: "A risk might happen; an issue already has. Score = impact × likelihood of what remains after the mitigation in place today.",
     icon: "wrench", group: "Governance", filters: ["status"], refs: ["owner"],
     order: { col: "created_at", asc: false },
     columns: [
       { key: "risk", label: "Risk", sub: "area" },
+      { key: "kind", label: "Kind", type: "chip" },
       { key: "owner_id", label: "Owner", type: "owner" },
       { key: "impact", label: "Impact", type: "number", align: "right" },
       { key: "likelihood", label: "Likelihood", type: "number", align: "right" },
       { key: "risk_score", label: "Score", type: "number", align: "right" },
+      { key: "next_review", label: "Review by", type: "date" },
       { key: "status", label: "Status", type: "status" },
     ],
     fields: [
-      { key: "risk", label: "Risk", type: "text", required: true, span2: true },
+      { key: "risk", label: "Risk or issue", type: "text", required: true, span2: true },
+      { key: "kind", label: "Kind", type: "select", options: ["risk", "issue"] },
       { key: "area", label: "Area", type: "text" },
-      { key: "impact", label: "Impact (1–5)", type: "number" },
-      { key: "likelihood", label: "Likelihood (1–5)", type: "number" },
+      { key: "inherent_impact", label: "Inherent impact (1–5) — before any control", type: "number" },
+      { key: "inherent_likelihood", label: "Inherent likelihood (1–5)", type: "number" },
+      { key: "impact", label: "Residual impact (1–5) — after the mitigation", type: "number" },
+      { key: "likelihood", label: "Residual likelihood (1–5)", type: "number" },
       { key: "owner_id", label: "Owner", type: "owner" },
       { key: "status", label: "Status", type: "status" },
-      { key: "mitigation", label: "Mitigation", type: "textarea", span2: true },
-      { key: "due_date", label: "Due date", type: "date" },
+      { key: "mitigation", label: "What reduces it today", type: "textarea", span2: true },
+      { key: "treatment", label: "What we plan to do next", type: "textarea", span2: true },
+      { key: "due_date", label: "Action due", type: "date" },
+      { key: "next_review", label: "Review by", type: "date" },
+      { key: "occurred_on", label: "If it happened, when", type: "date" },
     ],
   },
 
@@ -570,9 +578,11 @@ export const MODULES: Record<string, ModuleConfig> = {
       { key: "type", label: "Type", type: "select", options: ASSET_TYPES },
       { key: "workstream_id", label: "Workstream", type: "workstream" },
       { key: "owner_id", label: "Owner", type: "owner" },
-      { key: "version", label: "Version", type: "text" },
+      { key: "version", label: "Current version", type: "text" },
+      { key: "category", label: "Category", type: "text" },
       { key: "status", label: "Status", type: "text" },
-      { key: "link", label: "Link", type: "text", span2: true },
+      { key: "link", label: "Link to the current file", type: "text", span2: true },
+      { key: "review_every_days", label: "Review every (days)", type: "number" },
       { key: "created_date", label: "Created date", type: "date" },
       { key: "review_date", label: "Review date", type: "date" },
     ],
@@ -585,9 +595,10 @@ export const MODULES: Record<string, ModuleConfig> = {
     order: { col: "created_at", asc: false },
     columns: [
       { key: "item", label: "Item", sub: "category" },
+      { key: "serial_number", label: "Serial", type: "chip" },
       { key: "quantity", label: "Qty", type: "number", align: "right" },
       { key: "total_value", label: "Value", type: "money", align: "right" },
-      { key: "assigned_to", label: "Assigned", type: "owner" },
+      { key: "custodian_id", label: "Held by", type: "owner" },
       { key: "status", label: "Status", type: "chip" },
     ],
     fields: [
@@ -596,7 +607,10 @@ export const MODULES: Record<string, ModuleConfig> = {
       { key: "quantity", label: "Quantity", type: "number" },
       { key: "unit_cost", label: "Unit cost (₹)", type: "money" },
       { key: "location", label: "Location", type: "text" },
-      { key: "assigned_to", label: "Assigned to", type: "owner" },
+      { key: "serial_number", label: "Serial number", type: "text" },
+      { key: "custodian_id", label: "Who has it now", type: "owner" },
+      { key: "issued_at", label: "Issued on", type: "date" },
+      { key: "assigned_to", label: "Assigned to (free text)", type: "owner" },
       { key: "condition", label: "Condition", type: "text" },
       { key: "purchase_date", label: "Purchase date", type: "date" },
       { key: "status", label: "Status", type: "text" },
@@ -720,7 +734,8 @@ export const MODULE_ORDER: string[] = [
 ];
 
 export type NavItem = { href: string; label: string; icon: string };
-export type NavSection = { label: string; items: NavItem[] };
+/** `icon` is the collapsed rail glyph; the group name only appears on hover. */
+export type NavSection = { label: string; icon: string; items: NavItem[] };
 
 const m = (key: string): NavItem => ({
   href: `/admin/os/${key}`,
@@ -739,6 +754,7 @@ const m = (key: string): NavItem => ({
 export const OS_SECTIONS: NavSection[] = [
   {
     label: "Today",
+    icon: "home",
     items: [
       { href: "/admin/os", label: "Dashboard", icon: "home" },
       { href: "/admin/os/alerts", label: "Alerts", icon: "bell" },
@@ -747,6 +763,7 @@ export const OS_SECTIONS: NavSection[] = [
   },
   {
     label: "Plan",
+    icon: "rocket",
     items: [
       { href: "/admin/os/roadmap", label: "Roadmap", icon: "rocket" },
       { href: "/admin/os/tasks", label: "Tasks", icon: "check" },
@@ -757,6 +774,7 @@ export const OS_SECTIONS: NavSection[] = [
   },
   {
     label: "Events",
+    icon: "calendar",
     items: [
       { href: "/admin/os/events", label: "Events", icon: "calendar" },
       { href: "/admin/os/hosts", label: "Hosts", icon: "mic" },
@@ -765,6 +783,7 @@ export const OS_SECTIONS: NavSection[] = [
   },
   {
     label: "Money",
+    icon: "trophy",
     items: [
       { href: "/admin/os/finance", label: "Finance", icon: "trophy" },
       m("vendors"),
@@ -772,6 +791,7 @@ export const OS_SECTIONS: NavSection[] = [
   },
   {
     label: "Grow",
+    icon: "users",
     items: [
       { href: "/admin/os/membership", label: "Membership", icon: "medal" },
       m("crm"),
@@ -782,22 +802,36 @@ export const OS_SECTIONS: NavSection[] = [
   },
   {
     label: "Marketing",
+    icon: "broadcast",
     items: [m("campaigns"), m("content"), m("podcast"), m("competitors")],
   },
   {
     label: "Team",
+    icon: "medal",
     items: [m("people"), m("hiring"), m("empkpis")],
   },
   {
     label: "Product",
+    icon: "code",
     items: [m("product"), m("feedback")],
   },
   {
     label: "Govern",
-    items: [m("risks"), m("legal"), m("audit"), m("kpis"), m("assets"), m("inventory")],
+    icon: "book",
+    items: [
+      m("risks"),
+      { href: "/admin/os/complaints", label: "Complaints", icon: "users" },
+      m("legal"),
+      { href: "/admin/os/data-dictionary", label: "Data dictionary", icon: "book" },
+      m("assets"),
+      m("inventory"),
+      m("audit"),
+      m("kpis"),
+    ],
   },
   {
     label: "Insights",
+    icon: "sparkle",
     items: [
       { href: "/admin/os/analytics", label: "Analytics", icon: "nodes" },
       { href: "/admin/os/reports", label: "Reports", icon: "book" },

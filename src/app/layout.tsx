@@ -4,6 +4,7 @@ import "./globals.css";
 import { Chrome } from "@/components/Chrome";
 import { Toaster } from "@/components/Toast";
 import { getUserRole, getCurrentUser } from "@/lib/auth";
+import { getMySections } from "@/lib/os-access";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -81,6 +82,8 @@ export default async function RootLayout({
 }>) {
   const role = await getUserRole();
   const user = await getCurrentUser();
+  // An employee granted any OS section needs a way in; admins always have one.
+  const osSections = user ? await getMySections() : [];
 
   return (
     <html
@@ -98,7 +101,7 @@ export default async function RootLayout({
         >
           Skip to content
         </a>
-        <Chrome role={role} authed={!!user}>
+        <Chrome role={role} authed={!!user} hasOsAccess={osSections.length > 0}>
           {children}
         </Chrome>
         <Toaster />

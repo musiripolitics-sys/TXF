@@ -5,6 +5,10 @@
  *
  *   npm run test:email
  */
+// Always exercise the SMTP path into the local sink, even on a machine that
+// has a provider key configured — these tests are about the templates, not
+// about delivery.
+delete process.env.RESEND_API_KEY;
 process.env.SMTP_HOST = "127.0.0.1";
 process.env.SMTP_PORT = "2526";
 process.env.SMTP_USER = "admin@techxfluence.com";
@@ -42,6 +46,50 @@ const cases = [
     message: "We've moved to Hall B." })],
   ["host decision", () => M.sendHostDecision({
     to: "a@t.c", name: "Asha", approved: true })],
+
+  // Business OS: the moments a task changes hands.
+  ["task assigned", () => M.sendTaskAssigned({
+    to: "a@t.c", name: "Priya", code: "T-014", title: "Draft the October sponsor deck",
+    description: "Six slides, last year's numbers, the two new formats.",
+    dueDate: "12 Oct 2026", priority: "high", goal: "G-004 Make the money visible",
+    assignedBy: "Ada Admin", taskId: "11111111-1111-1111-1111-111111111111" })],
+  ["task approved", () => M.sendTaskDecision({
+    to: "a@t.c", name: "Priya", code: "T-014", title: "Draft the October sponsor deck",
+    approved: true, decidedBy: "Ada Admin", taskId: "11111111-1111-1111-1111-111111111111" })],
+  ["task sent back", () => M.sendTaskDecision({
+    to: "a@t.c", name: "Priya", code: "T-014", title: "Draft the October sponsor deck",
+    approved: false, note: "Needs last year's attendance numbers on slide 3.",
+    decidedBy: "Ada Admin", taskId: "11111111-1111-1111-1111-111111111111" })],
+  ["task submitted for approval", () => M.sendTaskSubmitted({
+    to: "a@t.c", name: "Ada", code: "T-014", title: "Draft the October sponsor deck",
+    submittedBy: "Priya P", taskId: "11111111-1111-1111-1111-111111111111" })],
+  // Onboarding, public forms and the approvals queue.
+  ["employee welcome", () => M.sendEmployeeWelcome({
+    to: "a@t.c", name: "Priya", title: "Community Lead",
+    sections: ["Plans", "Marketing", "Events"] })],
+  ["contact received", () => M.sendContactReceived({
+    to: "a@t.c", name: "Asha", subject: "Sponsorship" })],
+  ["host proposal received", () => M.sendHostProposalReceived({
+    to: "a@t.c", name: "Asha", eventTitle: "Chennai React Meetup" })],
+  ["newsletter welcome", () => M.sendNewsletterWelcome({ to: "a@t.c" })],
+  ["internal alert", () => M.sendInternalAlert({
+    to: "a@t.c", name: "Ada", heading: "New event proposal",
+    what: "somebody wants to host an event.",
+    details: [["Proposed by", "Asha R"], ["Event", "Chennai React Meetup"], ["City", "Chennai"]],
+    href: "/admin/os/hosts", cta: "Review the proposal" })],
+  ["approval approved", () => M.sendApprovalDecision({
+    to: "a@t.c", name: "Priya", requestType: "Expense",
+    requestTitle: "Venue deposit for the October meetup", approved: true })],
+  ["approval declined", () => M.sendApprovalDecision({
+    to: "a@t.c", name: "Priya", requestType: "Expense",
+    requestTitle: "Venue deposit for the October meetup", approved: false,
+    comments: "Get a second quote first." })],
+
+  ["task reviewed", () => M.sendTaskReviewed({
+    to: "a@t.c", name: "Priya", code: "T-014", title: "Draft the October sponsor deck",
+    outcome: "partial", quality: 4,
+    learning: "Book the design slot a week earlier next time.",
+    reviewedBy: "Ada Admin" })],
 ];
 
 console.log("Sending every template through the real code path:\n");

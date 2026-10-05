@@ -1,10 +1,18 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { readTasks } from "@/lib/os-tasks";
 import { KpiCard, EmptyState } from "@/components/os/ui";
 import { DashboardFilters } from "@/components/os/DashboardFilters";
 import { AttentionBand, type AttentionItem } from "@/components/os/AttentionBand";
 import { SectionOverview, type SectionCard } from "@/components/os/SectionOverview";
 import { type SectionStatus } from "@/lib/bos-sections";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
+import {
+  EmployeeDashboard,
+  type MyTask,
+  type MyGoal,
+  type MyKpi,
+} from "./EmployeeDashboard";
 import {
   inrCompact,
   num,
@@ -38,6 +46,13 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
 
   const supabase = await createClient();
   const today = isoToday();
+
+  // An employee opens the OS to ask "what do I have to do", not "how is the
+  // business doing". They get their own work along time instead of the
+  // executive view, and see nothing that is not assigned to them.
+  if (!(await isAdmin())) {
+    return <MyDashboard />;
+  }
 
   const [
     { data, error },
@@ -158,11 +173,12 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
         note: "Pending",
       }),
     ),
-    // PostgREST types an embedded relation as an array even when the foreign
-    // key makes it at most one row, so the task comes back as tasks[0].
-    ...((reviewsRes.data as { task_id: string; tasks: { title: string }[] | null }[] | null) ?? []).map(
+    // PostgREST embeds a to-one foreign key as an object, not an array, so
+    // indexing [0] left every one of these reading "Review a completed task"
+    // instead of naming it. Accept either shape.
+    ...((reviewsRes.data as { task_id: string; tasks: { title: string } | { title: string }[] | null }[] | null) ?? []).map(
       (r): AttentionItem => {
-        const taskTitle = r.tasks?.[0]?.title;
+        const taskTitle = (Array.isArray(r.tasks) ? r.tasks[0] : r.tasks)?.title;
         return {
         id: r.task_id,
         kind: "Review",
@@ -349,6 +365,76 @@ export default async function ExecutiveDashboard({ searchParams }: { searchParam
       </div>
       <SectionOverview sections={sectionCards} />
     </>
+  );
+}
+
+/** The employee view: their tasks, their goals, their deadlines, nothing else. */
+async function MyDashboard() {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const [myTasks, goalsRes, kpisRes, edgesRes, reviewsRes, profileRes] = await Promise.all([
+    readTasks<MyTask>(
+      (cols) =>
+        supabase
+          .from("tasks")
+          .select(cols)
+          .eq("owner_id", user.id)
+          .order("due_date", { ascending: true, nullsFirst: false }),
+      "id,code,title,goal_id,start_date,due_date,status,priority,estimate_hours,dependency_id",
+    ),
+    supabase
+      .from("goals")
+      .select("id,code,objective,end_date,status")
+      .eq("owner_id", user.id)
+      .order("end_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("employee_kpis")
+      .select("kpi_name,target,actual,period")
+      .eq("employee_id", user.id)
+      .order("period", { ascending: false })
+      .limit(6),
+    supabase.from("dependencies").select("from_id,to_id"),
+    supabase.from("task_reviews").select("task_id").eq("outcome", "pending"),
+    supabase.from("users").select("full_name").eq("id", user.id).maybeSingle(),
+  ]);
+
+  const tasks = myTasks;
+  const mine = new Set(tasks.map((t) => t.id));
+
+  // What each of their tasks is waiting on, but only where the blocker is
+  // still unfinished — a satisfied dependency is not worth mentioning.
+  const { data: blockers } = await supabase
+    .from("tasks")
+    .select("id,code,title,status");
+  const byId = new Map(
+    ((blockers as { id: string; code: string | null; title: string; status: string }[]) ?? []).map(
+      (t) => [t.id, t],
+    ),
+  );
+  const blockedTitles: Record<string, string> = {};
+  for (const e of (edgesRes.data as { from_id: string | null; to_id: string | null }[]) ?? []) {
+    if (!e.from_id || !e.to_id || !mine.has(e.from_id)) continue;
+    const on = byId.get(e.to_id);
+    if (on && on.status !== "completed") {
+      blockedTitles[e.from_id] = `${on.code ?? ""} ${on.title}`.trim();
+    }
+  }
+
+  const reviewsDue = ((reviewsRes.data as { task_id: string }[]) ?? []).filter((r) =>
+    mine.has(r.task_id),
+  ).length;
+
+  return (
+    <EmployeeDashboard
+      name={(profileRes.data as { full_name: string | null } | null)?.full_name ?? ""}
+      tasks={tasks}
+      goals={(goalsRes.data as MyGoal[]) ?? []}
+      kpis={(kpisRes.data as MyKpi[]) ?? []}
+      blockedTitles={blockedTitles}
+      reviewsDue={reviewsDue}
+    />
   );
 }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { acknowledgeContact, contactWithinLimit } from "@/app/actions/public-email";
 
 const topics = [
   "General enquiry",
@@ -45,20 +46,42 @@ export function ContactForm() {
     setSubmitting(true);
     setError(null);
 
+    // Checked before the insert, so a flood costs one round trip rather than
+    // a row and an email. The database enforces its own limit by address
+    // regardless, for anyone who skips this and posts to the API directly.
+    if (!(await contactWithinLimit())) {
+      setSubmitting(false);
+      setError("That's a lot of messages from one place. Please try again later.");
+      return;
+    }
+
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("contact_messages").insert({
-      name: form.name,
-      email: form.email,
-      topic: form.topic,
-      message: form.message,
-    });
+    const { data: inserted, error: insertError } = await supabase
+      .from("contact_messages")
+      .insert({
+        name: form.name,
+        email: form.email,
+        topic: form.topic,
+        message: form.message,
+      })
+      .select("id")
+      .maybeSingle();
 
     setSubmitting(false);
 
     if (insertError) {
-      setError("Couldn't send your message. Please try again.");
+      setError(
+        insertError.code === "23514"
+          ? "You've already sent us a few messages. Give us a little while to reply."
+          : "Couldn't send your message. Please try again.",
+      );
       return;
     }
+
+    // Acknowledge by id, not by content: the server reads the row it just
+    // wrote. Never awaited into the success path — a missing confirmation
+    // email must not make a sent message look unsent.
+    if (inserted?.id) void acknowledgeContact(inserted.id as string);
 
     setSent(true);
   };

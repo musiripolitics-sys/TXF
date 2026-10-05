@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
+import { mailTaskReviewed } from "@/lib/task-mail";
 
 const schema = z.object({
   period_type: z.enum(["week", "month"]),
@@ -64,13 +65,23 @@ const taskReviewSchema = z.object({
 export async function saveTaskReview(input: unknown) {
   const user = await getCurrentUser();
   if (!user) return { error: "Not signed in" };
-  if (!(await isAdmin())) return { error: "Not authorised" };
 
   const parsed = taskReviewSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { task_id, ...fields } = parsed.data;
 
   const supabase = await createClient();
+  // The retro on a piece of work belongs to whoever did it. An admin may
+  // review anything; anyone else, only the tasks they own.
+  if (!(await isAdmin())) {
+    const { data: owned } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("id", task_id)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (!owned) return { error: "Not authorised" };
+  }
   const { error } = await supabase
     .from("task_reviews")
     .update({
@@ -100,6 +111,16 @@ export async function saveTaskReview(input: unknown) {
     entity_id: task_id,
     after: fields,
   });
+
+  if (fields.outcome !== "pending") {
+    await mailTaskReviewed({
+      taskId: task_id,
+      outcome: fields.outcome,
+      quality: fields.quality ?? null,
+      learning: fields.learning ?? null,
+      byId: user.id,
+    });
+  }
 
   revalidatePath("/admin/os/reviews");
   revalidatePath("/admin/os");

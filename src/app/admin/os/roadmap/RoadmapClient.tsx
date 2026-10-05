@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "@/components/Toast";
 import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components/os/Modal";
 import { Card, StatusBadge, PriorityBadge, EmptyState, SectionHeading } from "@/components/os/ui";
@@ -16,9 +17,13 @@ import {
   type BosPriority,
 } from "@/lib/bos";
 import { saveGoal, deleteGoal, syncRoadmapTasks } from "../actions";
-import type { Goal, Workstream, OwnerOption } from "./types";
+import type { Goal, Workstream, OwnerOption, RoadmapTask, TaskEdge } from "./types";
+import { GoalTasks } from "./GoalTasks";
+import { RoadmapTimeline } from "./RoadmapTimeline";
+import { TaskDetail, type TaskComment } from "./TaskDetail";
+import { GoalDetail } from "./GoalDetail";
 
-type View = "month" | "week" | "list";
+type View = "month" | "week" | "list" | "timeline";
 
 const blank = {
   objective: "",
@@ -41,13 +46,40 @@ export function RoadmapClient({
   initialGoals,
   workstreams,
   owners,
+  tasks,
+  edges,
+  comments,
+  isAdmin,
 }: {
   initialGoals: Goal[];
   workstreams: Workstream[];
   owners: OwnerOption[];
+  tasks: RoadmapTask[];
+  edges: TaskEdge[];
+  comments: TaskComment[];
+  isAdmin: boolean;
 }) {
   const [view, setView] = useState<View>("month");
   const [syncing, setSyncing] = useState(false);
+  // Which goals are expanded to show their tasks. Everything is already loaded,
+  // so this is presentation only.
+  const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
+  // The task open in the detail panel, by id. Clicking a blocker inside the
+  // panel swaps it, so navigation stays in one place.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const openTask = openTaskId ? (tasks.find((t) => t.id === openTaskId) ?? null) : null;
+  // A task panel elsewhere links here as ?goal=<id>; open that goal on arrival
+  // rather than dropping the reader at the top of a ten-goal list.
+  const params = useSearchParams();
+  const [openGoalId, setOpenGoalId] = useState<string | null>(() => params.get("goal"));
+  const openGoal = openGoalId ? (initialGoals.find((g) => g.id === openGoalId) ?? null) : null;
+  const toggleGoal = (id: string) =>
+    setOpenGoals((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [fWork, setFWork] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [fPriority, setFPriority] = useState("");
@@ -213,7 +245,7 @@ export function RoadmapClient({
       {/* Controls */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex rounded-full border border-line bg-surface p-0.5">
-          {(["month", "week", "list"] as View[]).map((v) => (
+          {(["month", "week", "list", "timeline"] as View[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -221,7 +253,13 @@ export function RoadmapClient({
                 view === v ? "bg-brand text-white" : "text-muted hover:text-fg"
               }`}
             >
-              {v === "month" ? "By month" : v === "week" ? "By week" : "Timeline"}
+              {v === "month"
+                ? "By month"
+                : v === "week"
+                  ? "By week"
+                  : v === "list"
+                    ? "All goals"
+                    : "Timeline"}
             </button>
           ))}
         </div>
@@ -250,6 +288,16 @@ export function RoadmapClient({
           title="No goals match"
           hint="Add a 90-day goal, or clear the filters above."
         />
+      ) : view === "timeline" ? (
+        <RoadmapTimeline
+          goals={filtered}
+          tasks={tasks}
+          edges={edges}
+          workstreams={workstreams}
+          ownerName={ownerName}
+          onOpenGoal={(g) => setOpenGoalId(g.id)}
+          onOpenTask={setOpenTaskId}
+        />
       ) : (
         <div className="space-y-6">
           {groups.map((grp) => (
@@ -273,11 +321,46 @@ export function RoadmapClient({
                   <tbody>
                     {grp.rows.map((g) => {
                       const ws = g.workstream_id ? wsMap[g.workstream_id] : null;
+                      const goalTasks = tasks.filter((t) => t.goal_id === g.id);
+                      const openTasks = goalTasks.filter(
+                        (t) => t.status !== "completed" && t.status !== "cancelled",
+                      ).length;
+                      const isOpen = openGoals.has(g.id);
                       return (
-                        <tr key={g.id} className="border-b border-line/60 last:border-0 hover:bg-surface-2">
+                      <Fragment key={g.id}>
+                        <tr className="border-b border-line/60 last:border-0 hover:bg-surface-2">
                           <td className="px-4 py-3">
-                            <p className="font-medium text-fg">{g.objective}</p>
-                            {g.deliverable && <p className="text-xs text-muted">{g.deliverable}</p>}
+                            <div className="flex items-start gap-2">
+                              {goalTasks.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGoal(g.id)}
+                                  aria-label={isOpen ? "Hide tasks" : "Show tasks"}
+                                  aria-expanded={isOpen}
+                                  className="mt-0.5 w-3 shrink-0 text-[10px] text-faint hover:text-fg"
+                                >
+                                  {isOpen ? "▾" : "▸"}
+                                </button>
+                              ) : (
+                                <span className="mt-0.5 w-3 shrink-0" />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setOpenGoalId(g.id)}
+                                className="text-left"
+                              >
+                                <span className="block font-medium text-fg hover:text-brand hover:underline">{g.objective}</span>
+                                {g.deliverable && (
+                                  <span className="block text-xs text-muted">{g.deliverable}</span>
+                                )}
+                                {goalTasks.length > 0 && (
+                                  <span className="mt-1 inline-block text-[11px] text-brand-soft">
+                                    {goalTasks.length} task{goalTasks.length === 1 ? "" : "s"}
+                                    {openTasks > 0 ? ` · ${openTasks} open` : " · all done"}
+                                  </span>
+                                )}
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3 py-3">
                             {ws ? (
@@ -309,6 +392,20 @@ export function RoadmapClient({
                             </button>
                           </td>
                         </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={9} className="p-0">
+                              <GoalTasks
+                                tasks={goalTasks}
+                                edges={edges}
+                                allTasks={tasks}
+                                ownerName={ownerName}
+                                onOpenTask={setOpenTaskId}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                       );
                     })}
                   </tbody>
@@ -384,6 +481,38 @@ export function RoadmapClient({
           </div>
         </form>
       </Modal>
+
+      {openGoal && !openTask && (
+        <GoalDetail
+          goal={openGoal}
+          tasks={tasks.filter((t) => t.goal_id === openGoal.id)}
+          edges={edges}
+          owners={owners}
+          workstreams={workstreams}
+          onClose={() => setOpenGoalId(null)}
+          onOpenTask={setOpenTaskId}
+          onEdit={(g) => {
+            setOpenGoalId(null);
+            openEdit(g);
+          }}
+        />
+      )}
+
+      {/* Keyed on the task id so following a blocker remounts with a fresh draft. */}
+      {openTask && (
+        <TaskDetail
+          key={openTask.id}
+          task={openTask}
+          goal={initialGoals.find((g) => g.id === openTask.goal_id) ?? null}
+          allTasks={tasks}
+          edges={edges}
+          comments={comments.filter((c) => c.task_id === openTask.id)}
+          owners={owners}
+          isAdmin={isAdmin}
+          onClose={() => setOpenTaskId(null)}
+          onOpenTask={setOpenTaskId}
+        />
+      )}
     </>
   );
 }

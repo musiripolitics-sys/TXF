@@ -8,10 +8,22 @@ import { Field, Input, Textarea, Select, FormActions } from "@/components/os/Mod
 import { shortDate } from "@/lib/bos";
 import { saveTaskReview } from "./actions";
 
+export type ReviewComment = { id: string; body: string; created_at: string; author: string | null };
+
 export type TaskReview = {
   task_id: string;
+  code: string | null;
   title: string;
+  description: string | null;
   completed_at: string | null;
+  due_date: string | null;
+  priority: string | null;
+  owner_name: string | null;
+  goal_code: string | null;
+  goal_objective: string | null;
+  reviewer_name: string | null;
+  reviewed_at: string | null;
+  comments: ReviewComment[];
   outcome: "pending" | "met" | "partial" | "missed";
   estimate_hours: number | null;
   actual_hours: number | null;
@@ -93,6 +105,15 @@ export function TaskReviewsClient({ reviews }: { reviews: TaskReview[] }) {
   );
 }
 
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10px] uppercase tracking-wider text-faint">{label}</dt>
+      <dd className="text-fg">{children}</dd>
+    </div>
+  );
+}
+
 function ReviewRow({ review }: { review: TaskReview }) {
   const [open, setOpen] = useState(review.outcome === "pending");
   const [saving, start] = useTransition();
@@ -129,6 +150,20 @@ function ReviewRow({ review }: { review: TaskReview }) {
   const act = form.actual_hours ? Number(form.actual_hours) : review.actual_hours;
   const variance = est != null && act != null ? act - est : null;
 
+  // Hours tell you the effort; this tells you whether it landed when it was
+  // meant to, which is the other half of how the work went.
+  const lateness = (() => {
+    if (!review.due_date || !review.completed_at) return null;
+    const days = Math.round(
+      (new Date(review.completed_at.slice(0, 10)).getTime() -
+        new Date(review.due_date.slice(0, 10)).getTime()) /
+        86400000,
+    );
+    if (days > 0) return { text: `${days} day${days === 1 ? "" : "s"} late`, cls: "text-red-600" };
+    if (days < 0) return { text: `${-days} day${days === -1 ? "" : "s"} early`, cls: "text-green-600" };
+    return { text: "on time", cls: "text-green-600" };
+  })();
+
   return (
     <Card className="!p-0">
       <button
@@ -139,10 +174,20 @@ function ReviewRow({ review }: { review: TaskReview }) {
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${OUTCOME_TONE[review.outcome]}`}>
           {OUTCOMES.find((o) => o.value === review.outcome)?.label}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{review.title}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-fg">
+            {review.code && <span className="mr-1.5 font-mono text-[11px] text-faint">{review.code}</span>}
+            {review.title}
+          </span>
+          <span className="block truncate text-[11px] text-faint">
+            {review.owner_name ?? "Unassigned"}
+            {review.goal_objective && ` · ${review.goal_code ?? ""} ${review.goal_objective}`}
+          </span>
+        </span>
         {review.completed_at && (
-          <span className="hidden shrink-0 text-xs text-faint sm:inline">
-            done {shortDate(review.completed_at)}
+          <span className="hidden shrink-0 text-right text-xs sm:block">
+            <span className="block text-faint">done {shortDate(review.completed_at)}</span>
+            {lateness && <span className={`block ${lateness.cls}`}>{lateness.text}</span>}
           </span>
         )}
         <span className="shrink-0 text-xs tabular-nums text-muted">
@@ -157,7 +202,66 @@ function ReviewRow({ review }: { review: TaskReview }) {
       </button>
 
       {open && (
-        <form onSubmit={submit} className="border-t border-line px-5 py-4">
+        <div className="border-t border-line px-5 py-4">
+          <div className="mb-4 grid gap-4 md:grid-cols-[1.1fr_1fr]">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                What the task asked for
+              </p>
+              <p className="text-xs leading-relaxed text-muted">
+                {review.description || "No description was written on this task."}
+              </p>
+
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <Fact label="Assignee">{review.owner_name ?? "Unassigned"}</Fact>
+                <Fact label="Priority">{review.priority ?? "—"}</Fact>
+                <Fact label="Due">{review.due_date ? shortDate(review.due_date) : "—"}</Fact>
+                <Fact label="Completed">
+                  {review.completed_at ? shortDate(review.completed_at) : "—"}
+                  {lateness && <span className={`ml-1 ${lateness.cls}`}>({lateness.text})</span>}
+                </Fact>
+                <Fact label="Goal">
+                  {review.goal_objective ? `${review.goal_code ?? ""} ${review.goal_objective}` : "Not on the roadmap"}
+                </Fact>
+                <Fact label="Reviewed by">
+                  {review.reviewer_name
+                    ? `${review.reviewer_name}${review.reviewed_at ? ` · ${shortDate(review.reviewed_at)}` : ""}`
+                    : "Not yet"}
+                </Fact>
+              </dl>
+            </div>
+
+            <div className="min-w-0">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                What was actually done ({review.comments.length})
+              </p>
+              {review.comments.length === 0 ? (
+                <p className="text-xs text-faint">
+                  No comments. Since the completion gate, work cannot be closed without one,
+                  so this task predates it.
+                </p>
+              ) : (
+                <ul className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {review.comments.map((c) => (
+                    <li key={c.id} className="rounded-lg bg-surface-2 px-2.5 py-1.5">
+                      <p className="text-[10px] text-faint">
+                        {c.author ?? "Someone"} · {shortDate(c.created_at)}
+                      </p>
+                      <p className="whitespace-pre-wrap text-xs text-fg">{c.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href={`/admin/os/tasks?task=${review.task_id}`}
+                className="mt-2 inline-block text-[11px] font-medium text-brand-soft hover:underline"
+              >
+                Open the task →
+              </Link>
+            </div>
+          </div>
+
+        <form onSubmit={submit} className="border-t border-line pt-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Outcome">
               <Select
@@ -202,6 +306,7 @@ function ReviewRow({ review }: { review: TaskReview }) {
           </div>
           <FormActions onCancel={() => setOpen(false)} saving={saving} submitLabel="Save review" />
         </form>
+        </div>
       )}
     </Card>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "@/components/Toast";
 import { Modal, Field, Input, Textarea, Select, FormActions } from "@/components/os/Modal";
 import { Card, PriorityBadge, EmptyState } from "@/components/os/ui";
@@ -20,7 +21,8 @@ import {
 } from "@/lib/bos";
 import { saveTask, deleteTask, setTaskStatus } from "../actions";
 import type { Task, TaskView } from "./types";
-import type { Workstream, OwnerOption } from "../roadmap/types";
+import type { Workstream, OwnerOption, Goal, RoadmapTask, TaskEdge } from "../roadmap/types";
+import { TaskDetail, type TaskComment } from "../roadmap/TaskDetail";
 
 const blank = {
   title: "",
@@ -89,16 +91,28 @@ export function TasksClient({
   workstreams,
   goals,
   owners,
+  allTasks,
+  edges,
+  comments,
+  isAdmin,
   initialView,
 }: {
   initialTasks: Task[];
   workstreams: Workstream[];
-  goals: { id: string; objective: string }[];
+  goals: Goal[];
   owners: OwnerOption[];
+  allTasks: RoadmapTask[];
+  edges: TaskEdge[];
+  comments: TaskComment[];
+  isAdmin: boolean;
   initialView: TaskView;
 }) {
   const [view, setView] = useState<TaskView>(initialView);
   const [open, setOpen] = useState(false);
+  // A review links here as ?task=<id>; open it rather than leaving the reader
+  // to find one row among forty-six.
+  const params = useSearchParams();
+  const [detailId, setDetailId] = useState<string | null>(() => params.get("task"));
   const [editing, setEditing] = useState<Task | null>(null);
   const [form, setForm] = useState({ ...blank });
   const [pending, start] = useTransition();
@@ -114,6 +128,15 @@ export function TasksClient({
   }, [initialTasks]);
 
   const rows = initialTasks.filter((t) => matchesView(t, view));
+
+  // allTasks first: it is the wider list, so a blocker outside this view — or
+  // outside this employee's own work — still opens, and it is the one that
+  // carries a sane approval_state on a database without 0020.
+  const detailTask: RoadmapTask | null = detailId
+    ? (allTasks.find((t) => t.id === detailId) ??
+       initialTasks.find((t) => t.id === detailId) ??
+       null)
+    : null;
 
   const openNew = () => {
     setEditing(null);
@@ -246,7 +269,12 @@ export function TasksClient({
                 return (
                   <tr key={t.id} className="border-b border-line/60 last:border-0 hover:bg-surface-2">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-fg">{t.title}</p>
+                      <button
+                        onClick={() => setDetailId(t.id)}
+                        className="block text-left font-medium text-fg hover:text-brand hover:underline"
+                      >
+                        {t.title}
+                      </button>
                       {t.description && <p className="text-xs text-muted">{t.description}</p>}
                     </td>
                     <td className="px-3 py-3">
@@ -369,6 +397,22 @@ export function TasksClient({
           </div>
         </form>
       </Modal>
+
+      {/* Keyed on the id so following a blocker remounts with a fresh draft. */}
+      {detailTask && (
+        <TaskDetail
+          key={detailTask.id}
+          task={detailTask}
+          goal={goals.find((g) => g.id === detailTask.goal_id) ?? null}
+          allTasks={allTasks}
+          edges={edges}
+          comments={comments.filter((c) => c.task_id === detailTask.id)}
+          owners={owners}
+          isAdmin={isAdmin}
+          onClose={() => setDetailId(null)}
+          onOpenTask={setDetailId}
+        />
+      )}
     </>
   );
 }
