@@ -13,6 +13,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Routes are case-sensitive, but people type /techservice. Send any
+  // spelling of it to the real page. (A next.config redirect can't do this:
+  // its matching ignores case, so it would redirect the page to itself.)
+  if (pathname !== "/Techservice" && pathname.toLowerCase() === "/techservice") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/Techservice";
+    return NextResponse.redirect(url, 308);
+  }
+
   return await updateSession(request);
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { serviceClient } from "@/lib/supabase/service";
 import { sendPaymentReceipt } from "@/lib/email";
 import { membershipVerifySchema, firstError } from "@/lib/validation";
 
@@ -58,8 +59,19 @@ export async function POST(request: Request) {
     // Same source of truth as create-order: the DB price.
     const amount = plan.price_amount;
 
-    // 2. Insert into payments table
-    const { error: paymentError } = await supabase.from("payments").insert({
+    // 2. Insert into payments table, as the service role. The signature is
+    // verified and the price comes from the plan, so this is the trusted half;
+    // running it as the signed-in user is what forced public.payments to
+    // accept a client-written status 'paid'.
+    const admin = serviceClient();
+    if (!admin) {
+      console.error("verify: SUPABASE_SERVICE_ROLE_KEY is not set");
+      return NextResponse.json(
+        { error: "Payments aren't configured on the server." },
+        { status: 500 },
+      );
+    }
+    const { error: paymentError } = await admin.from("payments").insert({
       user_id: user.id,
       stream: "membership",
       amount,

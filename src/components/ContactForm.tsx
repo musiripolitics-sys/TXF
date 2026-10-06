@@ -20,16 +20,22 @@ const topics = [
 export function ContactForm() {
   const searchParams = useSearchParams();
   const role = searchParams?.get("role");
+  // /Techservice sends project enquiries here with ?enquiry=project.
+  const enquiry = searchParams?.get("enquiry");
 
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    topic: "",
-    message: "",
-  });
+  const [form, setForm] = useState(() =>
+    enquiry === "project" && !role
+      ? {
+          name: "",
+          email: "",
+          topic: "General enquiry",
+          message: "Hi TXF — I'd like to talk about a design / website project.\n\nWhat I'm planning: ",
+        }
+      : { name: "", email: "", topic: "", message: "" },
+  );
 
   useEffect(() => {
     if (role) {

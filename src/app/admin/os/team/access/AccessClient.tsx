@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { createContext, useContext, useMemo, useState, useTransition } from "react";
 import { toast } from "@/components/Toast";
 import { Card, EmptyState } from "@/components/os/ui";
-import { createEmployee, offboardEmployee, setModuleAccess } from "../../actions";
+import {
+  createEmployee, offboardEmployee, setModuleAccess, setProductEnabled,
+} from "../../actions";
 
 export type PersonRow = {
   id: string;
@@ -16,11 +18,26 @@ export type PersonRow = {
   sections: string[];
 };
 
-const SECTIONS = [
-  ["plan", "Plan"], ["events", "Events"], ["money", "Money"], ["grow", "Grow"],
-  ["marketing", "Marketing"], ["team", "Team"], ["product", "Product"],
-  ["govern", "Govern"], ["insights", "Insights"],
-] as const;
+export type ProductRow = {
+  key: string;
+  name: string;
+  description: string | null;
+  is_enabled: boolean;
+};
+
+/**
+ * The product catalogue, read from public.products by the page above.
+ *
+ * It used to be a constant here — the fourth copy of the same nine keys,
+ * after os-access.ts, the OS actions and a CHECK constraint in migration
+ * 0016. Stage 1 of the BOS Product Model plan left one copy, in the database.
+ *
+ * Passed by context rather than threaded as a prop, because three separate
+ * components in this file need it and none of them needs anything else.
+ */
+const ProductsCtx = createContext<ProductRow[]>([]);
+/** Only the products that are switched on. Granting a disabled one is pointless. */
+const useGrantable = () => useContext(ProductsCtx).filter((p) => p.is_enabled);
 
 /**
  * The team, and what each of them can open.
@@ -34,8 +51,19 @@ const SECTIONS = [
  * will see. Admins are listed but not editable: they always have everything,
  * and letting one be edited invites locking the last admin out.
  */
-export function AccessClient({ people, migrated }: { people: PersonRow[]; migrated: boolean }) {
+export function AccessClient({
+  people,
+  products,
+  migrated,
+  productsMigrated,
+}: {
+  people: PersonRow[];
+  products: ProductRow[];
+  migrated: boolean;
+  productsMigrated: boolean;
+}) {
   const [saving, start] = useTransition();
+  const grantable = products.filter((p) => p.is_enabled);
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -76,7 +104,7 @@ export function AccessClient({ people, migrated }: { people: PersonRow[]; migrat
     onCancel: () => setOpenId(null),
     onToggle: (sec: string) =>
       setDraft((d) => (d.includes(sec) ? d.filter((x) => x !== sec) : [...d, sec])),
-    onSelectAll: () => setDraft(SECTIONS.map(([k]) => k)),
+    onSelectAll: () => setDraft(grantable.map((pr) => pr.key)),
     onClear: () => setDraft([]),
     onSave: () => {
       run(() => setModuleAccess(p.id, draft), "Access updated");
@@ -86,7 +114,7 @@ export function AccessClient({ people, migrated }: { people: PersonRow[]; migrat
   });
 
   return (
-    <>
+    <ProductsCtx.Provider value={products}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-2xl font-bold tracking-tight text-fg">Team &amp; Access</h1>
         <div className="flex items-center gap-2">
@@ -163,7 +191,116 @@ export function AccessClient({ people, migrated }: { people: PersonRow[]; migrat
           ))}
         </div>
       </Section>
-    </>
+
+      <Products
+        products={products}
+        migrated={productsMigrated}
+        counts={people.reduce<Record<string, number>>((a, p) => {
+          for (const k of p.sections) a[k] = (a[k] ?? 0) + 1;
+          return a;
+        }, {})}
+        saving={saving}
+        onToggle={(key, enabled) =>
+          run(() => setProductEnabled(key, enabled), enabled ? "Product enabled" : "Product disabled")
+        }
+      />
+    </ProductsCtx.Provider>
+  );
+}
+
+/**
+ * The product catalogue, and the switch for each one.
+ *
+ * It lives on this page rather than behind a section guard on purpose: off
+ * means off for everyone, admins included, so a toggle reachable only through
+ * a guarded page could be used to lock the last admin out of un-toggling it.
+ * This page is guarded by isAdmin directly.
+ *
+ * Disabling leaves grants alone, so re-enabling restores exactly who had it.
+ * The count beside each product is how many employees hold it, which is the
+ * number that tells you whether switching it off will be noticed.
+ */
+function Products({
+  products,
+  migrated,
+  counts,
+  saving,
+  onToggle,
+}: {
+  products: ProductRow[];
+  migrated: boolean;
+  counts: Record<string, number>;
+  saving: boolean;
+  onToggle: (key: string, enabled: boolean) => void;
+}) {
+  return (
+    <div className="mb-6">
+      <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+        Products ({products.filter((p) => p.is_enabled).length} of {products.length} on)
+      </h2>
+
+      {!migrated ? (
+        <Card>
+          <p className="text-sm text-muted">
+            Run migration <span className="font-mono">0033_products.sql</span> in Supabase to
+            manage the product catalogue. Until then the nine built-in products are all on and
+            cannot be renamed or switched off.
+          </p>
+        </Card>
+      ) : (
+        <Card className="p-0">
+          <div className="divide-y divide-line">
+            {products.map((pr) => {
+              const held = counts[pr.key] ?? 0;
+              return (
+                <div key={pr.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-sm font-medium text-fg">
+                      {pr.name}
+                      <span className="font-mono text-[11px] font-normal text-faint">{pr.key}</span>
+                      {!pr.is_enabled && (
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                          Off
+                        </span>
+                      )}
+                    </p>
+                    {pr.description && (
+                      <p className="mt-0.5 truncate text-xs text-muted">{pr.description}</p>
+                    )}
+                  </div>
+
+                  <span className="shrink-0 text-xs text-faint">
+                    {held === 0
+                      ? "admins only"
+                      : `${held} employee${held === 1 ? "" : "s"}`}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => onToggle(pr.key, !pr.is_enabled)}
+                    aria-pressed={pr.is_enabled}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      pr.is_enabled
+                        ? "border-line text-muted hover:border-red-300 hover:text-red-600"
+                        : "border-brand/40 bg-brand/10 text-brand-soft hover:bg-brand/20"
+                    }`}
+                  >
+                    {pr.is_enabled ? "Turn off" : "Turn on"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <p className="mt-2 max-w-2xl text-xs text-muted">
+        Turning a product off hides it from every sidebar and refuses its pages
+        to everyone, admins included. Grants are kept, so turning it back on
+        restores exactly who had it.
+      </p>
+    </div>
   );
 }
 
@@ -186,6 +323,7 @@ function AddEmployee({
     start_date: "",
   });
   const [sections, setSections] = useState<string[]>([]);
+  const grantable = useGrantable();
   const field =
     "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus:border-brand";
 
@@ -219,7 +357,7 @@ function AddEmployee({
         Sections they can open
       </p>
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
-        {SECTIONS.map(([k, label]) => {
+        {grantable.map(({ key: k, name: label }) => {
           const on = sections.includes(k);
           return (
             <button
@@ -295,6 +433,7 @@ function PersonLine({
   onOffboard: () => void;
 }) {
   const isAdminRow = p.role === "admin";
+  const grantable = useGrantable();
 
   return (
     <div className="px-4 py-3">
@@ -337,11 +476,13 @@ function PersonLine({
 
       {!editing && !isAdminRow && p.sections.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
-          {SECTIONS.filter(([k]) => p.sections.includes(k)).map(([k, label]) => (
-            <span key={k} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
-              {label}
-            </span>
-          ))}
+          {grantable
+            .filter((pr) => p.sections.includes(pr.key))
+            .map((pr) => (
+              <span key={pr.key} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+                {pr.name}
+              </span>
+            ))}
         </div>
       )}
 
@@ -361,7 +502,7 @@ function PersonLine({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {SECTIONS.map(([k, label]) => {
+            {grantable.map(({ key: k, name: label }) => {
               const on = draft.includes(k);
               return (
                 <button

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState } from "react";
 import { eventCategories } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
@@ -168,12 +170,12 @@ export function HostForm() {
           >
             Submit another event
           </button>
-          <a
+          <Link
             href="/events"
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-soft hover:-translate-y-0.5 transition-all duration-200 shadow-md"
           >
             Browse live events
-          </a>
+          </Link>
         </div>
       </div>
     );

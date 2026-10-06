@@ -66,7 +66,21 @@ function coerce(config: (typeof MODULES)[string], raw: Raw) {
   return { row };
 }
 
-export async function saveRecord(moduleKey: string, id: string | null, raw: Raw) {
+/**
+ * What a record action tells the caller. Declared, rather than inferred,
+ * because requireAdmin returns a union whose error branch carries an optional
+ * `error` — which `"error" in gate` cannot narrow away, so the inferred return
+ * type carried shapes with no `error` at all and ModuleTable could not read
+ * res.error. Optional fields rather than a discriminated union, because that
+ * is the shape every caller in the OS already reads.
+ */
+export type RecordResult = { error?: string; success?: boolean };
+
+export async function saveRecord(
+  moduleKey: string,
+  id: string | null,
+  raw: Raw,
+): Promise<RecordResult> {
   const gate = await requireAdmin();
   if ("error" in gate) return gate;
 
@@ -95,7 +109,7 @@ export async function saveRecord(moduleKey: string, id: string | null, raw: Raw)
   return { success: true };
 }
 
-export async function deleteRecord(moduleKey: string, id: string) {
+export async function deleteRecord(moduleKey: string, id: string): Promise<RecordResult> {
   const gate = await requireAdmin();
   if ("error" in gate) return gate;
 

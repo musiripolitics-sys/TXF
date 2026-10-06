@@ -19,6 +19,7 @@ const columns = [
     links: [
       { label: "Chapters", href: "/communities" },
       { label: "About Us", href: "/about" },
+      { label: "TXF Tech Services", href: "/Techservice" },
       { label: "Careers", href: "/careers" },
       { label: "Partners", href: "/#partners" },
       { label: "Contact", href: "/contact" },

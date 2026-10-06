@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { serviceClient } from "@/lib/supabase/service";
 import { sendRegistrationConfirmation, sendPaymentReceipt } from "@/lib/email";
 import { ticketVerifySchema, firstError } from "@/lib/validation";
 
@@ -77,8 +78,21 @@ export async function POST(request: Request) {
     }
     const finalAmount = order.total;
 
+    // The signature is verified and the order was priced server-side, so what
+    // follows is the trusted half and runs as the service role. It used to run
+    // as the signed-in user, which is why public.payments had to let a client
+    // write status 'paid' — and therefore let anyone write it.
+    const admin = serviceClient();
+    if (!admin) {
+      console.error("ticket-verify: SUPABASE_SERVICE_ROLE_KEY is not set");
+      return NextResponse.json(
+        { error: "Payments aren't configured on the server." },
+        { status: 500 },
+      );
+    }
+
     // 1. Log the payment (idempotent on provider_ref).
-    const { data: payment, error: paymentError } = await supabase
+    const { data: payment, error: paymentError } = await admin
       .from("payments")
       .insert({
         user_id: user.id,
@@ -103,7 +117,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Issue the tickets held by the order (idempotent, links the payment).
-    const { data: fulfilled, error: regError } = await supabase.rpc("fulfil_order", {
+    const { data: fulfilled, error: regError } = await admin.rpc("fulfil_order", {
       p_order_id: order.id,
       p_payment_id: payment.id,
     });
@@ -123,7 +137,7 @@ export async function POST(request: Request) {
           key_secret,
         });
         await rzp.payments.refund(razorpay_payment_id, { amount: finalAmount });
-        await supabase
+        await admin
           .from("payments")
           .update({ status: "refunded" })
           .eq("id", payment.id);

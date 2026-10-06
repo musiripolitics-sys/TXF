@@ -1,0 +1,672 @@
+{
+  "note": "Every SECURITY DEFINER function in public must appear here. A function in neither this file nor the database fails supabase/tests/tenancy-definers.test.mjs. The classification is for prioritising Stage 5; the guard only cares that nothing is unclassified.",
+  "stage": "7",
+  "groups": {
+    "A": "Reads that span rows. Set-returning or aggregating. With no tenant predicate they return every tenant's data to any caller. Fixed last, once the isolation test from Stage 6 exists.",
+    "B": "Predicates about a row. Each needs 'and is this row in the caller's tenant'.",
+    "C": "Mutators that act on a row named by an argument. Each already asks whether the caller may; each now also needs whether the row is theirs.",
+    "D": "Triggers. Each must carry tenant_id through, or it writes rows no policy matches.",
+    "E": "Predicates about the caller's role. Most-called, so changed first: role becomes a property of a membership."
+  },
+  "scopes": {
+    "all": "No filter on the caller at all.",
+    "row": "Filtered by an id passed in, which is not checked for ownership.",
+    "caller": "Filtered to auth.uid(), so it leaks nothing today."
+  },
+  "functions": {
+    "attended(p_event_id uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Whether the caller attended an event. SCOPED in 0040: a tenant predicate on the row lookup.",
+      "scopedIn": "0040"
+    },
+    "award_credits(p_user uuid, p_amount integer, p_reason text, p_event_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Writes credits to any user id. No ownership check at all. SCOPED in 0042: the target must be an active member of the caller tenant. p_user was never checked, so any caller could credit any account in the database. users.points stays global, which is a data-model question for later.",
+      "scopedIn": "0042"
+    },
+    "bos_accept_invitation(p_token uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "scopedIn": "0047",
+      "note": "Added in 0047. Definer because the invitee cannot read tenant_invitations - they present a token and the function looks it up for them. The invitation is to an ADDRESS: signing in as somebody else and presenting the token is refused, so a forwarded link does not hand over a seat."
+    },
+    "bos_can_access(p_section text)": {
+      "group": "B",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Answers whether the caller has a section. Becomes per-tenant in Stage 7. SCOPED in 0040: the grant lookup is scoped, so being granted Plan at one business no longer opens the door at every business.",
+      "scopedIn": "0040"
+    },
+    "bos_can_see_goal(p_goal uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "As above, for goals. SCOPED in 0040: a tenant predicate on the row lookup. CORRECTED in 0046: 0040 scoped every exists() branch and left is_admin() standing alone at the front, so the first branch short-circuited and ANY admin passed for ANY row. An outer tenant gate now requires the row to be in the caller business before any branch is consulted. Found by the Stage 6 isolation test on its first run.",
+      "scopedIn": "0046"
+    },
+    "bos_can_see_task(p_task uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "The visibility predicate behind the Plan section. Needs a tenant clause. SCOPED in 0040: predicates on all six branches, and the is_admin short circuit above them is scoped too - which is why B and E had to be done together. CORRECTED in 0046: 0040 scoped every exists() branch and left is_admin() standing alone at the front, so the first branch short-circuited and ANY admin passed for ANY row. An outer tenant gate now requires the row to be in the caller business before any branch is consulted. Found by the Stage 6 isolation test on its first run.",
+      "scopedIn": "0046"
+    },
+    "bos_current_tenant()": {
+      "group": "B",
+      "scope": "caller",
+      "returns": "uuid",
+      "setReturning": false,
+      "note": "Added in 0034. The tenant the caller is acting in, which every Stage 4 policy compares against. A tenant_id claim in the token wins but is checked against membership first, so a claim naming someone else tenant returns null rather than granting it. Definer for the same reason is_admin is: it is called from inside policies and nesting a policy evaluation in every one of them buys nothing. Corrected in 0041: a claim that is present and refused now returns null rather than falling back to the default tenant.",
+      "scopedIn": "0034",
+      "bornTenantAware": true
+    },
+    "bos_event_slug(p_title text, p_id uuid)": {
+      "group": "A",
+      "scope": "all",
+      "returns": "text",
+      "setReturning": false,
+      "note": "Scans events to make a slug unique. Should be unique per tenant, not per platform. SCOPED in 0038: the uniqueness scan is per tenant, matching the composite slug constraint from 0036.",
+      "scopedIn": "0038"
+    },
+    "bos_govern_attention()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Set-returning, no caller filter of any kind. Returns every governed record that needs attention. Without a tenant predicate it returns every tenant's. SCOPED in 0038: a tenant predicate on each of the four union branches.",
+      "scopedIn": "0038"
+    },
+    "bos_guard_contact_rate()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Enforces the contact form ceiling. ADDRESSED in 0045: scoped through bos_rate_limit, whose key carries the tenant since 0044, so both the per-address limit and the hourly ceiling are per business.",
+      "scopedIn": "0045"
+    },
+    "bos_guard_newsletter_rate()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Enforces the newsletter ceiling. ADDRESSED in 0045: scoped through bos_rate_limit, as bos_guard_contact_rate.",
+      "scopedIn": "0045"
+    },
+    "bos_guard_task_completion()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Blocks completion without an assignee, a comment and approval. ADDRESSED in 0045: both task_comments checks are scoped.",
+      "scopedIn": "0045"
+    },
+    "bos_invite_to_tenant(p_email text, p_role text, p_sections text[])": {
+      "group": "C",
+      "scope": "caller",
+      "returns": "uuid",
+      "setReturning": false,
+      "scopedIn": "0047",
+      "note": "Added in 0047. Invites an address to the CALLER business only - the tenant comes from bos_request_tenant, never from an argument. Re-inviting issues a new token, so a link that leaked stops working."
+    },
+    "bos_is_staff()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "As above. SCOPED in 0040: a tenant predicate on the row lookup. FALLBACK REMOVED in 0047: the membership is the only authority now. Safe because bos_mirror_primary_role keeps tenant_members.role in step with users.primary_role, which is what the fallback existed to tolerate.",
+      "scopedIn": "0047"
+    },
+    "bos_mirror_primary_role()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "scopedIn": "0047",
+      "note": "Added in 0047. Mirrors a users.primary_role change onto every membership that still agreed with the OLD value, leaving a role somebody set deliberately per business alone. This is what made the legacy fallback in is_admin unnecessary, and it retires with primary_role itself."
+    },
+    "bos_my_sections()": {
+      "group": "B",
+      "scope": "caller",
+      "returns": "text[]",
+      "setReturning": false,
+      "note": "The nav's source of truth. Becomes per-tenant. SCOPED in 0040: a tenant predicate on the row lookup.",
+      "scopedIn": "0040"
+    },
+    "bos_my_tenants()": {
+      "group": "B",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "scopedIn": "0047",
+      "note": "Added in 0047. The businesses the caller belongs to, and which one they are acting in. DELIBERATELY not scoped to one tenant - listing them across tenants is what makes switching possible, which is also why tenant_members has no isolation policy. It answers only about auth.uid()."
+    },
+    "bos_notify_task_decision()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Writes a notification, so it must carry the tenant through. ADDRESSED in 0045: the notification insert is inlined for the same reason.",
+      "scopedIn": "0045"
+    },
+    "bos_notify_task_review()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. As above. ADDRESSED in 0045: the task lookup is scoped, and the notification insert is INLINED rather than calling notify - notify takes its tenant from the request, which for the cron or the webhook is the default tenant, so a notification about another business task would have been filed in the wrong one.",
+      "scopedIn": "0045"
+    },
+    "bos_open_task_review()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Opens a review row. ADDRESSED in 0045: the review carries the task tenant.",
+      "scopedIn": "0045"
+    },
+    "bos_publish_sop(p_version uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Publishes a version by id. SCOPED in 0042: the version lookup and both updates are scoped.",
+      "scopedIn": "0042"
+    },
+    "bos_rate_limit(p_bucket text, p_key text, p_limit integer, p_window interval)": {
+      "group": "C",
+      "scope": "all",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Platform infrastructure. Stays global, but the buckets should carry a tenant so one tenant cannot exhaust another's allowance. SCOPED in 0044: the KEY carries the tenant. rate_limits stays a platform table with no tenant_id - the rows are counters, not records - but two businesses sharing an address shared an allowance, so one could be exhausted by the other being spammed.",
+      "scopedIn": "0044"
+    },
+    "bos_request_tenant()": {
+      "group": "B",
+      "scope": "all",
+      "returns": "uuid",
+      "setReturning": false,
+      "note": "Added in 0037. The tenant every isolation policy compares against: the caller current tenant, else the default tenant, else the only tenant if there is exactly one. Scope is all because the fallbacks answer without reference to who is asking - which is required, since an anonymous visitor on the public site has no membership and a restrictive policy comparing tenant_id against NULL would hide every row from everybody. The consequence is that the public website can only serve the default tenant until a request carries which tenant it is for. Corrected in 0041: a claim that is present and refused now returns null rather than falling back to the default tenant.",
+      "scopedIn": "0037",
+      "bornTenantAware": true
+    },
+    "bos_section_status()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Per-section counts for the nav. Counts would include other tenants' rows. SCOPED in 0039: a tenant predicate in each of the five dynamic queries. Kept definer because it is gated on bos_is_staff, and as an invoker an employee counts would shrink to what they can read, which is a different number from the one the nav asks for.",
+      "scopedIn": "0039"
+    },
+    "bos_seed_tenant_membership()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Added in 0034. Joins a new account to the default tenant, so membership does not rot between now and Stage 7. Temporary: once invitations exist, joining a tenant stops being automatic and this goes away.",
+      "scopedIn": "0034",
+      "bornTenantAware": true
+    },
+    "bos_set_module_access(p_user uuid, p_sections text[])": {
+      "group": "C",
+      "scope": "row",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Grants sections to a user. Must not reach a user outside the caller's tenant. SCOPED in 0042: the delete, the insert and the count are all scoped, and the target must be a member. Without the tenant on the DELETE, revoking a section in one business revoked it in every business the person belonged to.",
+      "scopedIn": "0042"
+    },
+    "bos_sop_current(p_sop uuid)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "uuid",
+      "setReturning": false,
+      "note": "Resolves a SOP to its live version by id. SCOPED in 0039: scoped to the tenant.",
+      "scopedIn": "0039"
+    },
+    "bos_switch_tenant(p_tenant uuid)": {
+      "group": "C",
+      "scope": "caller",
+      "returns": "uuid",
+      "setReturning": false,
+      "scopedIn": "0047",
+      "note": "Added in 0047. Writes users.active_tenant_id after refusing any tenant the caller is not an active member of. That refusal is what makes the column safe to trust: the client names a tenant, the database decides."
+    },
+    "bos_sync_roadmap_tasks()": {
+      "group": "C",
+      "scope": "all",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Rewrites roadmap task links across the table. SCOPED in 0044: the goals read, the duplicate check and the dependency mirror are all scoped.",
+      "scopedIn": "0044"
+    },
+    "bos_sync_task_approval()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Keeps the approvals inbox in step. ADDRESSED in 0045: the delete, the insert and the update are scoped to the task tenant.",
+      "scopedIn": "0045"
+    },
+    "bos_task_completion_block(p_task uuid)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "text",
+      "setReturning": false,
+      "note": "Explains why a task cannot complete. Reveals the task's state to any caller. SCOPED in 0039: scoped to the tenant.",
+      "scopedIn": "0039"
+    },
+    "bos_tenant_default()": {
+      "group": "B",
+      "scope": "all",
+      "returns": "uuid",
+      "setReturning": false,
+      "note": "Added in 0035 as the column default on all 87 tenant-owned tables. Returns bos_current_tenant(), or the default tenant when there is no caller - which is the case for the cron job, the payment webhook and employee onboarding, all of which write as the service role. Scope is all rather than caller because the fallback branch answers without reference to who is asking; it reveals only the default tenant id, which is not a secret. Definer because it reads tenants, and a service-role insert has no membership to read it with. Stage 5 should narrow the fallback once more than one tenant exists, since a service-role write then has to be told which tenant it is for.",
+      "scopedIn": "0035",
+      "bornTenantAware": true
+    },
+    "bos_tenant_role(p_tenant uuid)": {
+      "group": "B",
+      "scope": "caller",
+      "returns": "user_role",
+      "setReturning": false,
+      "note": "Added in 0034. The caller role in a tenant. Definer by necessity, not convenience: a policy on tenant_members asking this question by selecting from tenant_members would recurse through its own policy forever, and bypassing RLS inside the helper is what breaks the cycle. Filtered to auth.uid(), so it can answer about nobody else.",
+      "scopedIn": "0034",
+      "bornTenantAware": true
+    },
+    "bos_track_changes()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger on six governed tables. Writes govern_changes, which must inherit the row's tenant or the history becomes invisible. ADDRESSED in 0045: writes new.tenant_id explicitly. A log row that inherited the REQUEST tenant would be invisible to the business whose record changed, leaving a hole in the history.",
+      "scopedIn": "0045"
+    },
+    "bos_user_directory()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Returns the whole staff directory. Role-gated, so an employee of tenant B would see tenant A's people. SCOPED in 0038: joined through tenant_members, and the role column now reports the role held in THIS tenant.",
+      "scopedIn": "0038"
+    },
+    "can_read_community(p_community uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Gate for community reads. SCOPED in 0040: a tenant predicate on the row lookup. CORRECTED in 0046: 0040 scoped every exists() branch and left is_admin() standing alone at the front, so the first branch short-circuited and ANY admin passed for ANY row. An outer tenant gate now requires the row to be in the caller business before any branch is consulted. Found by the Stage 6 isolation test on its first run.",
+      "scopedIn": "0046"
+    },
+    "cancel_registration(p_registration_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Cancels by id. SCOPED in 0043: the registration, event and waitlist lookups are scoped, with a service-role exception. This is the function the Stage 4 suite caught deleting another business attendee outright.",
+      "scopedIn": "0043"
+    },
+    "check_in_ticket(p_code text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Admits an admin, the event host, or anyone with the Events section. None of those stops another tenant's admin checking in your attendee. SCOPED in 0043: the ticket lookup is scoped. Codes stay globally unique on purpose, so the lookup always found the right row - the hole was the permission test below it, which admitted any admin without asking whose event it was. The friendly message it already returned is now true.",
+      "scopedIn": "0043"
+    },
+    "community_leads(p_community uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Whether the caller leads a community. SCOPED in 0040: a tenant predicate on the row lookup. CORRECTED in 0046: 0040 scoped every exists() branch and left is_admin() standing alone at the front, so the first branch short-circuited and ANY admin passed for ANY row. An outer tenant gate now requires the row to be in the caller business before any branch is consulted. Found by the Stage 6 isolation test on its first run.",
+      "scopedIn": "0046"
+    },
+    "create_pending_order(p_event_id uuid, p_ticket_type_id uuid, p_quantity integer, p_buyer_name text, p_buyer_email text, p_buyer_phone text, p_promo_code text, p_user_id uuid, p_answers jsonb)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Creates an order against an event id. SCOPED in 0043: the event and ticket type lookups and both stock updates are scoped, and the order carries the tenant explicitly.",
+      "scopedIn": "0043"
+    },
+    "decide_approval(p_id uuid, p_decision text, p_comments text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Approves by id. SCOPED in 0044: the update is scoped.",
+      "scopedIn": "0044"
+    },
+    "decide_host(p_user_id uuid, p_approve boolean)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Approves a host application. SCOPED in 0042: writes tenant_members.role for the caller tenant instead of users.primary_role, which was one field for every business. users.host_status is still written because the public site reads it, and retires in Stage 7.",
+      "scopedIn": "0042"
+    },
+    "ensure_group_seed_post(p_event_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Writes a seed post for an event. SCOPED in 0044: the duplicate check and the event lookup are scoped, and the author fallback reads tenant_members instead of the platform admin list.",
+      "scopedIn": "0044"
+    },
+    "event_attendance(p_event_ids uuid[])": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Set-returning, keyed by ids with no ownership check on them. Pass another tenant's event ids and it answers. SCOPED in 0038: the registrations are filtered, which is what makes another tenant event ids answer zero.",
+      "scopedIn": "0038"
+    },
+    "expire_pending_orders()": {
+      "group": "C",
+      "scope": "all",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Sweeps every pending order. Run by the daily job, so it should stay global but must not be callable per tenant. SCOPED in 0042: DELIBERATELY cross-tenant when there is no auth.uid(), which is how the daily Netlify job runs it, and scoped to the caller tenant otherwise. Scoping it unconditionally would have used bos_request_tenant fallback and quietly stopped it sweeping every business but the default one.",
+      "scopedIn": "0042"
+    },
+    "fulfil_order(p_order_id uuid, p_payment_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Completes a payment by id. No caller check at all. SCOPED in 0043: takes the tenant from the ORDER rather than the request, because the Razorpay webhook runs as the service role and has no membership - bos_request_tenant would have handed it the default tenant. Also carries a SECURITY FIX unrelated to tenancy: the function never checked the payment, so create_pending_order followed by fulfil_order(order_id, null) issued free tickets for a paid event. A paid order now needs a paid payment row of at least its total, in its own tenant, unless the caller is the service role. The promo redemption is inlined against the order tenant for the same webhook reason.",
+      "scopedIn": "0043"
+    },
+    "get_all_host_earnings()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Every host's money. The clearest cross-tenant read in the system. SCOPED in 0038: payments, events and payouts all scoped.",
+      "scopedIn": "0038"
+    },
+    "get_directory()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Set-returning, no filter. Reads the member directory. SCOPED in 0038: joined through tenant_members; the Elite check is tenant-scoped too.",
+      "scopedIn": "0038"
+    },
+    "get_event_stats(p_event_id uuid)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Aggregates one event. The event id is not checked for ownership. SCOPED in 0039: the event lookup is scoped, so another business event raises EVENT_NOT_FOUND rather than reporting its takings.",
+      "scopedIn": "0039"
+    },
+    "get_host_earnings()": {
+      "group": "A",
+      "scope": "caller",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Filtered to auth.uid(), so it leaks nothing today. It still needs scoping once one person hosts in two tenants. SCOPED in 0039: scoped. It leaked nothing, being filtered to auth.uid(), but one person hosting in two businesses would have been shown a merged balance.",
+      "scopedIn": "0039"
+    },
+    "get_organizer(p_id uuid)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Reads a user profile by id. No ownership check. SCOPED in 0039: joined through tenant_members, and the role now comes from the membership.",
+      "scopedIn": "0039"
+    },
+    "get_top_members(p_limit integer)": {
+      "group": "A",
+      "scope": "all",
+      "returns": "record",
+      "setReturning": true,
+      "note": "Leaderboard across all members. Would mix tenants into one ranking. SCOPED in 0038: joined through tenant_members, so each business has its own leaderboard. users.points stays global, which is a data-model question for later.",
+      "scopedIn": "0038"
+    },
+    "handle_new_user()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger on auth.users. Creates the public.users row, so it decides which tenant a new account joins. ADDRESSED in 0045: nothing to scope. public.users is global, and the guest-registration claim is deliberately cross-tenant - the account belongs to the person, so a registration they made at any business is theirs.",
+      "scopedIn": "0045"
+    },
+    "is_admin()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "The most-called function in the system. Becomes a question about a membership, not a user. SCOPED in 0040: reads tenant_members for the tenant this request is about. Being an admin of one business now grants nothing in another. A legacy fallback to users.primary_role applies ONLY inside the default tenant, so a drifted role cannot lock anybody out of Techxfluence and a platform-wide admin flag cannot leak admin sideways into a business someone merely belongs to. FALLBACK REMOVED in 0047: the membership is the only authority now. Safe because bos_mirror_primary_role keeps tenant_members.role in step with users.primary_role, which is what the fallback existed to tolerate.",
+      "scopedIn": "0047"
+    },
+    "is_community_member(p_community uuid)": {
+      "group": "B",
+      "scope": "row",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Membership predicate. SCOPED in 0040: a tenant predicate on the row lookup.",
+      "scopedIn": "0040"
+    },
+    "is_employee()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "As above. SCOPED in 0040: now delegates to bos_is_staff. The two asked the same question in two slightly different ways, which is one way for them to drift apart.",
+      "scopedIn": "0040"
+    },
+    "is_host()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "As above. SCOPED in 0040: a tenant predicate on the row lookup. FALLBACK REMOVED in 0047: the membership is the only authority now. Safe because bos_mirror_primary_role keeps tenant_members.role in step with users.primary_role, which is what the fallback existed to tolerate.",
+      "scopedIn": "0047"
+    },
+    "is_paid_member()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Membership tier is per tenant once each business sells its own. SCOPED in 0040: no predicate of its own: both delegates are scoped.",
+      "scopedIn": "0040"
+    },
+    "join_community(p_community uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Joins by id. SCOPED in 0044: the chapter lookup is scoped and the membership carries the tenant.",
+      "scopedIn": "0044"
+    },
+    "join_waitlist(p_event_id uuid, p_attendee_name text, p_attendee_email text, p_attendee_phone text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "text",
+      "setReturning": false,
+      "note": "Writes a waitlist row against an event id. SCOPED in 0042: the event lookup is scoped, so another business event is not found rather than joined.",
+      "scopedIn": "0042"
+    },
+    "leave_community(p_community uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Leaves by id. SCOPED in 0042: scoped.",
+      "scopedIn": "0042"
+    },
+    "meets_gate(p_action text)": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "boolean",
+      "setReturning": false,
+      "note": "Gate check for member actions. SCOPED in 0040: a tenant predicate on the row lookup.",
+      "scopedIn": "0040"
+    },
+    "member_discount_pct(p_user_id uuid)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Reads another user's tier by id. SCOPED in 0039: the membership lookup is scoped.",
+      "scopedIn": "0039"
+    },
+    "member_tier()": {
+      "group": "E",
+      "scope": "caller",
+      "returns": "text",
+      "setReturning": false,
+      "note": "As above. SCOPED in 0040: a tenant predicate on the row lookup.",
+      "scopedIn": "0040"
+    },
+    "notify(p_user_id uuid, p_type text, p_title text, p_body text, p_link text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Writes a notification to any user id. Called by the trigger functions in group D. SCOPED in 0042: the tenant is named rather than left to the column default.",
+      "scopedIn": "0042"
+    },
+    "notify_followers(p_event_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Fans out notifications for an event. SCOPED in 0044: the event lookup and the follower list are scoped.",
+      "scopedIn": "0044"
+    },
+    "public_stats()": {
+      "group": "A",
+      "scope": "all",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Deliberately readable by anonymous visitors. Under tenancy it has to become per-tenant, or every tenant's public site shows the platform total. SCOPED in 0038: events, partners and cities scoped; the member count became a count of memberships rather than of accounts.",
+      "scopedIn": "0038"
+    },
+    "record_payout(p_host_id uuid, p_amount integer, p_note text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "uuid",
+      "setReturning": false,
+      "note": "Money out, to a host id. SCOPED in 0042: p_host_id must be an active member of the caller tenant, which it was never checked for at all, and the payout carries the tenant explicitly.",
+      "scopedIn": "0042"
+    },
+    "record_sponsorship(p_amount integer, p_note text)": {
+      "group": "C",
+      "scope": "all",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Money in. Writes an unscoped row. SCOPED in 0042: the tenant is written explicitly rather than left to the column default.",
+      "scopedIn": "0042"
+    },
+    "redeem_promo(p_code text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Increments a promo by code alone. SCOPED in 0042: scoped. This one was BROKEN rather than leaky: matching on the code alone, two businesses holding LAUNCH50 made the update reach both rows and fail with \"query returned more than one row\".",
+      "scopedIn": "0042"
+    },
+    "refresh_badges(p_user uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Recomputes badges for a user id. SCOPED in 0042: the attendance and post counts and the badge list are scoped, so a badge needing two events is not earned by attending one at each of two businesses.",
+      "scopedIn": "0042"
+    },
+    "register_for_event(p_event_id uuid, p_attendee_name text, p_attendee_email text, p_attendee_phone text, p_payment_id uuid, p_user_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "text",
+      "setReturning": false,
+      "note": "Public registration path. No caller check by design. SCOPED in 0043: the ticket type and duplicate checks are scoped.",
+      "scopedIn": "0043"
+    },
+    "register_free_order(p_event_id uuid, p_ticket_type_id uuid, p_quantity integer, p_buyer_name text, p_buyer_email text, p_buyer_phone text, p_answers jsonb)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "As above, for free tickets. SCOPED in 0043: the ticket type and duplicate checks are scoped.",
+      "scopedIn": "0043"
+    },
+    "report_content(p_post_id uuid, p_comment_id uuid, p_reason text)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Files a report against a post id. SCOPED in 0044: the reported post or comment must be in this business, and the admins notified come from tenant_members rather than public.user_roles - which is the PLATFORM admin list, so every other business admin was being notified.",
+      "scopedIn": "0044"
+    },
+    "resolve_report(p_report_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "void",
+      "setReturning": false,
+      "note": "Closes a report by id. SCOPED in 0042: scoped.",
+      "scopedIn": "0042"
+    },
+    "spend_credits(p_amount integer, p_reason text, p_event_id uuid)": {
+      "group": "C",
+      "scope": "caller",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Spends the caller's own credits. SCOPED in 0044: the ledger row carries the tenant. It leaked nothing, being filtered to the caller, but a business could not see what was spent in it without seeing what was spent elsewhere.",
+      "scopedIn": "0044"
+    },
+    "sync_community_member_count()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Denormalised count. ADDRESSED in 0045: the count is scoped. It counted every active member of a community across every business.",
+      "scopedIn": "0045"
+    },
+    "sync_user_email()": {
+      "group": "D",
+      "scope": "all",
+      "returns": "trigger",
+      "setReturning": false,
+      "note": "Trigger. Mirrors the auth email onto public.users. ADDRESSED in 0045: nothing to scope: public.users is global by design, one person and one account across every tenant.",
+      "scopedIn": "0045"
+    },
+    "unlock_file(p_file_id uuid)": {
+      "group": "C",
+      "scope": "row",
+      "returns": "jsonb",
+      "setReturning": false,
+      "note": "Unlocks a gated file by id. SCOPED in 0044: the file lookup and both unlock inserts are scoped. This is the function the Stage 4 demonstration ended on: it handed over another business gated file AND spent the caller credits doing it.",
+      "scopedIn": "0044"
+    },
+    "validate_promo(p_code text)": {
+      "group": "A",
+      "scope": "row",
+      "returns": "integer",
+      "setReturning": false,
+      "note": "Looks a promo code up by code alone. Two tenants with the same code collide. SCOPED in 0039: scoped, which matters because codes are looked up by code alone and became unique per tenant in 0036.",
+      "scopedIn": "0039"
+    }
+  },
+  "stage5": "COMPLETE. All 75 SECURITY DEFINER functions have been through it. Six carry no tenant reference and all six are deliberate, pinned by name in supabase/tests/tenancy-stage5f.test.mjs: bos_guard_contact_rate and bos_guard_newsletter_rate are scoped through bos_rate_limit whose key carries the tenant; is_employee delegates to bos_is_staff and is_paid_member to is_admin and member_tier; sync_user_email and handle_new_user operate on public.users, which is global by design. A seventh appearing there is a regression. Order taken: A (0038, 0039), E and B together (0040), the claim correction the tests found (0041), C in three pieces (0042, 0043, 0044) and D (0045). Not the order the architecture document gave, because that order assumed FORCE ROW LEVEL SECURITY would close the owner hole at Stage 4 - it cannot here, the owning role carries BYPASSRLS - so the bodies were the only place to close it and A was where rows actually crossed.",
+  "noLongerDefiner": {
+    "bos_dashboard_summary(p_from date, p_to date)": "DROPPED in 0039. It could not be called: both overloads defaulted every argument, so a two-date call matched the four-argument one too and Postgres refused with \"is not unique\". Both call sites in the app pass four named arguments. Scoping it would have been 97 lines to protect dead code.",
+    "bos_dashboard_summary(p_from date, p_to date, p_owner uuid, p_workstream uuid)": "Made SECURITY INVOKER in 0039, so it is no longer in this inventory. It raises FORBIDDEN unless the caller is an admin, and an admin can read all 27 tables it touches, so it never needed to bypass RLS. As an invoker the isolation policies scope all 35 subqueries at once. Verified behaviour-preserving: 66 of 66 keys identical between the two versions, and every table it reads has a permissive SELECT policy an admin satisfies."
+  },
+  "securityFindings": {
+    "fulfil_order free tickets (found 7 October 2026, fixed in 0043)": "fulfil_order is executable by anon - verified against production, where an unauthenticated call returned ORDER_NOT_FOUND, meaning the function ran - and it never checked p_payment_id. So create_pending_order followed by fulfil_order(order_id, null) issued tickets for a paid event with no payment. Nothing to do with tenancy; found while rewriting the function for it. 0043 required a paid payment row of at least the order total, in the order tenant, unless the caller is the service role - and said openly that this raised the bar without closing the door, because public.payments let a signed-in person insert their own row with status paid, and UPDATE it afterwards. CLOSED in 0048. Both client-writable policies are dropped; SELECT stays so people can see their own receipts. The three writers are now the two verification routes and the Razorpay webhook, all server-side, all using the service role after checking a signature. The code change had to deploy first, which is safe in that order because the service role bypasses RLS. The test that simulated the legitimate purchase had to start writing its payment as the service role too, which is the clearest evidence the hole is shut."
+  },
+  "stage6": "The cross-tenant isolation assertions, which Stage 0 wrote down as the control that actually prevents the leak and which could not run until a second tenant was possible. They live in supabase/tests/tenancy-stage6.test.mjs: two businesses with deliberately COLLIDING values, every row-spanning function called as an admin of each with the results asserted disjoint, every aggregate asserted to count one business rather than both, and every id-taking function asked about the other business id. It earned its description on the first run. Four predicates - bos_can_see_task, bos_can_see_goal, can_read_community, community_leads - opened with a bare is_admin() disjunct, so an admin of one business could see any row in any business however carefully 0040 had scoped the other branches. 0046 fixes them with an outer tenant gate. It also found a test that was asserting the bug: a stage5c assertion passed a TASK id to bos_can_see_goal and expected true, which only worked because the short circuit meant the lookup never ran."
+}

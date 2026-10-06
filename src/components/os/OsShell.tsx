@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearch } from "./GlobalSearch";
+import { switchTenant } from "@/app/admin/os/actions";
+import { toast } from "@/components/Toast";
 import { OS_SECTIONS, type NavSection } from "@/lib/os-modules";
 
 /**
@@ -22,14 +25,27 @@ export function OsShell({
   email,
   isAdmin = false,
   sections,
+  productNames = {},
+  tenants = [],
   alertCount = 0,
   approvalCount = 0,
   children,
 }: {
   email: string;
   isAdmin?: boolean;
-  /** Section keys this user may open. Admins receive all nine. */
+  /** Product keys this user may open. Admins receive every enabled one. */
   sections: string[];
+  /**
+   * key -> display name from the products catalogue. An admin who renames
+   * Govern to Compliance renames it here too, which is why the nav reads a
+   * name rather than hard-coding one.
+   */
+  productNames?: Record<string, string>;
+  /**
+   * The businesses this person belongs to. One or none renders nothing: a
+   * switcher with a single option is a label pretending to be a control.
+   */
+  tenants?: { id: string; slug: string; name: string; role: string; is_active: boolean }[];
   alertCount?: number;
   approvalCount?: number;
   children: React.ReactNode;
@@ -40,16 +56,19 @@ export function OsShell({
   // and an absolutely positioned child of a scrolling box is clipped into it
   // — which is why hovering a section used to make the sidebar scroll
   // sideways instead of floating the list over the page.
-  const [flyout, setFlyout] = useState<{ label: string; x: number; y: number } | null>(null);
+  // Keyed by product key, not by label: labels are editable data now, and a
+  // flyout that loses track of itself the moment somebody renames a section
+  // is a bug waiting for the first rename.
+  const [flyout, setFlyout] = useState<{ key: string; x: number; y: number } | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelClose = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
   }, []);
-  const openFlyout = useCallback((label: string, el: HTMLElement) => {
+  const openFlyout = useCallback((key: string, el: HTMLElement) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     const r = el.getBoundingClientRect();
-    setFlyout({ label, x: r.right + 8, y: r.top });
+    setFlyout({ key, x: r.right + 8, y: r.top });
   }, []);
   // A grace period, so crossing the gap to the panel does not close it.
   const scheduleClose = useCallback(() => {
@@ -65,22 +84,34 @@ export function OsShell({
   // The nav shows only what the grant allows, so an employee never sees a
   // door they cannot open. "Today" is ungated.
   const allowed = new Set(sections);
+
+  // The nav with catalogue names substituted in, so every child below renders
+  // section.label and gets the live name without knowing the catalogue exists.
+  const nav: NavSection[] = useMemo(
+    () =>
+      OS_SECTIONS.map((s) =>
+        s.key && productNames[s.key] ? { ...s, label: productNames[s.key] } : s,
+      ),
+    [productNames],
+  );
   // An admin has ~35 destinations, so their sections stay collapsed behind a
   // hover. An employee usually holds two or three, which fit expanded — and a
   // section header that only reacts to hover reads as broken when clicked.
   const expandAll = !isAdmin;
 
-  const railSections = OS_SECTIONS.filter(
-    (s) => s.label !== "Today" && allowed.has(s.label.toLowerCase()),
-  );
+  // Matched on the product key. This used to lowercase the group label, which
+  // meant a renamed group silently lost its grant and a two-word label could
+  // never match one at all.
+  const railSections = nav.filter((s) => s.key !== null && allowed.has(s.key));
   // Pages reached from the top bar are not in the nav, so they need naming
   // here or the title bar keeps saying "Dashboard".
   const OFF_NAV: Record<string, string> = { "/admin/os/team/access": "Team & Access" };
   const current =
-    OS_SECTIONS.flatMap((s) => s.items).find((i) => isActive(i.href))?.label ??
+    nav.flatMap((s) => s.items).find((i) => isActive(i.href))?.label ??
     Object.entries(OFF_NAV).find(([href]) => isActive(href))?.[1] ??
     "Dashboard";
   const activeSection = railSections.find((s) => s.items.some((i) => isActive(i.href)));
+  const groupKey = (s: NavSection) => s.key ?? "today";
 
   return (
     <div className="flex min-h-screen bg-ink">
@@ -114,13 +145,13 @@ export function OsShell({
         <nav className="flex flex-col gap-0.5 overflow-y-auto px-2 pb-4">
           {railSections.map((section) => (
             expandAll ? (
-              <ExpandedSection key={section.label} section={section} isActive={isActive} />
+              <ExpandedSection key={groupKey(section)} section={section} isActive={isActive} />
             ) : (
               <RailItem
-                key={section.label}
+                key={groupKey(section)}
                 section={section}
-                active={activeSection?.label === section.label}
-                open={flyout?.label === section.label}
+                active={activeSection?.key === section.key}
+                open={flyout?.key === section.key}
                 onOpen={openFlyout}
                 onLeave={scheduleClose}
                 onDismiss={() => setFlyout(null)}
@@ -146,10 +177,10 @@ export function OsShell({
               </button>
             </div>
             <nav className="flex flex-col gap-5 p-4">
-              {OS_SECTIONS.filter(
-                (s) => s.label === "Today" || allowed.has(s.label.toLowerCase()),
-              ).map((section) => (
-                <div key={section.label}>
+              {nav
+                .filter((s) => s.key === null || allowed.has(s.key))
+                .map((section) => (
+                <div key={groupKey(section)}>
                   <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
                     {section.label}
                   </p>
@@ -192,6 +223,8 @@ export function OsShell({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
+            <TenantSwitcher tenants={tenants} />
+            <GlobalSearch />
             {/* Approvals and reviews are decided by somebody else and land
                 here; without this an employee had no way of hearing about it. */}
             <NotificationBell />
@@ -236,13 +269,101 @@ export function OsShell({
 
       {flyout && (
         <SectionFlyout
-          section={OS_SECTIONS.find((sec) => sec.label === flyout.label)!}
+          section={nav.find((sec) => sec.key === flyout.key)!}
           x={flyout.x}
           y={flyout.y}
           isActive={isActive}
           onEnter={cancelClose}
           onLeave={scheduleClose}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Which business you are acting in, and a way to change it.
+ *
+ * Renders nothing at all when the person belongs to one business or none.
+ * Techxfluence is one business today, so for everybody currently using this
+ * the switcher is invisible — which is the right appearance for a control
+ * with a single option.
+ */
+function TenantSwitcher({
+  tenants,
+}: {
+  tenants: { id: string; slug: string; name: string; role: string; is_active: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  if (tenants.length < 2) return null;
+
+  const active = tenants.find((t) => t.is_active) ?? tenants[0];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={pending}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex max-w-[11rem] items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-sm text-fg hover:bg-surface-2 disabled:opacity-50"
+      >
+        <Icon name="nodes" className="h-4 w-4 shrink-0 text-faint" strokeWidth={1.8} />
+        <span className="truncate">{active?.name}</span>
+        <svg viewBox="0 0 24 24" aria-hidden className="h-3 w-3 shrink-0 text-faint"
+             fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <button
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            role="menu"
+            className="absolute right-0 z-50 mt-1 w-60 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
+          >
+            <p className="border-b border-line px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+              Your businesses
+            </p>
+            {tenants.map((t) => (
+              <button
+                key={t.id}
+                role="menuitem"
+                disabled={pending || t.is_active}
+                onClick={() =>
+                  start(async () => {
+                    const res = await switchTenant(t.id);
+                    if (res && "error" in res && res.error) toast(res.error, "error");
+                    else setOpen(false);
+                  })
+                }
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                  t.is_active
+                    ? "bg-brand/10 font-medium text-brand-soft"
+                    : "text-fg hover:bg-surface-2"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{t.name}</span>
+                  <span className="block truncate text-[11px] text-faint">{t.role}</span>
+                </span>
+                {t.is_active && (
+                  <svg viewBox="0 0 12 12" aria-hidden className="h-3 w-3 shrink-0" fill="none"
+                       stroke="currentColor" strokeWidth="2.5">
+                    <path d="M2 6.5L4.5 9 10 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -324,7 +445,8 @@ function RailItem({
   section: NavSection;
   active: boolean;
   open: boolean;
-  onOpen: (label: string, el: HTMLElement) => void;
+  /** Receives the product KEY, which is what the flyout is tracked by. */
+  onOpen: (key: string, el: HTMLElement) => void;
   onLeave: () => void;
   onDismiss: () => void;
 }) {
@@ -332,8 +454,8 @@ function RailItem({
     <button
       type="button"
       aria-expanded={open}
-      onMouseEnter={(e) => onOpen(section.label, e.currentTarget)}
-      onFocus={(e) => onOpen(section.label, e.currentTarget)}
+      onMouseEnter={(e) => onOpen(section.key ?? "", e.currentTarget)}
+      onFocus={(e) => onOpen(section.key ?? "", e.currentTarget)}
       onMouseLeave={onLeave}
       onKeyDown={(e) => e.key === "Escape" && onDismiss()}
       className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${
