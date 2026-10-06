@@ -321,10 +321,12 @@ export async function saveCashflow(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
   const supabase = await createClient();
-  // Upsert on (month, scenario) — the table's unique constraint.
+  // Upsert on the table's unique constraint, which gained tenant_id in
+  // migration 0035 so two businesses can each have their own January.
+  // tenant_id is not in the payload: the column default supplies it.
   const { data, error } = await supabase
     .from("cashflow_months")
-    .upsert(parsed.data, { onConflict: "month,scenario" })
+    .upsert(parsed.data, { onConflict: "tenant_id,month,scenario" })
     .select()
     .maybeSingle();
   if (error) return { error: error.message };
@@ -673,7 +675,9 @@ export async function createEmployee(input: unknown) {
       start_date: start_date || null,
       status: "active",
     },
-    { onConflict: "user_id" },
+    // Scoped to the tenant since 0035: one profile per person per business,
+    // not one per person.
+    { onConflict: "tenant_id,user_id" },
   );
 
   if (sections.length > 0) {

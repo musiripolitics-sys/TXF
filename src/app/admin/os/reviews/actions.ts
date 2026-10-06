@@ -29,7 +29,7 @@ export async function saveReview(input: unknown) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("reviews")
-    .upsert(parsed.data, { onConflict: "period_type,period_start" })
+    .upsert(parsed.data, { onConflict: "tenant_id,period_type,period_start" })
     .select()
     .maybeSingle();
   if (error) return { error: error.message };
