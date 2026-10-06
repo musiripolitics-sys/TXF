@@ -10,6 +10,7 @@ const STATIC: { path: string; priority: number; freq: "daily" | "weekly" | "mont
   { path: "/membership", priority: 0.8, freq: "weekly" },
   { path: "/host", priority: 0.7, freq: "weekly" },
   { path: "/leaders", priority: 0.6, freq: "weekly" },
+  { path: "/Techservice", priority: 0.7, freq: "monthly" },
   { path: "/about", priority: 0.5, freq: "monthly" },
   { path: "/careers", priority: 0.5, freq: "monthly" },
   { path: "/contact", priority: 0.4, freq: "monthly" },

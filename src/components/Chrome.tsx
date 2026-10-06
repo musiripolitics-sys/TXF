@@ -43,6 +43,12 @@ export function Chrome({
     return <>{children}</>;
   }
 
+  // TXF Tech Services is a separate studio site with its own header and
+  // footer (components/techservice), not part of the community chrome.
+  if (pathname === "/Techservice" || pathname.startsWith("/Techservice/")) {
+    return <>{children}</>;
+  }
+
   const isApp =
     authed && APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p));
 
