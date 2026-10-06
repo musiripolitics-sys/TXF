@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getMySections } from "@/lib/os-access";
 import { productLabels } from "@/lib/os-products";
+import { loadMyTenants } from "@/lib/os-tenants";
 import { createClient } from "@/lib/supabase/server";
 import { OsShell } from "@/components/os/OsShell";
 
@@ -24,9 +25,10 @@ export default async function OsLayout({
   // it. Someone with no grants at all still has nothing to open, so they are
   // told rather than shown an empty shell.
   const admin = await isAdmin();
-  const [sections, productNames] = await Promise.all([
+  const [sections, productNames, tenants] = await Promise.all([
     getMySections(),
     productLabels(),
+    loadMyTenants(),
   ]);
   if (!admin && sections.length === 0) {
     return (
@@ -68,6 +70,7 @@ export default async function OsLayout({
       isAdmin={admin}
       sections={sections}
       productNames={productNames}
+      tenants={tenants}
       approvalCount={approvals.count ?? 0}
       alertCount={(overdueTasks.count ?? 0) + (criticalRisks.count ?? 0)}
     >

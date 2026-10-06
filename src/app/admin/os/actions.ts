@@ -956,3 +956,92 @@ export async function updateProduct(key: string, input: unknown) {
   revalidatePath(OS, "layout");
   return { success: true };
 }
+
+// ─────────────────────────── Tenancy ───────────────────────────
+
+/**
+ * Switch the signed-in person into one of their businesses.
+ *
+ * The tenant is named by the client and decided by the database:
+ * bos_switch_tenant refuses anything the caller is not an active member of,
+ * which is what makes a server-side column safe to trust where a
+ * client-supplied value would not be.
+ *
+ * revalidatePath with "layout" rather than a page, because switching changes
+ * what every query in the OS returns — the nav, the counts, all of it.
+ */
+export async function switchTenant(tenantId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_switch_tenant", { p_tenant: tenantId });
+  if (error) {
+    if (error.message.includes("NOT_A_MEMBER")) {
+      return { error: "You don't belong to that business." };
+    }
+    return {
+      error: error.message.includes("bos_switch_tenant")
+        ? "Run migration 0047 in Supabase first."
+        : error.message,
+    };
+  }
+
+  revalidatePath(OS, "layout");
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+const inviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email("A valid email is required"),
+  role: z.enum(["admin", "employee", "event_host", "community_member"]).default("employee"),
+  sections: z.array(z.string().trim().min(1)).default([]),
+});
+
+/**
+ * Invite someone to the business the admin is acting in.
+ *
+ * createEmployee stays: it makes an account with a password and works for
+ * somebody who has none. What it cannot do is add a person who ALREADY has an
+ * account — a member who registered on the public site, or somebody who works
+ * at another business on the platform. This is that path, and it becomes the
+ * only sensible one once a person can belong to several businesses.
+ *
+ * Returns the token rather than emailing it, because the caller decides how
+ * the invitation travels. Re-inviting the same address issues a new token, so
+ * a link that leaked can be revoked by issuing another.
+ */
+export async function inviteToTenant(input: unknown) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const parsed = inviteSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bos_invite_to_tenant", {
+    p_email: parsed.data.email,
+    p_role: parsed.data.role,
+    p_sections: parsed.data.sections,
+  });
+
+  if (error) {
+    const m = error.message;
+    if (m.includes("ALREADY_A_MEMBER")) return { error: "They're already in this business." };
+    if (m.includes("UNKNOWN_PRODUCT")) {
+      return { error: `No such product: ${m.split("UNKNOWN_PRODUCT:")[1]?.trim()}` };
+    }
+    if (m.includes("BAD_EMAIL")) return { error: "That doesn't look like an email address." };
+    if (m.includes("BAD_ROLE")) return { error: "That isn't a role." };
+    if (m.includes("bos_invite_to_tenant")) return { error: "Run migration 0047 in Supabase first." };
+    return { error: m };
+  }
+
+  await logAudit(supabase, gate.user.id, "insert", "tenant_invitations", null, null, {
+    email: parsed.data.email,
+    role: parsed.data.role,
+    sections: parsed.data.sections,
+  });
+  revalidatePath(`${OS}/team/access`);
+  return { success: true, token: data as string };
+}
