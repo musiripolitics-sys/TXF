@@ -6,7 +6,7 @@ import {
   mailTaskAssigned, mailTaskDecision, mailTaskSubmitted,
 } from "@/lib/task-mail";
 import { sendEmployeeWelcome } from "@/lib/email";
-import { SECTION_LABELS } from "@/lib/os-access";
+import { productLabels } from "@/lib/os-products";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 
@@ -543,23 +543,22 @@ export async function deleteTaskComment(id: string) {
 
 // ─────────────────────── People and access ───────────────────────
 
-const SECTION_KEYS = [
-  "plan", "events", "money", "grow", "marketing",
-  "team", "product", "govern", "insights",
-] as const;
-
 /**
- * Replace a person's section grants. Delegates to bos_set_module_access,
+ * Replace a person's product grants. Delegates to bos_set_module_access,
  * which re-checks admin in the database and refuses to let an admin edit
  * their own access — so a mistake here cannot lock the OS.
+ *
+ * The nine keys used to be listed here as well as in os-access.ts, the access
+ * page and a CHECK constraint. Since Stage 1 of the BOS Product Model plan the
+ * catalogue is public.products and the database validates against it, so an
+ * unknown key comes back named rather than being silently dropped — which is
+ * what the old filter here did.
  */
 export async function setModuleAccess(userId: string, sections: string[]) {
   const gate = await requireAdmin();
   if ("error" in gate) return gate;
 
-  const clean = [...new Set(sections)].filter((s) =>
-    (SECTION_KEYS as readonly string[]).includes(s),
-  );
+  const clean = [...new Set(sections)].map((s) => s.trim()).filter(Boolean);
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("bos_set_module_access", {
@@ -569,6 +568,10 @@ export async function setModuleAccess(userId: string, sections: string[]) {
   if (error) {
     if (error.message.includes("CANNOT_EDIT_OWN_ACCESS")) {
       return { error: "You can't change your own access." };
+    }
+    if (error.message.includes("UNKNOWN_PRODUCT")) {
+      const bad = error.message.split("UNKNOWN_PRODUCT:")[1]?.trim();
+      return { error: `No such product: ${bad}. Check the product list.` };
     }
     return {
       error: error.message.includes("bos_set_module_access")
@@ -591,7 +594,9 @@ const newEmployeeSchema = z.object({
   title: z.string().trim().optional().nullable(),
   department: z.string().trim().optional().nullable(),
   start_date: optDate,
-  sections: z.array(z.enum(SECTION_KEYS)).default([]),
+  // Not an enum: the product list is data now, and bos_set_module_access
+  // rejects a key the catalogue does not hold.
+  sections: z.array(z.string().trim().min(1)).default([]),
 });
 
 /**
@@ -700,7 +705,10 @@ export async function createEmployee(input: unknown) {
       to: email,
       name: full_name.split(" ")[0] || full_name,
       title: title || null,
-      sections: sections.map((k) => SECTION_LABELS[k as keyof typeof SECTION_LABELS] ?? k),
+      sections: await (async () => {
+        const labels = await productLabels();
+        return sections.map((k) => labels[k] ?? k);
+      })(),
     });
   } catch {
     // An account that exists but whose welcome bounced is still an account.
@@ -853,5 +861,94 @@ export async function decideTaskApproval(
 
   revalidateOs();
   revalidatePath("/admin/os/approvals");
+  return { success: true };
+}
+
+// ─────────────────────────── Products ───────────────────────────
+
+/**
+ * Turn a product on or off for the whole install.
+ *
+ * Off means off for everyone, admins included — bos_can_access refuses a
+ * disabled product whoever asks. That is deliberate: a toggle an admin can
+ * see through is not a toggle. It is also why this lives behind the access
+ * page, which is guarded by isAdmin directly rather than by requireSection,
+ * so disabling a product can never lock an admin out of re-enabling it.
+ *
+ * Grants are left alone. Re-enabling restores exactly who had it before,
+ * which matters because the alternative — cascading a delete through
+ * employee_module_access — makes a reversible toggle quietly destructive.
+ */
+export async function setProductEnabled(key: string, enabled: boolean) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("products")
+    .select("key,is_enabled")
+    .eq("key", key)
+    .maybeSingle();
+  if (!before) return { error: `No such product: ${key}` };
+
+  const { error } = await supabase
+    .from("products")
+    .update({ is_enabled: enabled })
+    .eq("key", key);
+  if (error) {
+    return {
+      error: error.message.includes("products")
+        ? "Run migration 0033 in Supabase first."
+        : error.message,
+    };
+  }
+
+  await logAudit(supabase, gate.user.id, "update", "products", key, before, {
+    key,
+    is_enabled: enabled,
+  });
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+const productSchema = z.object({
+  name: z.string().trim().min(2, "A name is required"),
+  description: z.string().trim().max(400).optional().nullable(),
+});
+
+/**
+ * Rename a product, or change the line of description under it. The nav reads
+ * products.name, so renaming Govern to Compliance renames it everywhere —
+ * which is the whole point of the catalogue being data.
+ *
+ * The key is never editable. It is referenced by employee_module_access and
+ * by requireSection in the page code, so changing it would orphan both.
+ */
+export async function updateProduct(key: string, input: unknown) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const parsed = productSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("products")
+    .select("key,name,description")
+    .eq("key", key)
+    .maybeSingle();
+  if (!before) return { error: `No such product: ${key}` };
+
+  const { error } = await supabase
+    .from("products")
+    .update({
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+    })
+    .eq("key", key);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "update", "products", key, before, parsed.data);
+  revalidatePath(OS, "layout");
   return { success: true };
 }

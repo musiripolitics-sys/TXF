@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { requireSection, SECTION_LABELS } from "@/lib/os-access";
+import { requireSection } from "@/lib/os-access";
+import { productLabels } from "@/lib/os-products";
 import { loadDirectory } from "@/lib/os-directory";
 import { PeopleClient, type Member } from "./PeopleClient";
 
@@ -13,13 +14,14 @@ export default async function PeoplePage() {
   await requireSection("team");
   const supabase = await createClient();
 
-  const [{ data: profiles }, { data: access }, { data: tasks }, { data: kpis }, people] =
+  const [{ data: profiles }, { data: access }, { data: tasks }, { data: kpis }, people, labels] =
     await Promise.all([
       supabase.from("employee_profiles").select("*"),
       supabase.from("employee_module_access").select("user_id,section"),
       supabase.from("tasks").select("owner_id,status,due_date"),
       supabase.from("employee_kpis").select("employee_id,target,actual"),
       loadDirectory(supabase),
+      productLabels(),
     ]);
 
   const prof = new Map(((profiles as Record<string, unknown>[]) ?? []).map((p) => [p.user_id as string, p]));
@@ -46,7 +48,9 @@ export default async function PeoplePage() {
       status: (pr?.status as string) ?? null,
       sections: ((access as { user_id: string; section: string }[]) ?? [])
         .filter((a) => a.user_id === p.id)
-        .map((a) => SECTION_LABELS[a.section as keyof typeof SECTION_LABELS] ?? a.section),
+        // Names from the catalogue, so a renamed product reads the same here
+        // as it does in the sidebar.
+        .map((a) => labels[a.section] ?? a.section),
       openTasks: open.length,
       overdueTasks: open.filter((t) => t.due_date && t.due_date < today).length,
       kpiCount: theirKpis.length,
