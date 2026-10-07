@@ -1075,8 +1075,11 @@ export async function createOrganisation(formData: FormData) {
   if (error) {
     const m = error.message;
     if (m.includes("bos_create_tenant")) return { error: "Run migration 0050 in Supabase first." };
-    if (m.includes("NOT_PLATFORM_OWNER")) return { error: "Only an admin of the main business can create another one." };
-    if (m.includes("NO_DEFAULT_TENANT")) return { error: "No business is marked as the default, so there is nothing to own the platform. Run 0034." };
+    // 0052 replaced NOT_PLATFORM_OWNER and NO_DEFAULT_TENANT with one reason:
+    // the authority is a row in platform_admins, not a membership anywhere.
+    if (m.includes("NOT_SUPER_ADMIN") || m.includes("NOT_PLATFORM_OWNER")) {
+      return { error: "Only a platform administrator can create a business." };
+    }
     if (m.includes("SLUG_TAKEN")) return { error: `The address "${m.split("SLUG_TAKEN:")[1]?.trim() ?? slug}" is already taken.` };
     if (m.includes("BAD_SLUG")) return { error: "That name has no letters or numbers to build an address from." };
     if (m.includes("BAD_NAME")) return { error: "Give the business a name of at least two characters." };
@@ -1266,4 +1269,72 @@ export async function acceptInvitation(token: string) {
   revalidatePath(OS, "layout");
   revalidatePath("/", "layout");
   return { success: true, result: data };
+}
+
+/**
+ * Appoint a platform administrator, by address.
+ *
+ * Before 0052 the only way to appoint one was the SQL editor, because the
+ * authority was "admin of the tenant flagged default" and there was nothing to
+ * grant. The address is resolved inside the database: a page should not have
+ * to know user ids, and bos_grant_platform_admin is the only thing that looks
+ * an account up across the platform.
+ */
+export async function grantPlatformAdmin(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const email = String(formData.get("email") ?? "").trim();
+  const role = String(formData.get("role") ?? "super_admin");
+  const days = Number(formData.get("days") ?? 0);
+  // Support access is time-boxed by the database, so send an end date with it
+  // rather than letting the call fail on SUPPORT_NEEDS_EXPIRY.
+  const expires =
+    role === "support"
+      ? new Date(Date.now() + (days > 0 ? days : 7) * 86_400_000).toISOString()
+      : null;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_grant_platform_admin", {
+    p_email: email,
+    p_role: role,
+    p_expires: expires,
+  });
+
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_grant_platform_admin")) return { error: "Run migration 0052 in Supabase first." };
+    if (m.includes("NOT_SUPER_ADMIN")) return { error: "Only a platform administrator can appoint one." };
+    if (m.includes("NO_SUCH_ACCOUNT")) return { error: `No account with the address ${email}. They have to sign up first.` };
+    if (m.includes("BAD_EMAIL")) return { error: "That doesn't look like an email address." };
+    if (m.includes("SUPPORT_NEEDS_EXPIRY")) return { error: "Support access has to have an end date." };
+    if (m.includes("EXPIRY_IN_THE_PAST")) return { error: "That end date has already passed." };
+    return { error: m };
+  }
+
+  await logAudit(supabase, user.id, "insert", "platform_admins", null, null, { email, role, expires });
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/** Remove a platform administrator. The database refuses the last super admin. */
+export async function revokePlatformAdmin(userId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_revoke_platform_admin", { p_user: userId });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_revoke_platform_admin")) return { error: "Run migration 0052 in Supabase first." };
+    if (m.includes("NOT_SUPER_ADMIN")) return { error: "Only a platform administrator can do that." };
+    if (m.includes("LAST_SUPER_ADMIN")) {
+      return { error: "They're the last platform administrator. Appoint another one first — nobody else can." };
+    }
+    return { error: m };
+  }
+
+  await logAudit(supabase, user.id, "delete", "platform_admins", userId, null, null);
+  revalidatePath(OS, "layout");
+  return { success: true };
 }

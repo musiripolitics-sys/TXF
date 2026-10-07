@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { loadMyOrganisations, isPlatformOwner } from "@/lib/os-tenants";
+import { loadMyOrganisations, isPlatformOwner, loadPlatformAdmins } from "@/lib/os-tenants";
 import { OrganisationsClient } from "./OrganisationsClient";
 
 export const metadata = { title: "Organisations · Business OS" };
@@ -23,7 +23,12 @@ export default async function OrganisationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/admin/os/organisations");
 
-  const [orgs, canCreate] = await Promise.all([loadMyOrganisations(), isPlatformOwner()]);
+  const [orgs, canCreate, platformAdmins] = await Promise.all([
+    loadMyOrganisations(),
+    isPlatformOwner(),
+    // Returns nothing unless the caller is one, so this needs no guard here.
+    loadPlatformAdmins(),
+  ]);
 
   // An empty list on a database with 0050 means this account belongs to no
   // business at all, which is a different problem from the migration being
@@ -31,6 +36,12 @@ export default async function OrganisationsPage() {
   const migrated = orgs.length > 0 || canCreate;
 
   return (
-    <OrganisationsClient orgs={orgs} canCreate={canCreate} migrated={migrated} />
+    <OrganisationsClient
+      orgs={orgs}
+      canCreate={canCreate}
+      migrated={migrated}
+      platformAdmins={platformAdmins}
+      me={user.id}
+    />
   );
 }

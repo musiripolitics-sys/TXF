@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "@/components/Toast";
 import { Card, EmptyState } from "@/components/os/ui";
-import type { Organisation } from "@/lib/os-tenants";
+import type { Organisation, PlatformAdmin } from "@/lib/os-tenants";
 import {
   createOrganisation, renameOrganisation, setOrganisationStatus, switchTenant,
+  grantPlatformAdmin, revokePlatformAdmin,
 } from "../actions";
 
 /** The same rule as public.bos_slugify, for previewing the address as you type. */
@@ -36,10 +37,14 @@ export function OrganisationsClient({
   orgs,
   canCreate,
   migrated,
+  platformAdmins,
+  me,
 }: {
   orgs: Organisation[];
   canCreate: boolean;
   migrated: boolean;
+  platformAdmins: PlatformAdmin[];
+  me: string;
 }) {
   const [saving, start] = useTransition();
   const [adding, setAdding] = useState(false);
@@ -167,7 +172,10 @@ export function OrganisationsClient({
       ) : (
         <div className="space-y-3">
           {orgs.map((o) => {
-            const isAdmin = o.role === "admin";
+            // A super admin holds no membership, so bos_my_tenant_summary
+            // reports super_admin rather than admin. Both may rename and
+            // suspend; the database decides, this only draws the buttons.
+            const isAdmin = o.role === "admin" || o.role === "super_admin";
             return (
               <Card key={o.id} className={o.is_active ? "border-brand/40" : ""}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -296,11 +304,195 @@ export function OrganisationsClient({
         </div>
       )}
 
+      {canCreate && (
+        <PlatformAdmins admins={platformAdmins} me={me} saving={saving} start={start} />
+      )}
+
       <p className="mt-6 text-[11px] leading-relaxed text-faint">
         Adding people to a business happens in{" "}
         <Link href="/admin/os/team/access" className="underline hover:text-fg">Team &amp; Access</Link>,
         inside whichever business you are currently working in. Switch first, then invite —
         an invitation belongs to one business, not to the platform.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Who runs the platform.
+ *
+ * Here rather than on Team & Access, because platform authority is not a fact
+ * about any business and Team & Access is always about one. Before 0052 there
+ * was nothing to show: the authority was "admin of the business flagged
+ * default", so appointing somebody meant editing a membership and hoping.
+ *
+ * Support is listed beside super admin deliberately. A list that showed only
+ * permanent authority would hide exactly the access worth reviewing.
+ */
+function PlatformAdmins({
+  admins,
+  me,
+  saving,
+  start,
+}: {
+  admins: PlatformAdmin[];
+  me: string;
+  saving: boolean;
+  start: (fn: () => Promise<void>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("super_admin");
+  const [days, setDays] = useState("7");
+  const field =
+    "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-fg outline-none focus:border-brand";
+
+  const supers = admins.filter((a) => a.role === "super_admin" && !a.is_expired).length;
+
+  return (
+    <div className="mt-8">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+          Platform administrators ({admins.length})
+        </h2>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="rounded-full border border-line px-3 py-1 text-xs font-medium text-muted hover:border-brand hover:text-brand"
+        >
+          {open ? "Cancel" : "+ Appoint"}
+        </button>
+      </div>
+
+      {open && (
+        <Card className="mb-3">
+          <form
+            action={(fd) =>
+              start(async () => {
+                const res = await grantPlatformAdmin(fd);
+                if ("error" in res && res.error) return toast(res.error, "error");
+                toast("Appointed", "success");
+                setOpen(false);
+                setEmail("");
+              })
+            }
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                  Email of an existing account
+                </span>
+                <input
+                  name="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="them@example.com"
+                  className={field}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                  As
+                </span>
+                <select name="role" value={role} onChange={(e) => setRole(e.target.value)} className={field}>
+                  <option value="super_admin">Super admin</option>
+                  <option value="support">Support (temporary)</option>
+                </select>
+              </label>
+            </div>
+
+            {role === "support" && (
+              <label className="mt-3 block max-w-[12rem]">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+                  Ends after
+                </span>
+                <select name="days" value={days} onChange={(e) => setDays(e.target.value)} className={field}>
+                  <option value="1">1 day</option>
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                </select>
+              </label>
+            )}
+
+            <p className="mt-3 rounded-xl border border-line bg-surface-2/50 px-3 py-2 text-[11px] text-muted">
+              {role === "super_admin"
+                ? "A super admin may enter every business on the platform and create new ones. Entering a business they do not belong to is written to that business audit log."
+                : "Support access must end. It does not make somebody a super admin — it is the seat that time-boxed internal access will use."}
+            </p>
+
+            <button
+              type="submit"
+              disabled={saving || !email.includes("@")}
+              className="mt-3 rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "Appointing…" : "Appoint"}
+            </button>
+          </form>
+        </Card>
+      )}
+
+      <Card className="p-0">
+        <div className="divide-y divide-line">
+          {admins.map((a) => (
+            <div key={a.user_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
+                  {a.full_name || a.email || a.user_id}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      a.role === "super_admin" ? "bg-brand/10 text-brand-soft" : "bg-surface-2 text-faint"
+                    }`}
+                  >
+                    {a.role === "super_admin" ? "Super admin" : "Support"}
+                  </span>
+                  {a.is_expired && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                      Expired
+                    </span>
+                  )}
+                  {a.user_id === me && (
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                      You
+                    </span>
+                  )}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-faint">
+                  {a.email}
+                  {a.granted_by_email && ` · appointed by ${a.granted_by_email}`}
+                  {a.expires_at
+                    ? ` · ${a.is_expired ? "ended" : "ends"} ${new Date(a.expires_at).toLocaleDateString()}`
+                    : " · does not expire"}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={saving || (a.role === "super_admin" && supers <= 1 && !a.is_expired)}
+                title={
+                  a.role === "super_admin" && supers <= 1 && !a.is_expired
+                    ? "The last platform administrator cannot be removed — nobody else can appoint one."
+                    : undefined
+                }
+                onClick={() =>
+                  start(async () => {
+                    const res = await revokePlatformAdmin(a.user_id);
+                    if ("error" in res && res.error) return toast(res.error, "error");
+                    toast("Removed", "success");
+                  })
+                }
+                className="shrink-0 text-xs font-medium text-faint hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <p className="mt-2 max-w-2xl text-xs text-muted">
+        Platform authority is a row here, not a membership in any business — which is why removing
+        the last one is refused: nobody else is able to appoint a replacement.
       </p>
     </div>
   );
