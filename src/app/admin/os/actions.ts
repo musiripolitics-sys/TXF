@@ -1135,3 +1135,135 @@ export async function setOrganisationStatus(tenantId: string, status: string) {
   revalidatePath("/", "layout");
   return { success: true };
 }
+
+/**
+ * Switch a product on or off FOR THE BUSINESS the admin is acting in.
+ *
+ * Distinct from setProductEnabled, which edits the platform catalogue and
+ * since 0051 is a platform owner act — it was writable by any tenant admin,
+ * so one business could switch a product off for every business.
+ */
+export async function setTenantProduct(key: string, enabled: boolean) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_set_tenant_product", {
+    p_key: key,
+    p_enabled: enabled,
+  });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_set_tenant_product")) return { error: "Run migration 0051 in Supabase first." };
+    if (m.includes("UNKNOWN_PRODUCT")) return { error: `No such product: ${key}` };
+    if (m.includes("FORBIDDEN")) return { error: "Only an admin of this business can do that." };
+    return { error: m };
+  }
+
+  await logAudit(supabase, gate.user.id, "update", "tenant_products", key, null, { is_enabled: enabled });
+  // "layout" because it changes the nav, not just this page.
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/** Change what somebody is in this business. Refuses to demote the last admin. */
+export async function setMemberRole(userId: string, role: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_set_member_role", { p_user: userId, p_role: role });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_set_member_role")) return { error: "Run migration 0051 in Supabase first." };
+    if (m.includes("LAST_ADMIN")) return { error: "They're the last admin. Appoint another one first — only an admin can." };
+    if (m.includes("NOT_A_MEMBER")) return { error: "They're not in this business." };
+    if (m.includes("BAD_ROLE")) return { error: `"${role}" isn't a role.` };
+    return { error: m };
+  }
+
+  await logAudit(supabase, gate.user.id, "update", "tenant_members", userId, null, { role });
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/**
+ * Remove somebody from this business.
+ *
+ * The membership is ended rather than deleted, so every row they wrote stays
+ * readable. Their grants in THIS business go; grants in another business are
+ * not this business to revoke.
+ */
+export async function removeMember(userId: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_remove_member", { p_user: userId });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_remove_member")) return { error: "Run migration 0051 in Supabase first." };
+    if (m.includes("LAST_ADMIN")) return { error: "They're the last admin. Appoint another one first." };
+    if (m.includes("NOT_A_MEMBER")) return { error: "They're not in this business." };
+    return { error: m };
+  }
+
+  await logAudit(supabase, gate.user.id, "delete", "tenant_members", userId, null, null);
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/**
+ * Withdraw a pending invitation.
+ *
+ * A plain delete rather than an RPC: the "tenant admin manages invitations"
+ * policy from 0047 already scopes it to the caller business, and unlike a
+ * membership there is no history worth keeping — nobody has acted as this
+ * invitation yet.
+ */
+export async function revokeInvitation(id: string) {
+  const gate = await requireAdmin();
+  if ("error" in gate) return gate;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("tenant_invitations").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  await logAudit(supabase, gate.user.id, "delete", "tenant_invitations", id, null, null);
+  revalidatePath(`${OS}/team/access`);
+  return { success: true };
+}
+
+/**
+ * Accept an invitation and join the business it names.
+ *
+ * Not admin-gated: the caller is by definition not in the business yet. The
+ * database decides — bos_accept_invitation checks the token against the
+ * signed-in address, so holding the link is not enough if it was sent to
+ * somebody else.
+ */
+export async function acceptInvitation(token: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in first." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bos_accept_invitation", { p_token: token });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_accept_invitation")) return { error: "Run migration 0047 in Supabase first." };
+    // The codes 0047 actually raises: NO_SUCH_INVITATION, ALREADY_ACCEPTED,
+    // INVITATION_EXPIRED, WRONG_ACCOUNT, NOT_SIGNED_IN.
+    if (m.includes("NO_SUCH_INVITATION")) return { error: "That invitation link is not valid." };
+    if (m.includes("INVITATION_EXPIRED")) return { error: "That invitation has expired. Ask for another." };
+    if (m.includes("ALREADY_ACCEPTED")) return { error: "That invitation has already been used." };
+    if (m.includes("WRONG_ACCOUNT")) {
+      return { error: "That invitation was sent to a different address. Sign in as that address and open the link again." };
+    }
+    if (m.includes("NOT_SIGNED_IN")) return { error: "Sign in first." };
+    return { error: m };
+  }
+
+  revalidatePath(OS, "layout");
+  revalidatePath("/", "layout");
+  return { success: true, result: data };
+}

@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { SECTION_KEYS, SECTION_LABELS } from "@/lib/os-access";
-import { AccessClient, type PersonRow, type ProductRow } from "./AccessClient";
+import { isPlatformOwner, loadMyTenants } from "@/lib/os-tenants";
+import {
+  AccessClient, type PersonRow, type ProductRow,
+  type TenantProductRow, type InvitationRow,
+} from "./AccessClient";
 
 export const metadata = { title: "Team & Access · Business OS" };
 
@@ -18,7 +22,10 @@ export default async function AccessPage() {
   const supabase = await createClient();
   // Staff only. Members are customers of the public site and have no business
   // in the OS; pulling them in here made the page mostly noise.
-  const [{ data: users }, grantsRes, profilesRes, productsRes] = await Promise.all([
+  const [
+    { data: users }, grantsRes, profilesRes, productsRes,
+    tenantProductsRes, invitationsRes, membersRes, platformOwner, myTenants,
+  ] = await Promise.all([
     supabase
       .from("users")
       .select("id,full_name,email,primary_role,created_at")
@@ -35,6 +42,22 @@ export default async function AccessPage() {
       .select("key,name,description,is_enabled")
       .order("sort_order")
       .order("key"),
+    // The catalogue as THIS business sees it. 0050 seeded tenant_products and
+    // nothing read it, so until 0051 every business showed all nine products
+    // whatever its rows said.
+    supabase.rpc("bos_tenant_products"),
+    // Pending invitations to this business. Scoped by the 0047 policy rather
+    // than by a filter here, so a stale tenant in the client cannot widen it.
+    supabase
+      .from("tenant_invitations")
+      .select("id,email,role,sections,token,created_at,expires_at")
+      .is("accepted_at", null)
+      .order("created_at", { ascending: false }),
+    // Role per BUSINESS, which since 0047 is the only authority. users.primary_role
+    // is a mirror of the default business and wrong for anybody else.
+    supabase.from("tenant_members").select("user_id,role,status").eq("status", "active"),
+    isPlatformOwner(),
+    loadMyTenants(),
   ]);
 
   const productsMigrated = !productsRes.error && (productsRes.data?.length ?? 0) > 0;
@@ -79,12 +102,31 @@ export default async function AccessPage() {
     // Anyone offboarded keeps their account but leaves this list.
     .filter((u) => profiles.get(u.id)?.status !== "ended");
 
+  // tenant_members.role wins over users.primary_role wherever it exists.
+  const memberRole = new Map(
+    ((membersRes.data as { user_id: string; role: string }[]) ?? []).map((m) => [m.user_id, m.role]),
+  );
+  const peopleWithTenantRole = people.map((p) => ({
+    ...p,
+    role: memberRole.get(p.id) ?? p.role,
+    inThisBusiness: memberRole.has(p.id),
+  }));
+
+  const tenantProducts = (tenantProductsRes.error ? [] : (tenantProductsRes.data ?? [])) as TenantProductRow[];
+  const invitations = (invitationsRes.error ? [] : (invitationsRes.data ?? [])) as InvitationRow[];
+
   return (
     <AccessClient
-      people={people}
+      people={peopleWithTenantRole}
       products={products}
       migrated={!grantsRes.error}
       productsMigrated={productsMigrated}
+      tenantProducts={tenantProducts}
+      tenantProductsMigrated={!tenantProductsRes.error}
+      invitations={invitations}
+      invitationsMigrated={!invitationsRes.error}
+      platformOwner={platformOwner}
+      businessName={myTenants.find((t) => t.is_active)?.name ?? myTenants[0]?.name ?? "this business"}
     />
   );
 }
