@@ -1338,3 +1338,70 @@ export async function revokePlatformAdmin(userId: string) {
   revalidatePath(OS, "layout");
   return { success: true };
 }
+
+/**
+ * Appoint somebody to a business from the platform console, by address.
+ *
+ * A business created by a super admin has only the super admin as its admin,
+ * which is useless — the point of creating one is to hand it over, and it
+ * cannot be handed over from inside itself. So this is a platform act, super
+ * admin only, logged in the business that gained the member.
+ */
+export async function assignTenantAdmin(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const role = String(formData.get("role") ?? "admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_assign_tenant_admin", {
+    p_tenant: tenantId,
+    p_email: email,
+    p_role: role,
+  });
+
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_assign_tenant_admin")) return { error: "Run migration 0053 in Supabase first." };
+    if (m.includes("NOT_SUPER_ADMIN")) return { error: "Only a platform administrator can do that." };
+    if (m.includes("NO_SUCH_ACCOUNT")) {
+      return { error: `No account with the address ${email}. They have to sign up first — or invite them from inside the business instead.` };
+    }
+    if (m.includes("NO_SUCH_TENANT")) return { error: "That business no longer exists." };
+    if (m.includes("BAD_EMAIL")) return { error: "That doesn't look like an email address." };
+    if (m.includes("BAD_ROLE")) return { error: `"${role}" isn't a role.` };
+    return { error: m };
+  }
+
+  revalidatePath("/admin/platform");
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/** Remove somebody from a named business, from the platform console. */
+export async function unassignTenantMember(tenantId: string, userId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_unassign_tenant_member", {
+    p_tenant: tenantId,
+    p_user: userId,
+  });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_unassign_tenant_member")) return { error: "Run migration 0053 in Supabase first." };
+    if (m.includes("NOT_SUPER_ADMIN")) return { error: "Only a platform administrator can do that." };
+    if (m.includes("LAST_ADMIN")) {
+      return { error: "They're the last admin of that business. Appoint another one first — the business cannot do it itself." };
+    }
+    if (m.includes("NOT_A_MEMBER")) return { error: "They're not in that business." };
+    return { error: m };
+  }
+
+  revalidatePath("/admin/platform");
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
