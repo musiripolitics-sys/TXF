@@ -1045,3 +1045,93 @@ export async function inviteToTenant(input: unknown) {
   revalidatePath(`${OS}/team/access`);
   return { success: true, token: data as string };
 }
+
+/**
+ * Create a business.
+ *
+ * Thin on purpose. bos_create_tenant writes the tenant, the creator's admin
+ * membership and the product list in one statement, because a tenant with no
+ * admin is unreachable and a tenant with no products is an empty shell. None
+ * of that belongs in a server action where a failed second write would leave
+ * the first one standing.
+ *
+ * The slug is derived by the database rather than sent, so there is exactly
+ * one implementation of what a slug may contain.
+ */
+export async function createOrganisation(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim();
+  if (name.length < 2) return { error: "Give the business a name." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bos_create_tenant", {
+    p_name: name,
+    p_slug: slug || null,
+  });
+
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_create_tenant")) return { error: "Run migration 0050 in Supabase first." };
+    if (m.includes("NOT_PLATFORM_OWNER")) return { error: "Only an admin of the main business can create another one." };
+    if (m.includes("NO_DEFAULT_TENANT")) return { error: "No business is marked as the default, so there is nothing to own the platform. Run 0034." };
+    if (m.includes("SLUG_TAKEN")) return { error: `The address "${m.split("SLUG_TAKEN:")[1]?.trim() ?? slug}" is already taken.` };
+    if (m.includes("BAD_SLUG")) return { error: "That name has no letters or numbers to build an address from." };
+    if (m.includes("BAD_NAME")) return { error: "Give the business a name of at least two characters." };
+    return { error: m };
+  }
+
+  await logAudit(supabase, user.id, "create", "tenants", String(data), null, { name, slug: slug || null });
+  revalidatePath(OS, "layout");
+  return { success: true, id: data as string };
+}
+
+/** Rename a business you administer. The slug does not follow — it is an address. */
+export async function renameOrganisation(tenantId: string, name: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+  if (name.trim().length < 2) return { error: "Give the business a name of at least two characters." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_rename_tenant", { p_tenant: tenantId, p_name: name.trim() });
+  if (error) {
+    if (error.message.includes("bos_rename_tenant")) return { error: "Run migration 0050 in Supabase first." };
+    if (error.message.includes("FORBIDDEN")) return { error: "You are not an admin of that business." };
+    return { error: error.message };
+  }
+
+  await logAudit(supabase, user.id, "update", "tenants", tenantId, null, { name: name.trim() });
+  revalidatePath(OS, "layout");
+  return { success: true };
+}
+
+/**
+ * Suspend, archive or reactivate a business you administer.
+ *
+ * The database refuses this for the default business, which bos_request_tenant
+ * falls back to: suspending it would hide it from bos_my_tenants and leave
+ * every account with no active tenant pointing at something the switcher
+ * will not offer back.
+ */
+export async function setOrganisationStatus(tenantId: string, status: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Not signed in" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("bos_set_tenant_status", { p_tenant: tenantId, p_status: status });
+  if (error) {
+    const m = error.message;
+    if (m.includes("bos_set_tenant_status")) return { error: "Run migration 0050 in Supabase first." };
+    if (m.includes("CANNOT_SUSPEND_DEFAULT")) return { error: "The main business cannot be suspended — everything falls back to it." };
+    if (m.includes("FORBIDDEN")) return { error: "You are not an admin of that business." };
+    if (m.includes("BAD_STATUS")) return { error: `"${status}" is not a status.` };
+    return { error: m };
+  }
+
+  await logAudit(supabase, user.id, "update", "tenants", tenantId, null, { status });
+  revalidatePath(OS, "layout");
+  revalidatePath("/", "layout");
+  return { success: true };
+}
