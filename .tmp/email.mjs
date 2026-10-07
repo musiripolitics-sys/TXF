@@ -22345,6 +22345,7 @@ var init_dist4 = __esm({
 
 // src/lib/email.ts
 import nodemailer from "nodemailer";
+var SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
 var FROM = process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
 var _transporter = null;
 function getTransporter() {
@@ -22498,7 +22499,7 @@ async function sendWaitlistPromoted(opts) {
   );
 }
 async function sendMembershipRenewal(opts) {
-  const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/membership`;
+  const url = `${SITE}/membership`;
   await send(
     opts.to,
     opts.expired ? `Your ${opts.tier} membership has expired` : `Your ${opts.tier} membership renews in 3 days`,
@@ -22515,7 +22516,7 @@ async function sendMembershipRenewal(opts) {
   );
 }
 async function sendSpotOpened(opts) {
-  const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/events/${opts.slug}`;
+  const url = `${SITE}/events/${opts.slug}`;
   await send(
     opts.to,
     `A spot just opened \u2014 ${opts.eventTitle}`,
@@ -22592,7 +22593,7 @@ async function sendHostDecision(opts) {
         `Hi ${opts.name}, your request for Host access has been approved. You can now
          submit events for approval and manage your attendees from your dashboard.
          <p style="margin:18px 0 0;">
-           <a href="${process.env.NEXT_PUBLIC_SITE_URL || ""}/host/dashboard"
+           <a href="${SITE}/host/dashboard"
               style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;
                      font-weight:600;padding:11px 22px;border-radius:9999px;">Go to Host dashboard</a>
          </p>`
@@ -22611,7 +22612,7 @@ async function sendHostDecision(opts) {
     );
   }
 }
-var osUrl = (path) => `${process.env.NEXT_PUBLIC_SITE_URL || ""}${path}`;
+var osUrl = (path) => `${SITE}${path}`;
 function button(href, label, colour = "#ff5a1f") {
   return `<p style="margin:18px 0 0;">
     <a href="${href}" style="display:inline-block;background:${colour};color:#fff;text-decoration:none;
@@ -22687,7 +22688,7 @@ async function sendTaskReviewed(opts) {
   );
 }
 async function sendEmployeeWelcome(opts) {
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const site = SITE;
   await send(
     opts.to,
     "Your Techxfluence Business OS account is ready",
@@ -22727,7 +22728,7 @@ async function sendHostProposalReceived(opts) {
   );
 }
 async function sendNewsletterWelcome(opts) {
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const site = SITE;
   await send(
     opts.to,
     "You're subscribed to Techxfluence",
@@ -22748,7 +22749,7 @@ async function sendInternalAlert(opts) {
       opts.heading,
       `Hi ${opts.name}, ${opts.what}
        ${opts.details ? facts(opts.details) : ""}
-       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}${opts.href}`, opts.cta)}`
+       ${button(`${SITE}${opts.href}`, opts.cta)}`
     )
   );
 }
@@ -22762,7 +22763,7 @@ async function sendApprovalDecision(opts) {
        \u2014 <strong>${opts.requestTitle}</strong> \u2014 was
        ${opts.approved ? "approved" : "declined"}.
        ${opts.comments ? `<p style="margin:14px 0 0;"><strong>Note:</strong> ${opts.comments}</p>` : ""}
-       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}/admin/os/approvals`, "See the request")}`
+       ${button(`${SITE}/admin/os/approvals`, "See the request")}`
     )
   );
 }
