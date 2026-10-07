@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, isEmployee } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { WorkspaceClient } from "./WorkspaceClient";
-import type { Task } from "../admin/os/tasks/types";
-import type { Goal, Workstream } from "../admin/os/roadmap/types";
+import type { Task } from "../shreex/tasks/types";
+import type { Goal, Workstream } from "../shreex/roadmap/types";
 
 export const metadata = { title: "My Workspace" };
 

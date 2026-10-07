@@ -9,8 +9,8 @@ import {
   type BosStatus, type BosPriority,
 } from "@/lib/bos";
 import { setMyTaskStatus, addMyTask, logMyExpense, addMyLead, updateMyKpiActual } from "./actions";
-import type { Task } from "../admin/os/tasks/types";
-import type { Goal, Workstream } from "../admin/os/roadmap/types";
+import type { Task } from "../shreex/tasks/types";
+import type { Goal, Workstream } from "../shreex/roadmap/types";
 import type { KpiRow, PendingApproval, AssignedEvent } from "./page";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);

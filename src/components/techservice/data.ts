@@ -103,7 +103,7 @@ export const projects: Project[] = [
     visual: "crm",
   },
   {
-    name: "Business OS",
+    name: "Shreex",
     category: "Operations Platform",
     services: "UI/UX Design · Web Application · Development",
     includes: "Tasks and approvals, SOPs, performance reviews, team dashboards and role-based access — one workspace to run the business.",

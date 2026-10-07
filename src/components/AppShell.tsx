@@ -30,7 +30,7 @@ const adminItems: NavItem[] = [
 // The OS is no longer admin-only, so it is not an admin item. Anyone holding
 // a section grant gets this, and the OS turns away anyone who does not.
 const osItems: NavItem[] = [
-  { href: "/admin/os", label: "Business OS", icon: "rocket" },
+  { href: "/shreex", label: "Shreex", icon: "rocket" },
 ];
 
 const workspaceItems: NavItem[] = [

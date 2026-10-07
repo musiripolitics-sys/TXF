@@ -212,7 +212,7 @@ function Crm() {
   );
 }
 
-/* ── Business OS: sidebar, KPIs, tasks ───────────────────────────── */
+/* ── Shreex: sidebar, KPIs, tasks ───────────────────────────── */
 
 function Os() {
   const kpis = ["bg-brand", "bg-fg/80", "bg-[#28c840]/80"];

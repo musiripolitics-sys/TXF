@@ -29,17 +29,17 @@ export function Chrome({
   children,
 }: {
   role: Role;
-  /** True when this person has at least one Business OS section. */
+  /** True when this person has at least one Shreex section. */
   hasOsAccess?: boolean;
   authed: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
 
-  // The Business OS ships its own full-height shell. Wrapping it in AppShell
+  // The Shreex ships its own full-height shell. Wrapping it in AppShell
   // too gave it two competing navigations stacked on top of each other, which
   // is most of why it was hard to move around in.
-  if (pathname === "/admin/os" || pathname.startsWith("/admin/os/")) {
+  if (pathname === "/shreex" || pathname.startsWith("/shreex/")) {
     return <>{children}</>;
   }
 
