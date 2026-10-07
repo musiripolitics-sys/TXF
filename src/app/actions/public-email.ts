@@ -32,10 +32,46 @@ function admin() {
 
 const firstName = (s: string | null | undefined) => (s || "there").split(" ")[0];
 
-/** Everyone who can act on an internal alert. */
-async function admins() {
+/**
+ * Everyone who can act on an internal alert, in the business the submission
+ * belongs to.
+ *
+ * This read `users where primary_role = 'admin'` until now, which is the
+ * PLATFORM admin list — so one business receiving a contact message mailed
+ * every admin on the installation. It is also the column Stage 7 retires: a
+ * role is a property of a membership, not of an account.
+ *
+ * Falls back to the platform list only if the membership read fails, so a
+ * database that has not caught up still reaches somebody rather than
+ * silently alerting nobody.
+ */
+async function admins(tenantId: string | null | undefined) {
   const db = admin();
   if (!db) return [];
+
+  if (tenantId) {
+    // Two reads rather than an embed. PostgREST returns a to-one embed as an
+    // object but types it as an array, and this project has already lost time
+    // to that mismatch; two plain selects have no shape to get wrong.
+    const { data: members, error } = await db
+      .from("tenant_members")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("role", "admin")
+      .eq("status", "active");
+
+    if (!error && Array.isArray(members) && members.length > 0) {
+      const ids = (members as { user_id: string }[]).map((m) => m.user_id);
+      const { data: people } = await db
+        .from("users")
+        .select("email,full_name")
+        .in("id", ids);
+      return ((people as { email: string | null; full_name: string | null }[]) ?? [])
+        .filter((a) => a.email);
+    }
+    // No admins in that business, or the read failed. Fall through.
+  }
+
   const { data } = await db.from("users").select("email,full_name").eq("primary_role", "admin");
   return ((data as { email: string | null; full_name: string | null }[]) ?? []).filter((a) => a.email);
 }
@@ -46,15 +82,18 @@ export async function acknowledgeContact(id: string) {
     if (!db) return;
     const { data } = await db
       .from("contact_messages")
-      .select("name,email,topic,message")
+      .select("name,email,topic,message,tenant_id")
       .eq("id", id)
       .maybeSingle();
-    const row = data as { name: string | null; email: string | null; topic: string | null; message: string | null } | null;
+    const row = data as {
+      name: string | null; email: string | null; topic: string | null;
+      message: string | null; tenant_id: string | null;
+    } | null;
     if (!row?.email) return;
 
     await sendContactReceived({ to: row.email, name: firstName(row.name), subject: row.topic });
     await Promise.all(
-      (await admins()).map((a) =>
+      (await admins(row.tenant_id)).map((a) =>
         sendInternalAlert({
           to: a.email!,
           name: firstName(a.full_name),
@@ -82,13 +121,14 @@ export async function acknowledgeHostProposal(id: string) {
     if (!db) return;
     const { data } = await db
       .from("host_submissions")
-      .select("title,category,date,city,venue,organizer_email,organizer_id")
+      .select("title,category,date,city,venue,organizer_email,organizer_id,tenant_id")
       .eq("id", id)
       .maybeSingle();
     const row = data as {
       title: string | null; category: string | null; date: string | null;
       city: string | null; venue: string | null;
       organizer_email: string | null; organizer_id: string | null;
+      tenant_id: string | null;
     } | null;
     if (!row?.organizer_email) return;
 
@@ -106,7 +146,7 @@ export async function acknowledgeHostProposal(id: string) {
       eventTitle: row.title,
     });
     await Promise.all(
-      (await admins()).map((a) =>
+      (await admins(row.tenant_id)).map((a) =>
         sendInternalAlert({
           to: a.email!,
           name: firstName(a.full_name),

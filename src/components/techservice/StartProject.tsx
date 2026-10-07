@@ -1,7 +1,7 @@
 import { Container, Heading } from "./ui";
 import { ProjectEnquiryForm } from "./ProjectEnquiryForm";
 
-const EMAIL = "hello@techxfluence.com";
+const EMAIL = "admin@techxfluence.com";
 const MAILTO = `mailto:${EMAIL}?subject=Project%20enquiry%20%E2%80%94%20TXF%20Tech%20Services`;
 
 const NEXT_STEPS = [
