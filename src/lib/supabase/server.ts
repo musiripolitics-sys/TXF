@@ -1,16 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { currentTenantConnection } from "@/lib/tenancy/registry";
 
 /**
  * Supabase client for Server Components, Server Actions and Route Handlers.
  * `cookies()` is async in this Next.js version, so this must be awaited.
+ *
+ * Since Stage A of the database split, the project is resolved per request
+ * from the Host header rather than read straight from the environment. With
+ * no registry configured that resolves to the same single project as before,
+ * so this is not a behaviour change until a second business exists.
  */
 export async function createClient() {
-  const cookieStore = await cookies();
+  const [cookieStore, tenant] = await Promise.all([
+    cookies(),
+    currentTenantConnection(),
+  ]);
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    tenant.url,
+    tenant.anonKey,
     {
       cookies: {
         getAll() {
