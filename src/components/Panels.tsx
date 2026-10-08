@@ -1,3 +1,11 @@
+/**
+ * Card, KpiCard and EmptyState.
+ *
+ * Copied out of components/os when Shreex moved to its own repository. The
+ * ambassador page is the only thing on this site that used them, and keeping
+ * a components/os directory in a repo with no OS in it would have been the
+ * last thread tying the two products together.
+ */
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Icon } from "@/components/Icon";

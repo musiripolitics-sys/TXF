@@ -128,7 +128,12 @@ const walk = (d) => {
   }
 };
 walk("src");
-ok(upserts.length >= 4, `found ${upserts.length} upsert conflict targets in src`);
+// The floor was 4 when this repository also held the Shreex platform. Most of
+// those upserts left with it, so the number is now about THIS site. One is not
+// a suspicious result — it is how many places the public site upserts — and
+// the assertion that matters is the next one: whichever targets exist must
+// name an index the database actually has.
+ok(upserts.length >= 1, `found ${upserts.length} upsert conflict targets in src`);
 const broken = upserts.filter((u) => {
   const sorted = [...u.cols].sort().join(",");
   return ![...uniqueTargets].some(
