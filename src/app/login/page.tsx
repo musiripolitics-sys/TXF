@@ -81,16 +81,12 @@ function LoginForm() {
   };
 
   /**
-   * Whether this sign-in is on the way into a back office rather than into the
-   * public site. Two different destinations now: /shreex is the platform, and
-   * /admin is the Techxfluence admin console, which is a tenant own tool.
-   *
-   * Checking only "/admin" was right until Shreex moved out from under it, at
-   * which point signing into the platform started showing the membership copy
-   * about perks and events — which a Jilo administrator has no use for.
+   * Whether this sign-in is on the way into the back office rather than into
+   * the public site. There is one back office again: /admin. The membership
+   * copy below is about perks and events, which is the wrong thing to greet
+   * an administrator with.
    */
-  const isWorkPath = next.startsWith("/shreex") || next.startsWith("/admin");
-  const isPlatform = next.startsWith("/shreex");
+  const isWorkPath = next.startsWith("/admin");
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-16">
@@ -105,14 +101,9 @@ function LoginForm() {
         {mode === "reset"
           ? "Enter your email and we'll send you a link to reset your password."
           : mode === "signin"
-            ? isPlatform
-              // Deliberately names no business. Whoever is signing in may
-              // administer Jilo, or a client, or Techxfluence — the platform
-              // should not greet all three as though they worked here.
-              ? "Sign in to Shreex."
-              : isWorkPath
-                ? "Access the admin console."
-                : "Sign in to access your membership perks and events."
+            ? isWorkPath
+              ? "Access the admin console."
+              : "Sign in to access your membership perks and events."
             : isWorkPath
               ? "Sign up, then ask an admin to grant you access."
               : "Sign up to join our community and access events."}

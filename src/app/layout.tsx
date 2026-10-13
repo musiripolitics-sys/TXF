@@ -98,10 +98,6 @@ export default async function RootLayout({
         >
           Skip to content
         </a>
-        {/* hasOsAccess is gone with Shreex. This site no longer links into the
-            platform: they are separate products, separate repositories and
-            separate databases, and a link from one to the other would be the
-            only thing left tying them together. */}
         <Chrome role={role} authed={!!user}>
           {children}
         </Chrome>

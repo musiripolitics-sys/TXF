@@ -1,22 +1,16 @@
 /**
  * Card, KpiCard and EmptyState.
  *
- * Copied out of components/os when Shreex moved to its own repository. The
- * ambassador page is the only thing on this site that used them, and keeping
- * a components/os directory in a repo with no OS in it would have been the
- * last thread tying the two products together.
+ * Copied out of components/os when the OS left this repository. The ambassador
+ * page is the only thing on this site that uses them, and keeping a
+ * components/os directory in a repo with no OS in it would have been the last
+ * thread tying the two products together. Everything else that came across —
+ * the status, priority and CRM-stage badges, the dashboard panels and the
+ * target-vs-actual meter — described work this site does not track, and went
+ * with the OS.
  */
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Icon } from "@/components/Icon";
-import {
-  STATUS_META,
-  PRIORITY_META,
-  STAGE_META,
-  type BosStatus,
-  type BosPriority,
-  type CrmStage,
-} from "@/lib/bos";
 
 /** A soft-elevated content card, matching the site's `.shadow-soft` cards. */
 export function Card({
@@ -94,126 +88,6 @@ export function KpiCard({
   );
 }
 
-/**
- * A grouping card for the dashboard — an icon, a title/description, and a
- * body of `PanelStat`s. Replaces bare `SectionHeading` + full-width grid: one
- * visible boundary per topic instead of a continuous wall of tiles.
- */
-export function Panel({
-  icon,
-  title,
-  desc,
-  tone = "default",
-  right,
-  className = "",
-  children,
-}: {
-  icon?: string;
-  title: string;
-  desc?: string;
-  tone?: "default" | "warn" | "brand";
-  right?: ReactNode;
-  className?: string;
-  children: ReactNode;
-}) {
-  const iconTone = {
-    default: "bg-surface-2 text-muted",
-    warn: "bg-amber-100 text-amber-600",
-    brand: "bg-brand/10 text-brand-soft",
-  }[tone];
-  return (
-    <div className={`rounded-2xl border border-line bg-surface p-5 shadow-soft ${className}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          {icon && (
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${iconTone}`}>
-              <Icon name={icon} className="h-4 w-4" strokeWidth={1.8} />
-            </span>
-          )}
-          <div>
-            <h3 className="font-display text-sm font-semibold text-fg">{title}</h3>
-            {desc && <p className="mt-0.5 text-xs text-muted">{desc}</p>}
-          </div>
-        </div>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/**
- * A flat stat cell for inside a `Panel` — no border/shadow of its own (the
- * panel already draws the boundary), just a hover tint so the grid reads as
- * one dense, scannable block instead of nested cards.
- */
-export function PanelStat({
-  label,
-  value,
-  sub,
-  href,
-  tone = "default",
-}: {
-  label: string;
-  value: ReactNode;
-  sub?: ReactNode;
-  href?: string;
-  tone?: "default" | "good" | "bad" | "warn" | "brand";
-}) {
-  const toneClass = {
-    default: "text-fg",
-    good: "text-green-600",
-    bad: "text-red-600",
-    warn: "text-amber-600",
-    brand: "text-brand-soft",
-  }[tone];
-  const body = (
-    <>
-      <p className="truncate text-[11px] font-medium text-faint">{label}</p>
-      <p className={`mt-1 font-display text-lg font-bold tabular-nums ${toneClass}`}>{value}</p>
-      {sub != null && <p className="mt-0.5 truncate text-[11px] text-muted">{sub}</p>}
-    </>
-  );
-  const base = "block rounded-xl p-2.5 transition-colors";
-  return href ? (
-    <Link href={href} className={`${base} hover:bg-surface-2`}>
-      {body}
-    </Link>
-  ) : (
-    <div className={base}>{body}</div>
-  );
-}
-
-export function StatusBadge({ status }: { status: BosStatus }) {
-  const m = STATUS_META[status] ?? STATUS_META.not_started;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${m.chip}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
-      {m.label}
-    </span>
-  );
-}
-
-export function PriorityBadge({ priority }: { priority: BosPriority }) {
-  const m = PRIORITY_META[priority] ?? PRIORITY_META.medium;
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${m.chip}`}>
-      {m.label}
-    </span>
-  );
-}
-
-export function StageBadge({ stage }: { stage: CrmStage }) {
-  const m = STAGE_META[stage] ?? STAGE_META.lead;
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${m.chip}`}>
-      {m.label}
-    </span>
-  );
-}
-
 /** Shown wherever a module has no rows yet — never a fake number. */
 export function EmptyState({
   title = "No data yet",
@@ -229,48 +103,6 @@ export function EmptyState({
       <p className="font-display text-sm font-semibold text-fg">{title}</p>
       {hint && <p className="mt-1 max-w-sm text-xs text-muted">{hint}</p>}
       {action && <div className="mt-4">{action}</div>}
-    </div>
-  );
-}
-
-export function SectionHeading({
-  title,
-  desc,
-  right,
-}: {
-  title: string;
-  desc?: string;
-  right?: ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-end justify-between gap-3">
-      <div>
-        <h2 className="font-display text-lg font-semibold text-fg">{title}</h2>
-        {desc && <p className="text-xs text-muted">{desc}</p>}
-      </div>
-      {right}
-    </div>
-  );
-}
-
-/** A thin target-vs-actual progress bar. */
-export function Meter({
-  actual,
-  target,
-  invert = false,
-}: {
-  actual: number;
-  target: number;
-  invert?: boolean;
-}) {
-  const ratio = target > 0 ? Math.min(actual / target, 1) : 0;
-  const good = invert ? actual <= target : actual >= target;
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink-2">
-      <div
-        className={`h-full rounded-full ${good ? "bg-green-500" : "bg-brand"}`}
-        style={{ width: `${Math.max(ratio * 100, target === 0 ? 0 : 2)}%` }}
-      />
     </div>
   );
 }

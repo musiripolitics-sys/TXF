@@ -160,7 +160,7 @@ export async function acknowledgeHostProposal(id: string) {
             ["Date", row.date],
             ["City", [row.venue, row.city].filter(Boolean).join(", ") || null],
           ],
-          href: "/shreex/hosts",
+          href: "/admin?tab=submissions",
           cta: "Review the proposal",
         }),
       ),

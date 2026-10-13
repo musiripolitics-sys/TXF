@@ -7,14 +7,29 @@ Two steps, in this order. Neither is optional.
 ```
 schema.sql                   -- the public site: events, tickets, members,
                              -- payments, community, credits, chapters
-migrations/0007 … 0030       -- the back office, in filename order
+migrations/0007 … 0055       -- everything since, in filename order
 ```
 
 `schema.sql` is the **base**, not the whole database. It is applied once to a
-fresh project and then never re-derived, so every table a migration adds —
-tasks, goals, employee access, approvals, complaints, SOPs, the change log —
-is absent from it by design. Running it alone gives you a working public site
-with no back office behind it.
+fresh project and then never re-derived, so every table a migration adds is
+absent from it by design. Running it alone gives you a working public site
+with nothing behind it.
+
+### The Business OS is not part of this database any more
+
+Migrations 0007 to 0053 build a Business OS on top of the base — tasks, goals,
+employee access, approvals, complaints, SOPs, a platform console. That became
+**Shreex**, which now has its own repository and its own Supabase project.
+
+`0054` removes the platform and `0055` removes the OS: 51 tables, 95 → 44.
+The files that built it are still in `migrations/`, because a migration
+history records what happened rather than describing the present. Run them in
+order and you end up with the 44 tables this site actually uses.
+
+⚠️ **0055 destroys data** and is the one file here that is not safe to run
+without reading first. Export anything worth keeping from `tasks`,
+`workstreams`, `leads` and their neighbours before applying it. Nothing was
+copied to the Shreex project; that database was created empty.
 
 Both are idempotent and ordered by dependency, so they can be re-run over an
 existing database.

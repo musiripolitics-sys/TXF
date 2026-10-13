@@ -34,9 +34,8 @@ export const isHost = cache(async (): Promise<boolean> => {
 });
 
 /**
- * Whether the current user is staff (Employee or Admin) — used to gate the
- * Shreex employee workspace. Backed by the SECURITY DEFINER
- * `is_employee()` helper added in migration 0007.
+ * Whether the current user is staff (Employee or Admin). Backed by the
+ * SECURITY DEFINER `is_employee()` helper added in migration 0007.
  */
 export const isEmployee = cache(async (): Promise<boolean> => {
   const supabase = await createClient();

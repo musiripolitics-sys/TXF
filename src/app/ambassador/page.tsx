@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getCurrentUser, isAmbassador, isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card, KpiCard, EmptyState } from "@/components/Panels";
-import { num, shortDate } from "@/lib/bos";
+import { num, shortDate } from "@/lib/format";
 
 export const metadata = { title: "Ambassador Portal" };
 
