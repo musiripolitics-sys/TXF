@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { sendRegistrationConfirmation, sendPaymentReceipt } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -74,14 +75,60 @@ export async function POST(request: Request) {
 
       // The pending order already holds the seats and carries the priced
       // quantity — fulfilling it is idempotent, so a retried webhook is safe.
-      const { error: regErr } = await admin.rpc("fulfil_order", {
+      const { data: fulfilled, error: regErr } = await admin.rpc("fulfil_order", {
         p_order_id: notes.orderId,
         p_payment_id: payment.id,
       });
       if (regErr) {
         console.error("Webhook ticket fulfilment failed:", regErr.message);
+        return NextResponse.json({ ok: true, fulfilment_failed: true });
       }
       // fulfil_order redeems the promo itself — nothing extra to do here.
+
+      /**
+       * And tell them, which this route used not to do.
+       *
+       * This path runs exactly when the browser did not come back — the tab
+       * was closed, the phone slept, the train went into a tunnel — so it is
+       * the path where the buyer has heard nothing at all. It issued the
+       * ticket into the database and sent no confirmation and no receipt,
+       * which from the buyer's side is indistinguishable from having paid
+       * ₹499 into a void.
+       *
+       * ticket-verify sends the same two emails on the happy path. Both are
+       * safe to run twice: a retried delivery stops at the 23505 above and
+       * never reaches here.
+       */
+      const [{ data: order }, { data: event }] = await Promise.all([
+        admin.from("orders")
+          .select("quantity, buyer_name, buyer_email, currency")
+          .eq("id", notes.orderId).maybeSingle(),
+        admin.from("events")
+          .select("title, date_label, venue, currency")
+          .eq("id", notes.eventId).maybeSingle(),
+      ]);
+      const codes = (fulfilled as { tickets?: string[] })?.tickets ?? [];
+      if (order?.buyer_email) {
+        await Promise.all([
+          sendRegistrationConfirmation({
+            to: order.buyer_email,
+            name: order.buyer_name ?? "there",
+            eventTitle: event?.title ?? "your event",
+            ticketCode: codes[0] ?? "",
+            dateLabel: event?.date_label ?? null,
+            venue: event?.venue ?? null,
+            extraTickets: codes.length > 1 ? codes.slice(1) : undefined,
+          }),
+          sendPaymentReceipt({
+            to: order.buyer_email,
+            name: order.buyer_name ?? "there",
+            description: `${order.quantity ?? 1} × Ticket — ${event?.title ?? "Event"}`,
+            amount: p.amount,
+            currency: p.currency || order.currency || event?.currency || "INR",
+            paymentRef: p.id,
+          }),
+        ]).catch((e) => console.error("Webhook confirmation email failed:", e));
+      }
     }
 
     if (notes.kind === "membership" && notes.userId && notes.tier) {

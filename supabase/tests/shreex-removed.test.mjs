@@ -22,9 +22,22 @@ for (const f of ["bos_create_tenant", "bos_switch_tenant", "bos_my_tenants", "bo
   ok(await n(`select count(*) c from pg_proc p join pg_namespace s on s.oid=p.pronamespace
               where s.nspname='public' and p.proname='${f}'`) === 0, `${f} removed`);
 }
-ok(await n(`select count(*) c from pg_proc p join pg_namespace s on s.oid=p.pronamespace
-            where s.nspname='public' and p.proname like 'bos_%'`) === 14,
-   `14 bos_ functions remain, down from 62 — 0054 took the platform's, 0055 the OS's`);
+// Named rather than counted. A count is a number to bump whenever anything
+// is added — 0056's bos_take_seat broke it the first time — and bumping a
+// number teaches nobody which functions are supposed to be here.
+const KEPT_BOS = ["bos_can_access", "bos_claimed_tenant", "bos_current_tenant",
+  "bos_guard_contact_rate", "bos_guard_newsletter_rate", "bos_is_staff",
+  "bos_mirror_primary_role", "bos_rate_limit", "bos_request_tenant",
+  "bos_seed_tenant_membership", "bos_stamp_host_stage", "bos_take_seat",
+  "bos_tenant_default", "bos_tenant_role", "bos_touch_row"];
+const liveBos = (await q(`select distinct p.proname from pg_proc p join pg_namespace s on s.oid=p.pronamespace
+  where s.nspname='public' and p.proname like 'bos_%' order by 1`)).map((r) => r.proname);
+const strayBos = liveBos.filter((f) => !KEPT_BOS.includes(f));
+const goneBos = KEPT_BOS.filter((f) => !liveBos.includes(f));
+ok(strayBos.length === 0 && goneBos.length === 0,
+   `the ${KEPT_BOS.length} surviving bos_ functions are exactly the expected ones, down from 62` +
+   (strayBos.length ? ` — unexpected: ${strayBos.join(", ")}` : "") +
+   (goneBos.length ? ` — missing: ${goneBos.join(", ")}` : ""));
 
 console.log("\nAnd its tables:");
 for (const t of ["platform_admins", "tenant_invitations"]) {
