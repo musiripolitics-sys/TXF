@@ -71,7 +71,7 @@ if (env.RESEND_API_KEY) {
       from,
       to,
       subject: "Techxfluence OS — email is working",
-      html: "<p>If you are reading this, the Business OS can send email.</p>",
+      html: "<p>If you are reading this, Techxfluence can send email.</p>",
     }),
   });
   const body = await r.text();

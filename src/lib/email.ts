@@ -19,6 +19,18 @@ import nodemailer, { type Transporter } from "nodemailer";
 // FROM falls back to the authenticated mailbox rather than a fixed address:
 // you can always send as yourself, but sending as anyone else needs Gmail's
 // "Send mail as" verification, and a wrong default fails at delivery time.
+/**
+ * The site these links point at.
+ *
+ * Falls back to the domain, not to an empty string. It used to be
+ * `SITE` in fourteen places, which meant an
+ * unset variable turned every link in every email into a relative path --
+ * "/events/slug" on its own, broken in any mail client. The rest of the app
+ * (sitemap, robots, the JSON-LD) already fell back to the domain, so a
+ * deployment could look correct in a sitemap while its email was unusable.
+ */
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
+
 const FROM =
   process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
 
@@ -233,7 +245,7 @@ export async function sendMembershipRenewal(opts: {
   tier: string;
   expired: boolean;
 }): Promise<void> {
-  const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/membership`;
+  const url = `${SITE}/membership`;
   await send(
     opts.to,
     opts.expired
@@ -258,7 +270,7 @@ export async function sendSpotOpened(opts: {
   eventTitle: string;
   slug: string;
 }): Promise<void> {
-  const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/events/${opts.slug}`;
+  const url = `${SITE}/events/${opts.slug}`;
   await send(
     opts.to,
     `A spot just opened — ${opts.eventTitle}`,
@@ -367,7 +379,7 @@ export async function sendHostDecision(opts: {
         `Hi ${opts.name}, your request for Host access has been approved. You can now
          submit events for approval and manage your attendees from your dashboard.
          <p style="margin:18px 0 0;">
-           <a href="${process.env.NEXT_PUBLIC_SITE_URL || ""}/host/dashboard"
+           <a href="${SITE}/host/dashboard"
               style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;
                      font-weight:600;padding:11px 22px;border-radius:9999px;">Go to Host dashboard</a>
          </p>`,
@@ -387,13 +399,10 @@ export async function sendHostDecision(opts: {
   }
 }
 
-// ─────────────────────────── Business OS: tasks ───────────────────────────
+// ─────────────────────────── Shared pieces ───────────────────────────
 //
-// Work changes hands inside the OS, but people do not live in the OS. The
-// notification bell (0021) reaches whoever happens to open it; these reach
-// them where they actually are.
-
-const osUrl = (path: string) => `${process.env.NEXT_PUBLIC_SITE_URL || ""}${path}`;
+// A call-to-action button and a facts table, so the templates below all read
+// the same way.
 
 function button(href: string, label: string, colour = "#ff5a1f"): string {
   return `<p style="margin:18px 0 0;">
@@ -412,157 +421,6 @@ function facts(rows: [string, string | null | undefined][]): string {
     )
     .join("");
   return body ? `<table style="margin-top:14px;font-size:14px;color:#0e0e0c;">${body}</table>` : "";
-}
-
-const taskLabel = (code: string | null, title: string) =>
-  `${code ? `${code} · ` : ""}${title}`;
-
-export async function sendTaskAssigned(opts: {
-  to: string;
-  name: string;
-  code: string | null;
-  title: string;
-  description?: string | null;
-  dueDate?: string | null;
-  priority?: string | null;
-  goal?: string | null;
-  assignedBy?: string | null;
-  taskId: string;
-}): Promise<void> {
-  await send(
-    opts.to,
-    `Assigned to you: ${taskLabel(opts.code, opts.title)}`,
-    shell(
-      "You have a new task 📋",
-      `Hi ${opts.name}, ${opts.assignedBy ? `${opts.assignedBy} assigned` : "you have been assigned"}
-       <strong>${opts.title}</strong>.
-       ${opts.description ? `<p style="margin:14px 0 0;">${opts.description}</p>` : ""}
-       ${facts([
-         ["Due", opts.dueDate],
-         ["Priority", opts.priority],
-         ["Goal", opts.goal],
-       ])}
-       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Open the task")}`,
-    ),
-  );
-}
-
-export async function sendTaskDecision(opts: {
-  to: string;
-  name: string;
-  code: string | null;
-  title: string;
-  approved: boolean;
-  note?: string | null;
-  decidedBy?: string | null;
-  taskId: string;
-}): Promise<void> {
-  await send(
-    opts.to,
-    `${opts.approved ? "Approved" : "Sent back"}: ${taskLabel(opts.code, opts.title)}`,
-    shell(
-      opts.approved ? "Your work was approved ✅" : "Your work came back",
-      opts.approved
-        ? `Hi ${opts.name}, <strong>${opts.title}</strong> was approved${
-            opts.decidedBy ? ` by ${opts.decidedBy}` : ""
-          } and the task is now complete. Nothing more to do.
-           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "See the task", "#16a34a")}`
-        : `Hi ${opts.name}, <strong>${opts.title}</strong> was sent back${
-            opts.decidedBy ? ` by ${opts.decidedBy}` : ""
-          } and needs another look.
-           ${opts.note ? `<p style="margin:14px 0 0;"><strong>Reason:</strong> ${opts.note}</p>` : ""}
-           ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Pick it back up")}`,
-    ),
-  );
-}
-
-export async function sendTaskSubmitted(opts: {
-  to: string;
-  name: string;
-  code: string | null;
-  title: string;
-  submittedBy: string | null;
-  taskId: string;
-}): Promise<void> {
-  await send(
-    opts.to,
-    `Needs your approval: ${taskLabel(opts.code, opts.title)}`,
-    shell(
-      "A task is waiting on you",
-      `Hi ${opts.name}, ${opts.submittedBy ?? "Someone"} has finished
-       <strong>${opts.title}</strong> and submitted it for approval. It stays open
-       until you approve it.
-       ${button(osUrl(`/admin/os/tasks?task=${opts.taskId}`), "Review it")}`,
-    ),
-  );
-}
-
-export async function sendTaskReviewed(opts: {
-  to: string;
-  name: string;
-  code: string | null;
-  title: string;
-  outcome: "met" | "partial" | "missed";
-  quality?: number | null;
-  learning?: string | null;
-  reviewedBy?: string | null;
-}): Promise<void> {
-  const verdict = { met: "Met the goal", partial: "Partially met", missed: "Missed" }[opts.outcome];
-  await send(
-    opts.to,
-    `Reviewed: ${taskLabel(opts.code, opts.title)}`,
-    shell(
-      "Your work was reviewed",
-      `Hi ${opts.name}, <strong>${opts.title}</strong> has been reviewed${
-        opts.reviewedBy ? ` by ${opts.reviewedBy}` : ""
-      }.
-       ${facts([
-         ["Outcome", verdict],
-         ["Quality", opts.quality != null ? `${opts.quality} of 5` : null],
-       ])}
-       ${opts.learning ? `<p style="margin:16px 0 0;"><strong>Carry forward:</strong> ${opts.learning}</p>` : ""}
-       ${button(osUrl("/admin/os/reviews?tab=tasks"), "Read the review")}`,
-    ),
-  );
-}
-
-// ───────────────────── Onboarding, forms and approvals ─────────────────────
-
-/**
- * A new employee has an account.
- *
- * Deliberately no password. An admin sets one when creating the account and
- * hands it over directly; putting it in an email would leave the credential
- * sitting in two mailboxes forever. The reset link covers anyone who was not
- * told, or who forgets.
- */
-export async function sendEmployeeWelcome(opts: {
-  to: string;
-  name: string;
-  title?: string | null;
-  sections: string[];
-}): Promise<void> {
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
-  await send(
-    opts.to,
-    "Your Techxfluence Business OS account is ready",
-    shell(
-      "Welcome to the team 👋",
-      `Hi ${opts.name}, your account for the Techxfluence Business OS is ready${
-        opts.title ? `, as <strong>${opts.title}</strong>` : ""
-      }.
-       ${
-         opts.sections.length
-           ? `<p style="margin:14px 0 0;">You have access to: <strong>${opts.sections.join(", ")}</strong>.
-              Anything else stays hidden until someone grants it.</p>`
-           : ""
-       }
-       <p style="margin:14px 0 0;">Sign in with this address. Whoever set your
-       account up has your password — if you do not have it, use
-       <em>Forgot password</em> on the sign-in page and set your own.</p>
-       ${button(`${site}/admin/os`, "Open the Business OS")}`,
-    ),
-  );
 }
 
 /** Someone used the contact form. Sent to them, so they know it arrived. */
@@ -605,7 +463,7 @@ export async function sendHostProposalReceived(opts: {
 }
 
 export async function sendNewsletterWelcome(opts: { to: string }): Promise<void> {
-  const site = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const site = SITE;
   await send(
     opts.to,
     "You're subscribed to Techxfluence",
@@ -636,65 +494,7 @@ export async function sendInternalAlert(opts: {
       opts.heading,
       `Hi ${opts.name}, ${opts.what}
        ${opts.details ? facts(opts.details) : ""}
-       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}${opts.href}`, opts.cta)}`,
-    ),
-  );
-}
-
-/** A request in the approvals queue was decided. Sent to whoever raised it. */
-export async function sendApprovalDecision(opts: {
-  to: string;
-  name: string;
-  requestType: string;
-  requestTitle: string;
-  approved: boolean;
-  comments?: string | null;
-}): Promise<void> {
-  await send(
-    opts.to,
-    `${opts.approved ? "Approved" : "Not approved"}: ${opts.requestTitle}`,
-    shell(
-      opts.approved ? "Your request was approved ✅" : "Your request was not approved",
-      `Hi ${opts.name}, your ${opts.requestType.toLowerCase()} request
-       — <strong>${opts.requestTitle}</strong> — was
-       ${opts.approved ? "approved" : "declined"}.
-       ${opts.comments ? `<p style="margin:14px 0 0;"><strong>Note:</strong> ${opts.comments}</p>` : ""}
-       ${button(`${process.env.NEXT_PUBLIC_SITE_URL || ""}/admin/os/approvals`, "See the request")}`,
-    ),
-  );
-}
-
-/**
- * A message someone in the team wrote and sent from the host pipeline.
- *
- * Unlike every other template here, the body is the author's own words, not
- * ours: no greeting bolted on the front and no call to action on the end,
- * because they have already written both. All this adds is the shell, so it
- * looks like it came from Techxfluence rather than from a form.
- */
-export async function sendHostMessage(opts: {
-  to: string;
-  subject: string;
-  body: string;
-  senderName?: string | null;
-}): Promise<void> {
-  const safe = opts.body
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\n/g, "<br/>");
-
-  await send(
-    opts.to,
-    opts.subject,
-    shell(
-      opts.subject,
-      `<div style="white-space:normal;">${safe}</div>
-       ${
-         opts.senderName
-           ? `<p style="margin:18px 0 0;font-size:13px;color:#8a897f;">Sent by ${opts.senderName} at Techxfluence.</p>`
-           : ""
-       }`,
+       ${button(`${SITE}${opts.href}`, opts.cta)}`,
     ),
   );
 }

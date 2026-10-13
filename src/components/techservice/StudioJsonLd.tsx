@@ -13,7 +13,7 @@ export function StudioJsonLd() {
       name: "TXF — Technology x Influence",
       url,
       logo: `${SITE}/txf-logo.svg`,
-      email: "hello@techxfluence.com",
+      email: "admin@techxfluence.com",
       slogan: "We Design. We Develop. We Deliver.",
       address: { "@type": "PostalAddress", addressLocality: "Chennai", addressRegion: "Tamil Nadu", addressCountry: "IN" },
       areaServed: "IN",

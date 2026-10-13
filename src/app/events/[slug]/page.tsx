@@ -204,7 +204,7 @@ export default async function EventDetailPage({
         ) : (
           <div className="pointer-events-none absolute inset-0 glow-brand" aria-hidden />
         )}
-        <div className={`relative mx-auto max-w-5xl px-5 py-12 sm:px-8 ${event.image ? "text-white" : "text-fg"}`}>
+        <div className={`relative mx-auto max-w-6xl px-5 py-9 sm:px-8 sm:py-14 ${event.image ? "text-white" : "text-fg"}`}>
           <Link
             href="/events"
             className={`text-sm transition-colors ${event.image ? "text-white/70 hover:text-white" : "text-muted hover:text-fg"}`}
@@ -225,16 +225,19 @@ export default async function EventDetailPage({
               {event.priceLabel}
             </span>
           </div>
-          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight sm:text-5xl text-balance">
+          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-5xl text-balance">
             {event.title}
           </h1>
-          <p className={`mt-4 max-w-2xl text-lg text-balance ${event.image ? "text-white/80" : "text-muted"}`}>
+          {/* Clamped on a phone. Unclamped, a long blurb pushed the date, the
+              price and the register button entirely below the fold — the hero
+              filled all 812px of an iPhone screen and said nothing actionable. */}
+          <p className={`mt-3 line-clamp-3 max-w-2xl text-base text-pretty sm:mt-4 sm:line-clamp-none sm:text-lg ${event.image ? "text-white/80" : "text-muted"}`}>
             {event.blurb}
           </p>
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-5 pt-8 sm:px-8">
+      <div className="mx-auto max-w-6xl px-5 pt-6 sm:px-8">
         <EventFacts
           dateLabel={event.dateLabel}
           time={event.time}
@@ -246,7 +249,7 @@ export default async function EventDetailPage({
       </div>
 
       {attendance && attendance.going > 0 && (
-        <div className="mx-auto max-w-5xl px-5 pt-5 sm:px-8">
+        <div className="mx-auto max-w-6xl px-5 pt-4 sm:px-8">
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
             <GoingStrip going={attendance.going} names={attendance.names} size="md" />
             {attendance.names.length === 0 && (
@@ -273,7 +276,14 @@ export default async function EventDetailPage({
         </div>
       )}
 
-      <div className="mx-auto grid max-w-5xl gap-10 px-5 py-10 pb-28 sm:px-8 lg:grid-cols-[1.6fr_1fr] lg:pb-12">
+      {/*
+        * max-w-6xl, not 5xl, and a rail with a fixed width rather than a
+        * fraction. At 1440 the old grid gave the prose column 566px inside a
+        * 1024px container, leaving 160px of gutter unused on each side while
+        * the booking card was squeezed to 354px. A measure of ~700px reads
+        * better and the rail stops shrinking on narrower laptops.
+        */}
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 pb-28 sm:px-8 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,380px)] lg:gap-12 lg:py-10 lg:pb-14">
         {/* Main column */}
         <div className="space-y-10">
           <section>
@@ -387,60 +397,63 @@ export default async function EventDetailPage({
 
         </div>
 
-        {/* Sticky registration card */}
-        <aside className="lg:pt-2">
-          <div className="lg:sticky lg:top-24 rounded-2xl border border-line bg-surface p-6 shadow-soft">
-            <dl className="space-y-4 text-sm">
-              {/* When and where now lead the page in the facts band, so the
-                  sidebar stays focused on the decision: price, then register. */}
-              <Detail label="Price" value={isFree ? "Free entry" : event.priceLabel} />
-              {event.hostName && (
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-faint">
-                    Host
-                  </dt>
-                  <dd className="mt-0.5 text-fg">
-                    {event.hostId ? (
-                      <Link
-                        href={`/organizer/${event.hostId}`}
-                        className="font-medium text-brand-soft hover:underline"
-                      >
-                        {event.hostName} →
-                      </Link>
-                    ) : (
-                      event.hostName
-                    )}
-                  </dd>
-                </div>
-              )}
-            </dl>
+        {/*
+          * The booking rail.
+          *
+          * It used to be one sticky card holding price, host, add-to-calendar,
+          * share, the seats bar, your tickets, the whole registration form and
+          * a membership note — 972px of it, pinned at top:96px in a 900px
+          * window. From a third of the way down the page to near the end, the
+          * bottom 168px of that card sat below the fold and no amount of
+          * scrolling brought it back, because a stuck element does not move.
+          * Measured at 1440x900, what lived down there was:
+          *
+          *   "Members save up to 50% on every ticket. See plans"
+          *   "By registering, you agree to our Code of Conduct and Terms"
+          *   "Members get priority registration & discounts. Join"
+          *
+          * so a consent notice that could not be read and two upsells that
+          * could not be clicked. The buy button itself cleared the fold by
+          * seven pixels, which is luck rather than design: one more question
+          * on the form, one more ticket tier, or an existing ticket shown
+          * above it, and it goes under too.
+          *
+          * So the sticky part now holds only the decision — price, seats,
+          * register — and is capped at the viewport with its own scrollbar, so
+          * a long form (many questions, several tiers, an existing ticket)
+          * stays reachable instead of being clipped. Everything that is
+          * reference rather than decision moved below it and scrolls normally.
+          *
+          * Deliberately NOT overscroll-contain. The card is usually only a few
+          * dozen pixels taller than its cap, and containing the overscroll
+          * would mean a wheel gesture over it stopped dead at the end of those
+          * pixels instead of carrying on down the page — swapping one scroll
+          * trap for a subtler one.
+          */}
+        <aside className="space-y-4 lg:pt-2">
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6 lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
+            <div className="flex items-baseline justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-faint">
+                  Price
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-fg">
+                  {isFree ? "Free" : event.priceLabel}
+                </p>
+              </div>
+              <span className="shrink-0 text-xs text-muted">
+                {event.spotsLeft} of {event.capacity} left
+              </span>
+            </div>
 
-            <div className="mt-5">
-              <EventActions
-                title={event.title}
-                dateISO={event.date}
-                time={event.time}
-                location={`${event.venue}, ${event.address}`}
-                details={event.blurb}
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-2">
+              <div
+                className="h-full rounded-full bg-brand"
+                style={{ width: `${pct}%` }}
               />
             </div>
 
             <div className="mt-5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted">{event.spotsLeft} spots left</span>
-                <span className="text-faint">
-                  {filled}/{event.capacity}
-                </span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-2">
-                <div
-                  className="h-full rounded-full bg-brand"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 border-t border-line pt-6">
               {userRegistrations.length > 0 && (
                 <div className="mb-6 space-y-3">
                   <h3 className="font-semibold text-fg mb-3 text-center text-sm">Your Tickets</h3>
@@ -516,7 +529,38 @@ export default async function EventDetailPage({
                 }}
               />
             </div>
-            <p className="mt-3 text-center text-xs text-faint">
+          </div>
+
+          {/* Reference, not decision: nothing here is worth costing the
+              register button its place on screen. */}
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
+            {event.hostName && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-faint">
+                  Host
+                </p>
+                <p className="mt-0.5 text-fg">
+                  {event.hostId ? (
+                    <Link
+                      href={`/organizer/${event.hostId}`}
+                      className="font-medium text-brand-soft hover:underline"
+                    >
+                      {event.hostName} →
+                    </Link>
+                  ) : (
+                    event.hostName
+                  )}
+                </p>
+              </div>
+            )}
+            <EventActions
+              title={event.title}
+              dateISO={event.date}
+              time={event.time}
+              location={`${event.venue}, ${event.address}`}
+              details={event.blurb}
+            />
+            <p className="mt-4 text-center text-xs text-faint">
               Members get priority registration & discounts.{" "}
               <Link href="/membership" className="text-brand-soft underline">
                 Join
@@ -529,7 +573,7 @@ export default async function EventDetailPage({
       <RelatedEvents current={event} all={allEvents} />
 
       {/* Mobile sticky register bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         {event.spotsLeft <= 0 ? (
           <span className="block rounded-full bg-ink-2 py-3 text-center text-sm font-semibold text-muted">
             Sold out

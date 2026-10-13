@@ -53,8 +53,8 @@ export function LegalDocView({ doc }: { doc: LegalDoc }) {
 
       <footer className="mt-12 rounded-2xl border border-line bg-surface p-6 text-sm text-muted">
         Questions? Reach the Techxfluence support team at{" "}
-        <a href="mailto:hello@techxfluence.com" className="text-brand-soft underline">
-          hello@techxfluence.com
+        <a href="mailto:admin@techxfluence.com" className="text-brand-soft underline">
+          admin@techxfluence.com
         </a>
         .
       </footer>

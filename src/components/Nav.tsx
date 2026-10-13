@@ -21,7 +21,10 @@ type AppRole = "admin" | "host" | "employee" | "ambassador" | "member";
 const roleMeta: Record<AppRole, { label: string; dash?: { href: string; label: string } }> = {
   admin: { label: "Admin", dash: { href: "/admin", label: "Console" } },
   host: { label: "Host", dash: { href: "/host/dashboard", label: "My Events" } },
-  employee: { label: "Team", dash: { href: "/workspace", label: "My Workspace" } },
+  // No dash for an employee. /workspace was the OS employee page and left
+  // with it; the staff surfaces that remain (events, check-in, the console)
+  // are reached through the role that grants them, not through this one.
+  employee: { label: "Team" },
   ambassador: { label: "Ambassador", dash: { href: "/ambassador", label: "My Portal" } },
   member: { label: "Member" },
 };

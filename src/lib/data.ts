@@ -8,7 +8,7 @@ export const brand = {
   short: "TXF",
   tagline: "Where Technology Meets Influence",
   subTagline: "Connect. Learn. Build. Influence.",
-  email: "hello@techxfluence.com",
+  email: "admin@techxfluence.com",
   location: "Chennai, Tamil Nadu, India",
   socials: [
     { label: "LinkedIn", href: "https://linkedin.com" },

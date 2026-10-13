@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node supabase/tests/run.mjs",
     "check:smtp": "node scripts/check-smtp.mjs",
-    "test:email": "npx esbuild src/lib/email.ts --bundle --format=esm --platform=node --outfile=.tmp/email.mjs --external:nodemailer --alias:server-only=./scripts/server-only-stub.mjs --log-level=error && node scripts/test-email.mjs"
+    "test:email": "npx esbuild src/lib/email.ts --bundle --format=esm --platform=node --outfile=.tmp/email.mjs --external:nodemailer --alias:server-only=./scripts/server-only-stub.mjs --log-level=error && node scripts/test-email.mjs",
+    "check:razorpay": "node scripts/razorpay-check.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -26,6 +27,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.7",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

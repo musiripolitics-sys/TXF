@@ -103,8 +103,8 @@ export const projects: Project[] = [
     visual: "crm",
   },
   {
-    name: "Business OS",
-    category: "Operations Platform",
+    name: "Operations Platform",
+    category: "Internal Tools",
     services: "UI/UX Design · Web Application · Development",
     includes: "Tasks and approvals, SOPs, performance reviews, team dashboards and role-based access — one workspace to run the business.",
     visual: "os",

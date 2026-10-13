@@ -68,7 +68,7 @@ export function ProjectEnquiryForm() {
       setError(
         insertError.code === "23514"
           ? "You've already sent us a few messages. Give us a little while to reply."
-          : "Couldn't send your enquiry. Please try again, or email hello@techxfluence.com.",
+          : "Couldn't send your enquiry. Please try again, or email admin@techxfluence.com.",
       );
       return;
     }

@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, isAmbassador, isAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { Card, KpiCard, EmptyState } from "@/components/os/ui";
-import { num, shortDate } from "@/lib/bos";
+import { Card, KpiCard, EmptyState } from "@/components/Panels";
+import { num, shortDate } from "@/lib/format";
 
 export const metadata = { title: "Ambassador Portal" };
 

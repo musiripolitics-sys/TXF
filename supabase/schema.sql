@@ -3,9 +3,15 @@
 --
 -- This file builds the public site: events, tickets, members, payments,
 -- community, credits. It is the starting point a fresh project needs first,
--- and migrations/0007 onward build the Business OS on top of it — tasks,
--- goals, employee access, approvals, complaints, SOPs and the rest. Running
--- this file alone gives you a site with no Business OS in it.
+-- and migrations/0007 onward take it from there.
+--
+-- Those migrations once built a Business OS on top of this — tasks, goals,
+-- employee access, approvals, complaints, SOPs — which became Shreex, left
+-- for its own repository and its own database, and was removed from this one
+-- by 0054 and 0055. The files that created it are still here, because a
+-- migration history is a record of what happened and not a description of the
+-- present; what they create, 0055 drops again. The end state is this file
+-- plus the events, hosting, membership and payment work the migrations add.
 --
 -- It is not a dump of production and must not be read as one. It is applied
 -- once and then never re-derived, so anything added to the database by a

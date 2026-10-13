@@ -120,10 +120,30 @@ export function AdminDashboard({
   };
   const [reports, setReports] = useState<Report[]>([]);
 
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "submissions" | "create" | "manage" | "users" | "payouts" | "reports"
-  >("overview");
+  /**
+   * The open tab, which `?tab=` can choose.
+   *
+   * The host-proposal notification links here saying "Review the proposal",
+   * and without this it landed on the overview and left the reader to find
+   * the right tab themselves.
+   *
+   * Applied in an effect rather than as the initial state. The server renders
+   * this component too and has no window to read the query from, so reading it
+   * during render returns "overview" on the server and "submissions" in the
+   * browser — a hydration mismatch, which is the same mistake five date
+   * formatters in this repository already made. The effect runs once, after
+   * mount, so a tab clicked afterwards is not fought by the URL.
+   */
+  type Tab =
+    | "overview" | "submissions" | "create" | "manage" | "users" | "payouts" | "reports";
+  const TABS: Tab[] = ["overview", "submissions", "create", "manage", "users", "payouts", "reports"];
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get("tab");
+    if (asked && TABS.includes(asked as Tab)) setActiveTab(asked as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -690,7 +710,7 @@ export function AdminDashboard({
 
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
         <div className="mb-8 flex gap-8 overflow-x-auto border-b border-line">
-          {(["overview", "submissions", "create", "manage", "users", "payouts", "reports"] as const).map((tab) => (
+          {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

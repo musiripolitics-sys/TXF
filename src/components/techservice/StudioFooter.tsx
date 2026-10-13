@@ -4,7 +4,7 @@ import { brand } from "@/lib/data";
 import { Container } from "./ui";
 import { services } from "./data";
 
-const EMAIL = "hello@techxfluence.com";
+const EMAIL = "admin@techxfluence.com";
 
 /**
  * The studio's own footer — Figma "Footer": brand column, three link

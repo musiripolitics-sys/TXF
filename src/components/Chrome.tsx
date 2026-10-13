@@ -14,7 +14,6 @@ const APP_PREFIXES = [
   "/directory",
   "/profile",
   "/admin",
-  "/workspace",
   "/ambassador",
   "/host/dashboard",
   "/host/checkin",
@@ -24,24 +23,14 @@ const APP_PREFIXES = [
 
 export function Chrome({
   role,
-  hasOsAccess = false,
   authed,
   children,
 }: {
   role: Role;
-  /** True when this person has at least one Business OS section. */
-  hasOsAccess?: boolean;
   authed: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-
-  // The Business OS ships its own full-height shell. Wrapping it in AppShell
-  // too gave it two competing navigations stacked on top of each other, which
-  // is most of why it was hard to move around in.
-  if (pathname === "/admin/os" || pathname.startsWith("/admin/os/")) {
-    return <>{children}</>;
-  }
 
   // TXF Tech Services is a separate studio site with its own header and
   // footer (components/techservice), not part of the community chrome.
@@ -53,11 +42,7 @@ export function Chrome({
     authed && APP_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p));
 
   if (isApp) {
-    return (
-      <AppShell role={role} hasOsAccess={hasOsAccess}>
-        {children}
-      </AppShell>
-    );
+    return <AppShell role={role}>{children}</AppShell>;
   }
 
   return (

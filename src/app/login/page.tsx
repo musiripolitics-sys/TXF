@@ -80,7 +80,13 @@ function LoginForm() {
     router.refresh();
   };
 
-  const isAdminPath = next.startsWith("/admin");
+  /**
+   * Whether this sign-in is on the way into the back office rather than into
+   * the public site. There is one back office again: /admin. The membership
+   * copy below is about perks and events, which is the wrong thing to greet
+   * an administrator with.
+   */
+  const isWorkPath = next.startsWith("/admin");
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-5 py-16">
@@ -95,10 +101,10 @@ function LoginForm() {
         {mode === "reset"
           ? "Enter your email and we'll send you a link to reset your password."
           : mode === "signin"
-            ? isAdminPath
-              ? "Access the Techxfluence admin console."
+            ? isWorkPath
+              ? "Access the admin console."
               : "Sign in to access your membership perks and events."
-            : isAdminPath
+            : isWorkPath
               ? "Sign up, then ask an admin to grant you access."
               : "Sign up to join our community and access events."}
       </p>
