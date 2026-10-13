@@ -34,7 +34,8 @@ const say = (s) => console.log("  " + s);
 
 // ── Credentials, from the terminal and from the places they already live ────
 const keyId = process.argv[2];
-if (!keyId) die("usage: razorpay-go-live.sh <rzp_live_key_id>");
+const expectMerchant = process.argv[3] ?? null;
+if (!keyId) die("usage: razorpay-go-live.sh <rzp_live_key_id> [expected_merchant_id]");
 if (!keyId.startsWith("rzp_live_")) {
   die(`"${keyId}" is not a live key id. Live keys start rzp_live_; rzp_test_ keys take only test cards.\n` +
       `  Razorpay Dashboard → switch the toggle to Live → Account & Settings → API Keys.`);
@@ -99,6 +100,27 @@ if (existing) {
 }
 say(`   alerts on failure go to ${ALERT_EMAIL}`);
 
+/**
+ * Whose account is this, really?
+ *
+ * This site was built against one Razorpay account and the money is meant to
+ * land in another; the two were told apart only by noticing that a payment
+ * link's merchant id did not match the webhook's owner. Nothing in a key id
+ * says which account it belongs to, so the check is made here — after the
+ * webhook, which is the first object that reports an owner, and before
+ * Netlify, which is the first change that is awkward to undo.
+ */
+const created = (await rzp("webhooks")).j?.items?.find((w) => w.url === WEBHOOK_URL);
+const merchant = created?.owner_id;
+say(`   merchant id: ${merchant ?? "unknown"}`);
+if (expectMerchant && merchant && merchant !== expectMerchant) {
+  if (!existing) await rzp(`webhooks/${created.id}`, { method: "DELETE" });
+  die(`These keys belong to merchant ${merchant}, not ${expectMerchant}.\n` +
+      `  Payments would land in the wrong Razorpay account.\n` +
+      `  The webhook just created has been removed again; Netlify was not touched.`);
+}
+if (expectMerchant && merchant === expectMerchant) say(`✅ that is the account you named`);
+
 // ── 3. Netlify ──────────────────────────────────────────────────────────────
 console.log("\n3. Netlify environment");
 const site = (await netlify(`sites/${siteId}`)).j;
@@ -148,7 +170,7 @@ say(`${good.status === 200 ? "✅" : "❌"} correctly signed → ${good.status} 
 say(`${bad.status === 400 ? "✅" : "❌"} forged signature  → ${bad.status}`);
 
 if (good.status === 200 && bad.status === 400) {
-  console.log(`\n✅ Live. The site now takes real payments, and the webhook will fulfil an order even if the buyer's browser dies mid-payment.`);
+  console.log(`\n✅ Live. Payments land in merchant ${merchant ?? "(unknown)"}, and the webhook will fulfil an order even if the buyer's browser dies mid-payment.`);
   console.log(`   .env.local is untouched, so local development stays on the test keys.\n`);
 } else {
   console.log(`\n⚠️  The switch is in place but the endpoint did not answer as expected. Do not take payments until this reads two ticks.\n`);

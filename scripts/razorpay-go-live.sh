@@ -16,7 +16,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ $# -lt 1 ]; then
-  echo "usage: $0 <rzp_live_key_id>" >&2
+  echo "usage: $0 <rzp_live_key_id> [expected_merchant_id]" >&2
+  echo "       the second argument is checked before anything is changed, so" >&2
+  echo "       keys from the wrong Razorpay account stop the run" >&2
   exit 1
 fi
 
@@ -40,4 +42,4 @@ if [ "$SECRET" != "$CONFIRM2" ]; then
   exit 1
 fi
 
-printf '%s' "$SECRET" | node scripts/razorpay-go-live.mjs "$1"
+printf '%s' "$SECRET" | node scripts/razorpay-go-live.mjs "$1" "${2:-}"
