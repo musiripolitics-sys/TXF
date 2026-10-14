@@ -101,24 +101,6 @@ export function getEvent(slug: string): TXFEvent | undefined {
   return events.find((e) => e.slug === slug);
 }
 
-/** A sensible default run-of-show derived from the event. */
-export function eventAgenda(e: TXFEvent): { when: string; what: string }[] {
-  const isHack = e.category === "Hackathon";
-  return [
-    { when: "Doors open", what: "Registration & check-in" },
-    { when: "Kickoff", what: `Welcome & intro to ${e.title}` },
-    {
-      when: "Main session",
-      what: isHack ? "Team formation & hacking begins" : "Talks & deep-dive sessions",
-    },
-    { when: "Break", what: "Networking & refreshments" },
-    {
-      when: "Wrap-up",
-      what: isHack ? "Demos, judging & prizes" : "Panel, Q&A and closing",
-    },
-  ];
-}
-
 export const eventCategories: EventCategory[] = [
   "Meetup",
   "Workshop",

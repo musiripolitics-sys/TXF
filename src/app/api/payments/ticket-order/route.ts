@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       attendee_name,
       attendee_email,
       attendee_phone,
+      answers,
     } = parsed.data;
 
     const key_id = process.env.RAZORPAY_KEY_ID;
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
         p_buyer_phone: attendee_phone ?? null,
         p_promo_code: promoCode ?? null,
         p_user_id: user.id,
+        p_answers: answers ?? null,
       },
     );
 

@@ -35,6 +35,17 @@ export const ticketOrderSchema = z.object({
   attendee_name: name,
   attendee_email: email,
   attendee_phone: phone,
+  /**
+   * The organiser's own questions, keyed by question id.
+   *
+   * The free path has carried these since the questions feature existed —
+   * registerForEvent reads q_<id> off the form and hands them to
+   * register_free_order. The paid path never did, so an event that asked
+   * which week you wanted threw the answer away the moment the ticket cost
+   * money. orders.answers and create_pending_order's p_answers were both
+   * already there waiting; only these two layers were missing.
+   */
+  answers: z.record(z.string().uuid(), z.string().max(2000)).optional(),
 });
 
 export const ticketVerifySchema = z.object({
