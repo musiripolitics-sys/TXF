@@ -161,7 +161,7 @@ export function AdminDashboard({
     title: "",
     category: "Meetup" as EventCategory,
     date: "",
-    time: "10:00 AM – 1:00 PM IST",
+    time: "",
     city: "",
     venue: "",
     address: "",
@@ -180,11 +180,16 @@ export function AdminDashboard({
     { name: "", role: "" },
   ]);
   const [agenda, setAgenda] = useState<{ when: string; what: string }[]>([
-    { when: "Doors open", what: "Registration & check-in" },
-    { when: "Kickoff", what: "Welcome & intro" },
-    { when: "Main session", what: "Talks & deep-dive sessions" },
-    { when: "Break", what: "Networking & refreshments" },
-    { when: "Wrap-up", what: "Panel, Q&A and closing" },
+    // One empty row, not five invented ones.
+    //
+    // These used to default to "Doors open / Kickoff / Main session / Break /
+    // Wrap-up", and because they were VALUES rather than placeholders they
+    // were written to event_agenda for every event created here unless
+    // somebody deleted them by hand. A three-hour online webinar went out
+    // advertising registration, refreshments and a closing panel. The inputs
+    // carry the same wording as placeholder text, where it guides without
+    // being saved.
+    { when: "", what: "" },
   ]);
 
   // Ticket tiers. Price is entered in rupees and stored in paise.
@@ -642,7 +647,7 @@ export function AdminDashboard({
       latitude: "",
       longitude: "",
       date: "",
-      time: "10:00 AM – 1:00 PM IST",
+      time: "",
       city: "",
       venue: "",
       address: "",
@@ -655,11 +660,7 @@ export function AdminDashboard({
     setSpeakers([{ name: "", role: "" }]);
     setTiers([blankTier]);
     setAgenda([
-      { when: "Doors open", what: "Registration & check-in" },
-      { when: "Kickoff", what: "Welcome & intro" },
-      { when: "Main session", what: "Talks & deep-dive sessions" },
-      { when: "Break", what: "Networking & refreshments" },
-      { when: "Wrap-up", what: "Panel, Q&A and closing" },
+      { when: "", what: "" },
     ]);
     await refresh();
     setActiveTab("manage");
@@ -992,6 +993,7 @@ export function AdminDashboard({
                   <input
                     type="text"
                     required
+                    placeholder="10:00 AM – 1:00 PM IST"
                     value={eventForm.time}
                     onChange={(e) =>
                       setEventForm({ ...eventForm, time: e.target.value })

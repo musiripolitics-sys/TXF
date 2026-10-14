@@ -5,11 +5,18 @@ import { type Leader } from "@/lib/data";
 import { getLeaders } from "@/lib/content";
 
 export async function Leadership() {
+  /**
+   * The first four by sort_order, not four names written in here.
+   *
+   * This used to pick them by a hardcoded list — ["Mahalakshmi",
+   * "Kumaresan", "Priyanka", "Abishek"] — matched against the leader name,
+   * so changing who appears meant editing this file, and anyone whose name
+   * was spelled differently in the database silently vanished from the
+   * section. leader_profiles.sort_order already exists to say who comes
+   * first, and getLeaders orders by it.
+   */
   const leaders = await getLeaders();
-  const order = ["Mahalakshmi", "Kumaresan", "Priyanka", "Abishek"];
-  const activeLeaders: Leader[] = order
-    .map((n) => leaders.find((l) => l.name === n))
-    .filter((l): l is Leader => !!l);
+  const activeLeaders: Leader[] = leaders.slice(0, 4);
 
   return (
     <div className="border-y border-line bg-ink-2">

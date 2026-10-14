@@ -73,7 +73,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type leader_role         as enum ('Founder','Community Lead','Event Coordinator','Ambassador','Mentor');
+  -- 'Manager' is in 0001_init.sql and in production, and was missing here:
+  -- schema.sql is maintained by hand and drifted. A project built from this
+  -- file alone rejected a leader_profiles row the live database holds.
+  create type leader_role         as enum ('Founder','Manager','Community Lead','Event Coordinator','Ambassador','Mentor');
 exception when duplicate_object then null; end $$;
 
 do $$ begin

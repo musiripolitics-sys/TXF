@@ -11,6 +11,9 @@ import { EventActions } from "@/components/EventActions";
 import { EventJsonLd } from "@/components/EventJsonLd";
 import { EventFacts } from "@/components/EventFacts";
 import { EventWhereBlock } from "@/components/EventWhereBlock";
+import { EventProse } from "@/components/EventProse";
+import { EventSectionNav } from "@/components/EventSectionNav";
+import { RegisterCta } from "@/components/RegisterCta";
 import { EventOrganizer } from "@/components/EventOrganizer";
 import { RelatedEvents } from "@/components/RelatedEvents";
 import { getEvents, getAttendance } from "@/lib/events";
@@ -106,6 +109,25 @@ export default async function EventDetailPage({
 
   const isFree = event.price === "Free";
   const agenda = event.agenda ?? [];
+
+  /**
+   * What the side nav offers, built from the same conditions the sections
+   * themselves are rendered under. An event with no speakers gets no Speakers
+   * link because the section is not there to link to — the nav cannot drift
+   * from the page because it is derived from it rather than written beside it.
+   */
+  const sections = [
+    event.about ? { id: "about", label: "About" } : null,
+    agenda.length > 0
+      ? { id: "schedule", label: agenda.length > 3 ? "Schedule" : "Agenda" }
+      : null,
+    event.speakers.length > 0 ? { id: "speakers", label: "Speakers" } : null,
+    { id: "where", label: "Where" },
+    event.highlights && event.highlights.length > 0
+      ? { id: "good-to-know", label: "Good to know" }
+      : null,
+    !isFree && event.refundPolicy ? { id: "refunds", label: "Refunds" } : null,
+  ].filter((x): x is { id: string; label: string } => x !== null);
   const filled = event.capacity - event.spotsLeft;
   const pct = Math.round((filled / event.capacity) * 100);
 
@@ -286,26 +308,46 @@ export default async function EventDetailPage({
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 pb-28 sm:px-8 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,380px)] lg:gap-12 lg:py-10 lg:pb-14">
         {/* Main column */}
         <div className="space-y-10">
-          <section>
-            <h2 className="font-display text-xl font-semibold text-fg">
-              About this event
-            </h2>
-            <p className="mt-3 leading-relaxed text-muted">{event.about}</p>
+          <section id="about" className="scroll-mt-24">
+            <SectionTitle>About this event</SectionTitle>
+            <EventProse text={event.about} />
           </section>
 
           {agenda.length > 0 && (
-          <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Agenda</h2>
-            <ol className="mt-4 space-y-3">
-              {agenda.map((item) => (
-                <li
-                  key={item.when}
-                  className="flex gap-4 rounded-xl border border-line bg-surface px-4 py-3"
-                >
-                  <span className="w-28 shrink-0 text-sm font-medium text-brand-soft">
-                    {item.when}
-                  </span>
-                  <span className="text-sm text-muted">{item.what}</span>
+          <section id="schedule" className="scroll-mt-24">
+            <SectionTitle>
+              {/* "Agenda" for a single sitting, "Schedule" once there is more
+                  than a day's worth. Read off the rows, not off this event. */}
+              {agenda.length > 3 ? "Schedule" : "Agenda"}
+            </SectionTitle>
+            {/*
+              * A timeline rather than a two-column table.
+              *
+              * The old shape gave the label a fixed 7rem column and ran the
+              * detail beside it, which works for "Doors open — registration"
+              * and collapses the moment a row carries a real description: four
+              * weeks of curriculum arrived as four dense paragraphs wearing
+              * narrow labels. Stacking the label above its detail gives the
+              * text the full column and turns the rail into something you can
+              * run your eye down.
+              */}
+            <ol className="mt-4 space-y-0">
+              {agenda.map((item, i) => (
+                <li key={item.when} className="relative flex gap-4 pb-5 last:pb-0">
+                  <div className="flex shrink-0 flex-col items-center">
+                    <span className="grid h-7 w-7 place-items-center rounded-full border border-brand/30 bg-brand/10 text-[11px] font-semibold tabular-nums text-brand-soft">
+                      {i + 1}
+                    </span>
+                    {i < agenda.length - 1 && (
+                      <span className="mt-1 w-px flex-1 bg-line" aria-hidden />
+                    )}
+                  </div>
+                  <div className="min-w-0 pb-1">
+                    <p className="font-display text-sm font-semibold text-fg">
+                      {item.when}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted">{item.what}</p>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -313,8 +355,8 @@ export default async function EventDetailPage({
           )}
 
           {event.speakers.length > 0 && (
-          <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
+          <section id="speakers" className="scroll-mt-24">
+            <SectionTitle>Speakers</SectionTitle>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {event.speakers.map((s) => (
                 <div
@@ -334,6 +376,7 @@ export default async function EventDetailPage({
           </section>
           )}
 
+          <div id="where" className="scroll-mt-24">
           <EventWhereBlock
             venue={event.venue}
             address={event.address}
@@ -341,10 +384,11 @@ export default async function EventDetailPage({
             latitude={event.latitude}
             longitude={event.longitude}
           />
+          </div>
 
           {event.highlights && event.highlights.length > 0 && (
-            <section>
-              <h2 className="font-display text-xl font-semibold text-fg">Good to know</h2>
+            <section id="good-to-know" className="scroll-mt-24">
+              <SectionTitle>Good to know</SectionTitle>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                 {event.highlights.map((h) => (
                   <li
@@ -367,10 +411,8 @@ export default async function EventDetailPage({
           />
 
           {!isFree && event.refundPolicy && (
-            <section>
-              <h2 className="font-display text-xl font-semibold text-fg">
-                Refunds &amp; cancellation
-              </h2>
+            <section id="refunds" className="scroll-mt-24">
+              <SectionTitle>Refunds &amp; cancellation</SectionTitle>
               <p className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-surface px-4 py-4 text-sm leading-relaxed text-muted">
                 {event.refundPolicy}
               </p>
@@ -378,20 +420,20 @@ export default async function EventDetailPage({
           )}
 
           {event.tags && event.tags.length > 0 && (
-            <section>
-              <h2 className="font-display text-xl font-semibold text-fg">Tags</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {event.tags.map((t) => (
-                  <Link
-                    key={t}
-                    href={`/events?tag=${encodeURIComponent(t)}`}
-                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand"
-                  >
-                    {t}
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-6">
+              <span className="text-xs font-semibold uppercase tracking-wider text-faint">
+                Topics
+              </span>
+              {event.tags.map((t) => (
+                <Link
+                  key={t}
+                  href={`/events?tag=${encodeURIComponent(t)}`}
+                  className="rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted transition-colors hover:border-brand hover:text-brand"
+                >
+                  {t}
+                </Link>
+              ))}
+            </div>
           )}
 
 
@@ -400,38 +442,37 @@ export default async function EventDetailPage({
         {/*
           * The booking rail.
           *
-          * It used to be one sticky card holding price, host, add-to-calendar,
+          * It began as one sticky card holding price, host, add-to-calendar,
           * share, the seats bar, your tickets, the whole registration form and
-          * a membership note — 972px of it, pinned at top:96px in a 900px
-          * window. From a third of the way down the page to near the end, the
-          * bottom 168px of that card sat below the fold and no amount of
-          * scrolling brought it back, because a stuck element does not move.
-          * Measured at 1440x900, what lived down there was:
+          * a membership note: 972px of it, pinned at top:96px in a 900px
+          * window, with the bottom 168px — including "By registering, you
+          * agree to our Code of Conduct and Terms" — permanently below the
+          * fold, because a stuck element does not move.
           *
-          *   "Members save up to 50% on every ticket. See plans"
-          *   "By registering, you agree to our Code of Conduct and Terms"
-          *   "Members get priority registration & discounts. Join"
+          * Capping it at the viewport fixed the clipping and left the real
+          * problem, which is that a form belongs where you are filling it in,
+          * not where you are deciding. The form is a dialog now. What stays on
+          * screen while you read is the three things the decision needs —
+          * price, seats, a button — and the rail is short enough that sticking
+          * it is free rather than something to be managed.
           *
-          * so a consent notice that could not be read and two upsells that
-          * could not be clicked. The buy button itself cleared the fold by
-          * seven pixels, which is luck rather than design: one more question
-          * on the form, one more ticket tier, or an existing ticket shown
-          * above it, and it goes under too.
-          *
-          * So the sticky part now holds only the decision — price, seats,
-          * register — and is capped at the viewport with its own scrollbar, so
-          * a long form (many questions, several tiers, an existing ticket)
-          * stays reachable instead of being clipped. Everything that is
-          * reference rather than decision moved below it and scrolls normally.
-          *
-          * Deliberately NOT overscroll-contain. The card is usually only a few
-          * dozen pixels taller than its cap, and containing the overscroll
-          * would mean a wheel gesture over it stopped dead at the end of those
-          * pixels instead of carrying on down the page — swapping one scroll
-          * trap for a subtler one.
+          * Your tickets stay out here on purpose: that is status, not an
+          * action, and hiding a ticket code behind a button nobody has reason
+          * to press is how people conclude they never got one.
           */}
         <aside className="space-y-4 lg:pt-2">
-          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6 lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
+          {/*
+            * One sticky unit, not two. The booking card and the page nav
+            * travel together: made sticky separately they pin to the same
+            * offset and sit on top of each other, and the fix for that is not
+            * a second magic number but a single container.
+            *
+            * Capped at the viewport with its own scrollbar, which now only
+            * matters for a very long nav on a short window — the card itself
+            * is three lines and a button since the form moved into a dialog.
+            */}
+          <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
             <div className="flex items-baseline justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-faint">
@@ -501,11 +542,13 @@ export default async function EventDetailPage({
                 </div>
               )}
               
-              <RegistrationForm
+              <RegisterCta
+                eventTitle={event.title}
                 eventId={event.id || ""}
                 isFull={event.spotsLeft <= 0}
                 isPaid={event.price === "Paid"}
                 priceLabel={memberPriceLabel ?? event.priceLabel}
+                spotsLeft={event.spotsLeft}
                 ticketTypes={event.ticketTypes}
                 questions={event.questions}
                 memberNote={
@@ -529,6 +572,11 @@ export default async function EventDetailPage({
                 }}
               />
             </div>
+          </div>
+
+            {/* Renders itself only when there is enough page to be worth
+                navigating — see EventSectionNav. */}
+            <EventSectionNav sections={sections} />
           </div>
 
           {/* Reference, not decision: nothing here is worth costing the
@@ -572,43 +620,23 @@ export default async function EventDetailPage({
 
       <RelatedEvents current={event} all={allEvents} />
 
-      {/* Mobile sticky register bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-        {event.spotsLeft <= 0 ? (
-          <span className="block rounded-full bg-ink-2 py-3 text-center text-sm font-semibold text-muted">
-            Sold out
-          </span>
-        ) : (
-          <a
-            href="#register"
-            className="block rounded-full bg-brand py-3 text-center text-sm font-semibold text-white"
-          >
-            {isFree
-              ? "Register free"
-              : `Buy ticket · ${memberPriceLabel ?? event.priceLabel}`}
-          </a>
-        )}
-      </div>
     </>
   );
 }
 
-function Detail({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
+/**
+ * One section heading for the whole page.
+ *
+ * The same four classes were retyped on eight <h2>s, which is how they drift:
+ * change the scale in one place and the page grows two sizes of the same
+ * thing. It also lets the rule "a section heading is a section heading" be
+ * stated once rather than implied eight times.
+ */
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wider text-faint">
-        {label}
-      </dt>
-      <dd className="mt-1 font-medium text-fg">{value}</dd>
-      {sub && <dd className="text-xs text-muted">{sub}</dd>}
-    </div>
+    <h2 className="font-display text-lg font-semibold tracking-tight text-fg">
+      {children}
+    </h2>
   );
 }
+

@@ -34,7 +34,19 @@ type Attendee = {
   attendee_email: string;
   status: string;
   ticket_code: string | null;
+  /**
+   * Answers to the organiser's own questions, keyed by question id.
+   *
+   * They live on the ORDER, not the registration — every path that records
+   * an answer goes through create_pending_order or register_free_order, and
+   * both write orders.answers. So this arrives through the order join, and
+   * is null for a registration made before the event had questions.
+   */
+  orders: { answers: Record<string, string> | null } | null;
 };
+
+/** An event's own questions, so the columns are the organiser's, not ours. */
+type EventQuestion = { id: string; label: string; sort_order: number };
 
 type HostEvent = {
   id: string;
@@ -50,6 +62,7 @@ type HostEvent = {
   blurb: string | null;
   about: string | null;
   registrations: Attendee[];
+  event_questions: EventQuestion[];
 };
 
 type EventEdits = {
@@ -79,15 +92,25 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
-  /** Download this event's attendee list as a CSV. */
+  /**
+   * Download this event's attendee list as a CSV.
+   *
+   * The question columns come from the event's own event_questions rows, in
+   * the organiser's order, so an event that asks which week somebody wants
+   * gets a "Which week" column without anything here knowing what a week is.
+   */
   const exportCsv = (ev: HostEvent) => {
+    const questions = [...(ev.event_questions ?? [])].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
     const rows = [
-      ["Name", "Email", "Ticket code", "Status"],
+      ["Name", "Email", "Ticket code", "Status", ...questions.map((q) => q.label)],
       ...(ev.registrations ?? []).map((a) => [
         a.attendee_name,
         a.attendee_email,
         (a.ticket_code ?? "").toUpperCase(),
         a.status,
+        ...questions.map((q) => a.orders?.answers?.[q.id] ?? ""),
       ]),
     ];
     // Quote every field so commas in names can't break the columns.
@@ -342,7 +365,9 @@ export function HostDashboard({ hostId }: { hostId: string }) {
       supabase
         .from("events")
         .select(
-          "id,slug,title,date_label,spots_left,capacity,status,time,venue,address,blurb,about, registrations(id,attendee_name,attendee_email,status,ticket_code)",
+          "id,slug,title,date_label,spots_left,capacity,status,time,venue,address,blurb,about, " +
+            "registrations(id,attendee_name,attendee_email,status,ticket_code,orders(answers)), " +
+            "event_questions(id,label,sort_order)",
         )
         .eq("host_id", hostId)
         .order("date", { ascending: true }),
@@ -1038,6 +1063,21 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                                   <p className="text-xs text-faint">
                                     {a.attendee_email}
                                   </p>
+                                  {/* Whatever this event asked, answered. The
+                                      labels are the organiser's own rows, so
+                                      nothing here knows what is being asked. */}
+                                  {[...(ev.event_questions ?? [])]
+                                    .sort((q1, q2) => q1.sort_order - q2.sort_order)
+                                    .map((q) => {
+                                      const answer = a.orders?.answers?.[q.id];
+                                      if (!answer) return null;
+                                      return (
+                                        <p key={q.id} className="mt-1 text-xs text-muted">
+                                          <span className="text-faint">{q.label}: </span>
+                                          {answer}
+                                        </p>
+                                      );
+                                    })}
                                 </td>
                                 <td className="p-4 text-xs text-faint">
                                   {a.ticket_code}

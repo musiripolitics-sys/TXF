@@ -1,8 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
-  events as staticEvents,
-  getEvent as getStaticEvent,
   type TXFEvent,
 } from "@/lib/data";
 import { dbEventToTXF, type DBEvent } from "./events-map";
@@ -40,10 +38,10 @@ export async function getEvents(): Promise<TXFEvent[]> {
     // of the page works fine without them.
     if (error) ({ data, error } = await query(BASE_COLS));
 
-    if (error || !data || data.length === 0) return staticEvents;
+    if (error || !data) return [];
     return (data as unknown as DBEvent[]).map(dbEventToTXF);
   } catch {
-    return staticEvents;
+    return [];
   }
 }
 
@@ -71,7 +69,7 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
     // Same fallback as getEvents: the discovery columns are optional.
     if (error) ({ data, error } = await query(BASE_COLS));
 
-    if (error || !data) return getStaticEvent(slug) ?? null;
+    if (error || !data) return null;
 
     const row = data as unknown as DBEvent & {
       host_name?: string | null;
@@ -128,7 +126,7 @@ export async function getEventBySlug(slug: string): Promise<TXFEvent | null> {
 
     return txf;
   } catch {
-    return getStaticEvent(slug) ?? null;
+    return null;
   }
 }
 

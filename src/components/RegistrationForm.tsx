@@ -75,6 +75,16 @@ export function RegistrationForm({
       attendee_phone: (formData.get("attendee_phone") as string)?.trim() || "",
     };
 
+    // The organiser's questions render as q_<questionId>. The free path reads
+    // them server-side off this same FormData; the paid path posts JSON, so
+    // they have to be lifted out here or they never leave the browser.
+    const answers: Record<string, string> = {};
+    for (const [key, value] of formData.entries()) {
+      if (key.startsWith("q_") && typeof value === "string" && value.trim()) {
+        answers[key.slice(2)] = value.trim();
+      }
+    }
+
     if (waitlistMode) {
       setLoading(true);
       const res = await joinWaitlist(eventId, formData);
@@ -85,7 +95,7 @@ export function RegistrationForm({
     }
 
     if (isPaid) {
-      await handlePaid(attendee);
+      await handlePaid(attendee, answers);
       return;
     }
 
@@ -97,11 +107,14 @@ export function RegistrationForm({
     setLoading(false);
   }
 
-  async function handlePaid(attendee: {
-    attendee_name: string;
-    attendee_email: string;
-    attendee_phone: string;
-  }) {
+  async function handlePaid(
+    attendee: {
+      attendee_name: string;
+      attendee_email: string;
+      attendee_phone: string;
+    },
+    answers: Record<string, string>,
+  ) {
     // Paid tickets require an account so the payment is attached to a user.
     if (!userProfile?.email) {
       const next = typeof window !== "undefined" ? window.location.pathname : "/";
@@ -119,6 +132,7 @@ export function RegistrationForm({
           ticketTypeId: tier?.id,
           quantity: qty,
           promoCode: promo.trim() || undefined,
+          answers: Object.keys(answers).length ? answers : undefined,
           ...attendee,
         }),
       });
