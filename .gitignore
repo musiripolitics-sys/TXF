@@ -63,9 +63,12 @@ build/Release
 .env.development
 .env.production
 .env.test
-# Backups of env files are still env files.
-.env*.bak
-.env*.backup
+# Backups of env files are still env files. The trailing * matters: a backup
+# named .env.local.bak.1791984281 does not match ".env*.bak", and one was
+# committed because of it — caught before it was pushed, but only just.
+.env*.bak*
+.env*.backup*
+.env.local.*
 
 # Vercel
 .vercel

@@ -1,6 +1,6 @@
 import type { TXFEvent } from "@/lib/data";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
+import { SITE_URL as SITE } from "@/lib/site";
 
 /**
  * schema.org/Event structured data. This is what makes an event eligible for

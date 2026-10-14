@@ -29,7 +29,7 @@ import nodemailer, { type Transporter } from "nodemailer";
  * (sitemap, robots, the JSON-LD) already fell back to the domain, so a
  * deployment could look correct in a sitemap while its email was unusable.
  */
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
+import { SITE_URL as SITE } from "@/lib/site";
 
 const FROM =
   process.env.EMAIL_FROM || process.env.SMTP_USER || "Techxfluence";
