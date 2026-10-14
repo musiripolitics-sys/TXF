@@ -7,26 +7,19 @@ import type { TicketType, EventQuestion } from "@/lib/data";
 import type { NextStepsProps } from "@/components/RegistrationNextSteps";
 
 /**
- * "Register now", and the form behind it.
+ * High-converting Registration CTA button and interactive Dialog.
  *
- * The form used to sit open in the right-hand rail, which made the rail as
- * tall as the form: name, email, phone, tier, quantity, promo code, every
- * question the organiser asked, the terms line. That card was 972px in a
- * 900px window, and capping it only moved the problem into a scrollbar.
- *
- * As a dialog it costs one click and gives back the whole rail, so what
- * stays on screen while you read is the price, the seats and the button.
- * It also gives the form the full width of a phone instead of a column.
- *
- * The button is the only thing rendered on the server path; nothing about
- * the form loads until it is opened.
+ * Keeps the sidebar rail compact and focused on the decision (price, seats, button),
+ * and provides a full-width, clean dialog for filling in attendee details.
  */
 export function RegisterCta({
   eventTitle,
+  eventId,
   isFull,
   isPaid,
   priceLabel,
   spotsLeft,
+  hasTicket = false,
   ...form
 }: {
   eventTitle: string;
@@ -35,6 +28,7 @@ export function RegisterCta({
   isPaid?: boolean;
   priceLabel?: string;
   spotsLeft: number;
+  hasTicket?: boolean;
   memberNote?: string;
   ticketTypes?: TicketType[];
   questions?: EventQuestion[];
@@ -43,53 +37,65 @@ export function RegisterCta({
 }) {
   const [open, setOpen] = useState(false);
 
-  const label = isFull
-    ? "Join the waitlist"
-    : isPaid
-      ? `Register now · ${priceLabel ?? ""}`.trim()
-      : "Register now · Free";
+  const label = hasTicket
+    ? "Book another ticket"
+    : isFull
+      ? "Join the waitlist"
+      : isPaid
+        ? `Register now · ${priceLabel ?? ""}`.trim()
+        : "Register now · Free";
 
   return (
     <>
       <button
-        id="register"
+        type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-full bg-brand px-6 py-3.5 text-base font-semibold text-white shadow-[0_8px_30px_-8px_rgba(255,106,26,0.7)] transition-all hover:-translate-y-0.5 hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+        className="group relative flex w-full items-center justify-center gap-2.5 rounded-full bg-brand px-6 py-3.5 text-base font-semibold text-white shadow-[0_8px_25px_-6px_rgba(255,90,31,0.5)] transition-all hover:bg-brand-soft hover:-translate-y-0.5 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
       >
-        {label}
+        <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+        </svg>
+        <span>{label}</span>
       </button>
 
-      {!isFull && spotsLeft > 0 && spotsLeft <= 25 && (
-        <p className="mt-2 text-center text-xs font-medium text-amber-600">
+      {!hasTicket && !isFull && spotsLeft > 0 && spotsLeft <= 25 && (
+        <p className="mt-2 text-center text-xs font-semibold text-amber-600 flex items-center justify-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
           Only {spotsLeft} {spotsLeft === 1 ? "seat" : "seats"} left
         </p>
       )}
 
-      {/*
-        * The phone's bar, sharing this component's state.
-        *
-        * It used to be its own markup in the page with href="#register",
-        * which worked while #register was a form to scroll to. Now that the
-        * form is a dialog, an anchor would scroll to a button and ask for a
-        * second tap. Rendering it here costs nothing — the button and the bar
-        * are the same control at two sizes — and there is one definition of
-        * what "register" does rather than two that can drift.
-        */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-        <button
-          onClick={() => setOpen(true)}
-          className="block w-full rounded-full bg-brand py-3 text-center text-sm font-semibold text-white"
-        >
-          {label}
-        </button>
-      </div>
+      {/* Mobile Sticky Bar - Hidden when modal is active */}
+      {!open && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand py-3 text-center text-sm font-semibold text-white shadow-soft"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+            </svg>
+            <span>{label}</span>
+          </button>
+        </div>
+      )}
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={isFull ? `Join the waitlist · ${eventTitle}` : `Register · ${eventTitle}`}
+        title={isFull ? "Join the Waitlist" : "Event Registration"}
+        subtitle={eventTitle}
       >
-        <RegistrationForm isFull={isFull} isPaid={isPaid} priceLabel={priceLabel} {...form} />
+        <RegistrationForm
+          eventId={eventId}
+          isFull={isFull}
+          isPaid={isPaid}
+          priceLabel={priceLabel}
+          onClose={() => setOpen(false)}
+          eventTitle={eventTitle}
+          {...form}
+        />
       </Modal>
     </>
   );

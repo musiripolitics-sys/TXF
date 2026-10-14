@@ -1,9 +1,7 @@
 import { Icon } from "@/components/Icon";
 
 /**
- * The band directly under the title: when, where and how long — the three
- * facts that were previously the smallest text on the page, buried in the
- * sidebar.
+ * Event quick facts strip: date, time, location, and capacity.
  */
 export function EventFacts({
   dateLabel,
@@ -22,41 +20,70 @@ export function EventFacts({
 }) {
   const isOnline = city?.trim().toLowerCase() === "online";
   const filling = spotsLeft > 0 && spotsLeft <= 25;
+  const isSoldOut = spotsLeft <= 0;
 
-  const items: { icon: string; label: string; value: string }[] = [
-    { icon: "calendar", label: "Date", value: dateLabel },
-    ...(time ? [{ icon: "clock", label: "Time", value: time }] : []),
+  const items: { icon: string; label: string; value: string; sub?: string; badge?: string }[] = [
+    {
+      icon: "calendar",
+      label: "Date",
+      value: dateLabel,
+    },
+    ...(time
+      ? [
+          {
+            icon: "clock",
+            label: "Time",
+            value: time,
+          },
+        ]
+      : []),
     {
       icon: isOnline ? "broadcast" : "map-pin",
       label: "Location",
-      value: isOnline ? "Online" : `${venue}, ${city}`,
+      value: isOnline ? "Online Event" : venue,
+      sub: isOnline ? "Virtual joining link provided" : city,
     },
     {
       icon: "users",
-      label: "Spots",
-      value: spotsLeft <= 0 ? "Sold out" : `${spotsLeft} of ${capacity} left`,
+      label: "Availability",
+      value: isSoldOut ? "Sold Out" : `${spotsLeft} spots left`,
+      sub: isSoldOut ? "Waitlist open" : `of ${capacity} seats total`,
+      badge: isSoldOut ? "Waitlist" : filling ? "Filling fast" : undefined,
     },
   ];
 
   return (
-    <div className="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface p-4 shadow-soft sm:grid-cols-2 lg:grid-cols-4">
       {items.map((f) => (
-        <div key={f.label} className="flex items-start gap-2.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand-soft">
-            <Icon name={f.icon} className="h-[18px] w-[18px]" strokeWidth={1.7} />
+        <div key={f.label} className="flex items-start gap-3 p-1">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-soft">
+            <Icon name={f.icon} className="h-5 w-5" strokeWidth={1.8} />
           </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">
-              {f.label}
-            </p>
-            <p
-              className={`truncate text-sm font-medium ${
-                f.label === "Spots" && filling ? "text-brand-soft" : "text-fg"
-              }`}
-              title={f.value}
-            >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
+                {f.label}
+              </p>
+              {f.badge && (
+                <span
+                  className={`rounded-full px-2 py-0.2 text-[10px] font-semibold ${
+                    isSoldOut
+                      ? "bg-ink-2 text-muted"
+                      : "bg-amber-500/10 text-amber-600"
+                  }`}
+                >
+                  {f.badge}
+                </span>
+              )}
+            </div>
+            <p className="truncate text-sm font-semibold text-fg mt-0.5" title={f.value}>
               {f.value}
             </p>
+            {f.sub && (
+              <p className="truncate text-xs text-muted mt-0.5" title={f.sub}>
+                {f.sub}
+              </p>
+            )}
           </div>
         </div>
       ))}

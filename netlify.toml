@@ -1,5 +1,10 @@
-# Netlify reads this; it does not read vercel.json, which is why the daily
-# reminder job silently stopped existing when the site moved here.
+# Netlify reads this; it does not read vercel.json, and vercel.json is read
+# by Vercel and not by Netlify. Both now exist, declaring the same daily job
+# in each provider's own dialect, because this schedule has already been lost
+# once in a move: it lived in vercel.json, the site moved here, and no
+# attendee got a reminder for months while nothing appeared to be wrong.
+#
+# They are kept in step by hand. If you change one, change the other.
 #
 # Build settings are left to Netlify's own Next.js detection on purpose —
 # pinning them here is a second place to keep in step for no gain.

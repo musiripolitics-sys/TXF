@@ -25,9 +25,9 @@ export function EventOrganizer({
 
   return (
     <section>
-      <h2 className="font-display text-xl font-semibold text-fg">Organiser</h2>
-      <div className="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface px-4 py-4">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
+      <h2 className="font-display text-lg font-semibold tracking-tight text-fg">Organiser</h2>
+      <div className="mt-3 flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-surface p-5 shadow-soft">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white shadow-sm">
           {initials(hostName)}
         </span>
 

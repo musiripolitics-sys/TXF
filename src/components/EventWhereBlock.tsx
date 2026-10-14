@@ -26,16 +26,15 @@ export function EventWhereBlock({
   if (isOnline) {
     return (
       <section>
-        <h2 className="font-display text-xl font-semibold text-fg">Where</h2>
-        <div className="mt-3 flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-join/12 text-join-soft">
-            <Icon name="broadcast" className="h-5 w-5" strokeWidth={1.7} />
+        <h2 className="font-display text-lg font-semibold tracking-tight text-fg">Where</h2>
+        <div className="mt-3 flex items-start gap-3 rounded-2xl border border-line bg-surface p-5 shadow-soft">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-join/10 text-join-soft">
+            <Icon name="broadcast" className="h-5 w-5" strokeWidth={1.8} />
           </span>
           <div>
             <p className="text-sm font-semibold text-fg">This event is online</p>
-            <p className="mt-0.5 text-sm text-muted">
-              The joining link is emailed with your ticket and again an hour before
-              it starts.
+            <p className="mt-1 text-sm text-muted">
+              The virtual joining link is emailed with your ticket pass and again before the event starts.
             </p>
           </div>
         </div>
@@ -56,40 +55,50 @@ export function EventWhereBlock({
 
   return (
     <section>
-      <h2 className="font-display text-xl font-semibold text-fg">Where</h2>
+      <h2 className="font-display text-lg font-semibold tracking-tight text-fg">Where</h2>
 
-      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
-        {bbox && (
+      <div className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface shadow-soft">
+        {bbox ? (
           <iframe
             title={`Map showing ${venue}`}
             src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${latitude},${longitude}`}
             loading="lazy"
             className="h-56 w-full border-0"
           />
+        ) : (
+          <div className="flex h-36 w-full items-center justify-center bg-ink-2/60 border-b border-line px-4 text-center">
+            <div className="flex flex-col items-center">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-brand/10 text-brand mb-2">
+                <Icon name="map-pin" className="h-5 w-5" strokeWidth={1.8} />
+              </span>
+              <p className="text-sm font-medium text-fg">{venue}</p>
+              <p className="text-xs text-muted mt-0.5">{city}</p>
+            </div>
+          </div>
         )}
 
-        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-fg">{venue}</p>
+            <p className="text-sm font-bold text-fg">{venue}</p>
             {address && <p className="mt-0.5 text-sm text-muted">{address}</p>}
-            <p className="mt-0.5 text-sm text-faint">{city}</p>
+            <p className="mt-0.5 text-xs text-faint">{city}</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${query}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-brand hover:text-brand"
+              className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-brand hover:text-brand shadow-sm"
             >
-              Google Maps
+              Google Maps ↗
             </a>
             <a
               href={`https://maps.apple.com/?q=${query}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-brand hover:text-brand"
+              className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-brand hover:text-brand shadow-sm"
             >
-              Apple Maps
+              Apple Maps ↗
             </a>
           </div>
         </div>

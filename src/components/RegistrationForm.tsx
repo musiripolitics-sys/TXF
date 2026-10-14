@@ -1,17 +1,14 @@
 "use client";
 
 import type { RazorpayHandlerResponse } from "@/types/razorpay";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { registerForEvent, joinWaitlist } from "@/app/events/[slug]/actions";
 import { Icon } from "./Icon";
-import {
-  RegistrationNextSteps,
-  type NextStepsProps,
-} from "./RegistrationNextSteps";
 import type { TicketType, EventQuestion } from "@/lib/data";
+import type { NextStepsProps } from "./RegistrationNextSteps";
+import { googleCalUrl } from "@/lib/calendar";
 
 interface RegistrationFormProps {
   eventId: string;
@@ -26,6 +23,8 @@ interface RegistrationFormProps {
     email?: string;
     phone?: string;
   } | null;
+  onClose?: () => void;
+  eventTitle?: string;
 }
 
 const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN")}`;
@@ -39,12 +38,16 @@ export function RegistrationForm({
   ticketTypes = [],
   questions = [],
   userProfile,
+  onClose,
+  eventTitle,
   nextSteps,
 }: RegistrationFormProps & { nextSteps?: NextStepsProps }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [attendeeName, setAttendeeName] = useState(userProfile?.full_name || "");
+  const [copied, setCopied] = useState(false);
   const [waitlisted, setWaitlisted] = useState(false);
   const [promo, setPromo] = useState("");
 
@@ -58,9 +61,6 @@ export function RegistrationForm({
   const maxQty = Math.min(tier?.maxPerOrder ?? 10, tier?.available ?? 10);
 
   const subtotal = (tier?.priceAmount ?? 0) * qty;
-
-  // Full events take waitlist joins. Free: auto-promoted when a seat frees.
-  // Paid: first in line gets notified to buy the freed seat.
   const waitlistMode = isFull;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -69,15 +69,15 @@ export function RegistrationForm({
     setSuccess(null);
 
     const formData = new FormData(e.currentTarget);
+    const nameVal = (formData.get("attendee_name") as string)?.trim();
+    if (nameVal) setAttendeeName(nameVal);
+
     const attendee = {
-      attendee_name: (formData.get("attendee_name") as string)?.trim(),
+      attendee_name: nameVal,
       attendee_email: (formData.get("attendee_email") as string)?.trim(),
       attendee_phone: (formData.get("attendee_phone") as string)?.trim() || "",
     };
 
-    // The organiser's questions render as q_<questionId>. The free path reads
-    // them server-side off this same FormData; the paid path posts JSON, so
-    // they have to be lifted out here or they never leave the browser.
     const answers: Record<string, string> = {};
     for (const [key, value] of formData.entries()) {
       if (key.startsWith("q_") && typeof value === "string" && value.trim()) {
@@ -99,11 +99,15 @@ export function RegistrationForm({
       return;
     }
 
-    // Free event — register directly via the server action.
+    // Free event registration
     setLoading(true);
     const res = await registerForEvent(eventId, formData, tier?.id, qty);
-    if (res.error) setError(res.error);
-    else if (res.success && res.ticketCode) setSuccess(res.ticketCode);
+    if (res.error) {
+      setError(res.error);
+    } else if (res.success && res.ticketCode) {
+      setSuccess(res.ticketCode);
+      router.refresh();
+    }
     setLoading(false);
   }
 
@@ -115,7 +119,6 @@ export function RegistrationForm({
     },
     answers: Record<string, string>,
   ) {
-    // Paid tickets require an account so the payment is attached to a user.
     if (!userProfile?.email) {
       const next = typeof window !== "undefined" ? window.location.pathname : "/";
       router.push(`/login?mode=signup&next=${encodeURIComponent(next)}`);
@@ -143,7 +146,6 @@ export function RegistrationForm({
         return;
       }
 
-      // A 100%-discounted order is already fulfilled — no gateway needed.
       if (order.free) {
         setSuccess(order.tickets?.[0] ?? "");
         setLoading(false);
@@ -156,7 +158,7 @@ export function RegistrationForm({
         amount: order.amount,
         currency: order.currency,
         name: "Techxfluence",
-        description: "Event ticket",
+        description: eventTitle || "Event ticket",
         order_id: order.orderId,
         prefill: {
           name: attendee.attendee_name,
@@ -206,223 +208,352 @@ export function RegistrationForm({
     }
   }
 
+  // ── Success State ──────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="rounded-2xl border border-brand/30 bg-brand/5 p-8 text-center mt-10">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand/20 text-brand">
-          <Icon name="check" className="h-6 w-6" />
+      <div className="space-y-6 text-center animate-float-up py-2">
+        {/* Celebratory Checkmark Icon */}
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 ring-8 ring-emerald-500/5">
+          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
         </div>
-        <h3 className="mt-4 font-display text-2xl font-bold text-fg">You&apos;re registered!</h3>
-        <p className="mt-2 text-muted">We&apos;ve saved your spot. See you there!</p>
-        <div className="mt-6 inline-block rounded-lg bg-surface border border-line px-4 py-2 font-mono text-lg font-bold text-fg tracking-widest shadow-inner">
-          {success}
-        </div>
-        <p className="mt-2 text-xs text-faint">Your ticket code</p>
 
-        {nextSteps && <RegistrationNextSteps {...nextSteps} />}
-        {!userProfile?.email && (
-          <p className="mx-auto mt-5 max-w-xs rounded-xl border border-line bg-surface p-3 text-xs text-muted">
-            <a
-              href="/login?mode=signup"
-              className="font-medium text-brand-soft underline"
+        <div>
+          <h3 className="font-display text-2xl font-bold tracking-tight text-fg">
+            You&apos;re Registered!
+          </h3>
+          <p className="mt-1 text-sm text-muted">
+            We&apos;ve reserved your spot. A confirmation has been emailed to you.
+          </p>
+        </div>
+
+        {/* Ticket Pass Stub Card */}
+        <div className="rounded-2xl border border-line bg-ink-2 p-5 text-left shadow-soft">
+          <div className="flex items-center justify-between border-b border-line/70 pb-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand">
+              TXF Event Pass
+            </span>
+            <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600">
+              Confirmed
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-faint">Ticket Code</p>
+              <p className="font-mono text-2xl font-bold tracking-wider text-fg mt-0.5 truncate">
+                {success}
+              </p>
+              {attendeeName && (
+                <p className="text-xs text-muted mt-1 truncate">{attendeeName}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(success);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="shrink-0 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg hover:border-brand hover:text-brand transition-colors flex items-center gap-1.5 shadow-sm"
             >
+              {copied ? (
+                <>
+                  <svg className="h-3.5 w-3.5 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Icon name="share" className="h-3.5 w-3.5" />
+                  <span>Copy Code</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="space-y-3 pt-1">
+          {nextSteps?.calendar && (
+            <a
+              href={googleCalUrl(nextSteps.calendar)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-line bg-surface py-3 text-sm font-semibold text-fg hover:border-brand hover:text-brand transition-colors shadow-sm"
+            >
+              <Icon name="calendar" className="h-4 w-4" />
+              Add to Google Calendar
+            </a>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.refresh();
+              }}
+              className="w-full rounded-full bg-brand py-3 text-sm font-semibold text-white shadow-soft hover:bg-brand-soft transition-all"
+            >
+              Done · Return to Event
+            </button>
+          )}
+        </div>
+
+        {!userProfile?.email && (
+          <p className="mx-auto text-xs text-muted max-w-sm pt-2">
+            <a href="/login?mode=signup" className="text-brand-soft underline font-semibold">
               Create a free account
             </a>{" "}
-            with this email to keep your ticket, earn points at check-in and
-            join the attendee group after the event.
+            with this email to store your ticket, earn points at check-in, and join the community.
           </p>
         )}
       </div>
     );
   }
 
+  // ── Waitlist State ─────────────────────────────────────────────────────────
   if (waitlisted) {
     return (
-      <div className="mt-10 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-8 text-center">
-        <h3 className="font-display text-2xl font-bold text-fg">
-          You&apos;re on the waitlist
-        </h3>
-        <p className="mt-2 text-muted">
-          This event is full, but we&apos;ll email you the moment a spot opens up.
-        </p>
+      <div className="space-y-6 text-center animate-float-up py-4">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 ring-8 ring-amber-500/5">
+          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
 
-        {nextSteps && (
-          // No calendar entry: a waitlist place isn't a seat yet.
-          <RegistrationNextSteps {...nextSteps} showCalendar={false} />
+        <div>
+          <h3 className="font-display text-2xl font-bold tracking-tight text-fg">
+            You&apos;re on the Waitlist
+          </h3>
+          <p className="mt-1 text-sm text-muted max-w-sm mx-auto">
+            This event is currently full. We&apos;ll notify you immediately via email the moment a spot opens up.
+          </p>
+        </div>
+
+        {onClose && (
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              router.refresh();
+            }}
+            className="w-full rounded-full bg-brand py-3 text-sm font-semibold text-white shadow-soft hover:bg-brand-soft transition-all"
+          >
+            Done
+          </button>
         )}
       </div>
     );
   }
 
+  // ── Form State ─────────────────────────────────────────────────────────────
   return (
-    <div id="register">
+    <div className="space-y-4">
       {isPaid && (
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
-          {waitlistMode && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600">
+        {waitlistMode && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs font-medium text-amber-700">
+            <svg className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span>
               {isPaid
-                ? "Sold out. Join the waitlist — if a seat frees up, you're first in line to buy it."
-                : "This event is full. Join the waitlist and we'll email you if a spot opens up."}
-            </div>
-          )}
-          {error && (
-            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
-              {error}
-            </div>
-          )}
+                ? "This event is sold out. Join the waitlist — if a seat frees up, you are first in line to buy it."
+                : "This event is at capacity. Join the waitlist and we will notify you as soon as a spot opens."}
+            </span>
+          </div>
+        )}
 
-          {/* Ticket tiers — only shown when the event offers a real choice. */}
-          {!waitlistMode && sellable.length > 1 && (
-            <fieldset className="space-y-2">
-              <legend className="mb-1 block text-sm font-medium text-muted">
-                Select ticket
-              </legend>
-              {sellable.map((t) => (
-                <label
-                  key={t.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
-                    t.id === tier?.id
-                      ? "border-brand bg-brand/5"
-                      : "border-line hover:border-brand/40"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="ticket_type"
-                    value={t.id}
-                    checked={t.id === tier?.id}
-                    onChange={() => {
-                      setTierId(t.id);
-                      setQty(1);
-                    }}
-                    className="mt-1 accent-[var(--color-brand)]"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-fg">{t.name}</span>
-                      <span className="text-sm font-bold text-fg">{t.priceLabel}</span>
-                    </span>
-                    {t.description && (
-                      <span className="mt-0.5 block text-xs text-muted">
-                        {t.description}
+        {error && (
+          <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs font-medium text-red-600">
+            <svg className="h-4 w-4 shrink-0 text-red-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Ticket Tiers */}
+        {!waitlistMode && sellable.length > 1 && (
+          <fieldset className="space-y-2">
+            <legend className="mb-1 block text-xs font-bold uppercase tracking-wider text-muted">
+              Select Ticket Tier
+            </legend>
+            <div className="space-y-2">
+              {sellable.map((t) => {
+                const selected = t.id === tier?.id;
+                return (
+                  <label
+                    key={t.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all ${
+                      selected
+                        ? "border-brand bg-brand/5 ring-1 ring-brand/30 shadow-sm"
+                        : "border-line bg-surface hover:border-brand/40"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="ticket_type"
+                      value={t.id}
+                      checked={selected}
+                      onChange={() => {
+                        setTierId(t.id);
+                        setQty(1);
+                      }}
+                      className="mt-1 accent-[var(--color-brand)] h-4 w-4"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-fg">{t.name}</span>
+                        <span className="text-sm font-bold text-fg">{t.priceLabel}</span>
                       </span>
-                    )}
-                    <span className="mt-0.5 block text-xs text-faint">
-                      {t.available} left
+                      {t.description && (
+                        <span className="mt-0.5 block text-xs text-muted">
+                          {t.description}
+                        </span>
+                      )}
+                      <span className="mt-1 block text-[11px] font-medium text-amber-600">
+                        {t.available} {t.available === 1 ? "seat" : "seats"} left
+                      </span>
                     </span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          )}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
 
-          {/* Quantity */}
-          {!waitlistMode && tier && maxQty > 1 && (
+        {/* Quantity */}
+        {!waitlistMode && tier && maxQty > 1 && (
+          <div className="flex items-center justify-between rounded-xl border border-line bg-surface p-3.5">
             <div>
-              <span className="mb-1 block text-sm font-medium text-muted">Quantity</span>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  disabled={qty <= 1}
-                  aria-label="Decrease quantity"
-                  className="h-9 w-9 rounded-full border border-line text-lg leading-none text-fg disabled:opacity-40"
-                >
-                  −
-                </button>
-                <span className="min-w-8 text-center text-sm font-semibold text-fg">
-                  {qty}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-                  disabled={qty >= maxQty}
-                  aria-label="Increase quantity"
-                  className="h-9 w-9 rounded-full border border-line text-lg leading-none text-fg disabled:opacity-40"
-                >
-                  +
-                </button>
-                <span className="text-xs text-faint">max {maxQty}</span>
-              </div>
+              <span className="block text-sm font-semibold text-fg">Quantity</span>
+              <span className="text-xs text-faint">Max {maxQty} per order</span>
             </div>
-          )}
-
-          {/* Order summary — only meaningful for paid tiers */}
-          {!waitlistMode && tier && tier.priceAmount > 0 && (
-            <div className="rounded-xl border border-line bg-ink-2 p-3 text-sm">
-              <div className="flex items-center justify-between text-muted">
-                <span>
-                  {tier.name} × {qty}
-                </span>
-                <span>{inr(subtotal)}</span>
-              </div>
-              {memberNote && (
-                <div className="mt-1 flex items-center justify-between text-xs text-host-soft">
-                  <span>{memberNote}</span>
-                  <span>applied at checkout</span>
-                </div>
-              )}
-              <div className="mt-2 flex items-center justify-between border-t border-line pt-2 font-semibold text-fg">
-                <span>Total</span>
-                <span>{inr(subtotal)}</span>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                aria-label="Decrease quantity"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-fg hover:bg-ink-2 disabled:opacity-30 transition-colors"
+              >
+                −
+              </button>
+              <span className="min-w-6 text-center text-sm font-bold text-fg">
+                {qty}
+              </span>
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                disabled={qty >= maxQty}
+                aria-label="Increase quantity"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-fg hover:bg-ink-2 disabled:opacity-30 transition-colors"
+              >
+                +
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
+        {/* Order Summary (for paid tickets) */}
+        {!waitlistMode && tier && tier.priceAmount > 0 && (
+          <div className="rounded-xl border border-line bg-ink-2 p-3.5 text-sm">
+            <div className="flex items-center justify-between text-muted">
+              <span>
+                {tier.name} × {qty}
+              </span>
+              <span className="font-medium text-fg">{inr(subtotal)}</span>
+            </div>
+            {memberNote && (
+              <div className="mt-1.5 flex items-center justify-between text-xs text-host-soft font-medium">
+                <span>{memberNote}</span>
+                <span>applied</span>
+              </div>
+            )}
+            <div className="mt-2.5 flex items-center justify-between border-t border-line/70 pt-2 font-bold text-fg">
+              <span>Total Amount</span>
+              <span className="font-display text-base text-brand">{inr(subtotal)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Attendee Details */}
+        <div className="space-y-3 pt-1">
           <div>
-            <label htmlFor="attendee_name" className="block text-sm font-medium text-muted mb-1">
-              Full Name
+            <label htmlFor="reg_attendee_name" className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+              Full Name <span className="text-brand">*</span>
             </label>
             <input
               type="text"
-              id="attendee_name"
+              id="reg_attendee_name"
               name="attendee_name"
               required
+              placeholder="e.g. Alex Johnson"
               defaultValue={userProfile?.full_name || ""}
-              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
 
           <div>
-            <label htmlFor="attendee_email" className="block text-sm font-medium text-muted mb-1">
-              Email Address
+            <label htmlFor="reg_attendee_email" className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+              Email Address <span className="text-brand">*</span>
             </label>
             <input
               type="email"
-              id="attendee_email"
+              id="reg_attendee_email"
               name="attendee_email"
               required
+              placeholder="alex@example.com"
               defaultValue={userProfile?.email || ""}
-              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
+            <span className="mt-1 block text-[11px] text-faint">
+              Your ticket and joining details will be sent here.
+            </span>
           </div>
 
           <div>
-            <label htmlFor="attendee_phone" className="block text-sm font-medium text-muted mb-1">
-              Phone Number <span className="text-faint">(Optional)</span>
+            <label htmlFor="reg_attendee_phone" className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+              Phone Number <span className="text-faint font-normal">(Optional)</span>
             </label>
             <input
               type="tel"
-              id="attendee_phone"
+              id="reg_attendee_phone"
               name="attendee_phone"
+              placeholder="+91 98765 43210"
               defaultValue={userProfile?.phone || ""}
-              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
+        </div>
 
-          {/* Organiser's custom questions */}
-          {!waitlistMode &&
-            questions.map((q) => {
+        {/* Organiser's Custom Questions */}
+        {!waitlistMode && questions.length > 0 && (
+          <div className="space-y-3 pt-1 border-t border-line/60">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted pt-1">
+              Organizer Questions
+            </p>
+            {questions.map((q) => {
               const id = `q_${q.id}`;
               const cls =
-                "w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg outline-none transition-colors focus:border-brand";
+                "w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15";
               return (
                 <div key={q.id}>
-                  <label htmlFor={id} className="mb-1 block text-sm font-medium text-muted">
+                  <label htmlFor={id} className="mb-1.5 block text-xs font-semibold text-muted">
                     {q.label}
-                    {!q.required && <span className="text-faint"> (Optional)</span>}
+                    {q.required ? (
+                      <span className="text-brand"> *</span>
+                    ) : (
+                      <span className="text-faint font-normal"> (Optional)</span>
+                    )}
                   </label>
                   {q.type === "textarea" ? (
                     <textarea
@@ -449,63 +580,75 @@ export function RegistrationForm({
                 </div>
               );
             })}
+          </div>
+        )}
 
-          {isPaid && !waitlistMode && (
-            <div>
-              <label htmlFor="promo_code" className="block text-sm font-medium text-muted mb-1">
-                Promo code <span className="text-faint">(Optional)</span>
-              </label>
-              <input
-                type="text"
-                id="promo_code"
-                value={promo}
-                onChange={(e) => setPromo(e.target.value)}
-                placeholder="e.g. LAUNCH20"
-                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm uppercase tracking-wide text-fg outline-none transition-colors focus:border-brand"
-              />
-            </div>
-          )}
+        {/* Promo Code */}
+        {isPaid && !waitlistMode && (
+          <div className="pt-1">
+            <label htmlFor="reg_promo_code" className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+              Promo Code <span className="text-faint font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              id="reg_promo_code"
+              value={promo}
+              onChange={(e) => setPromo(e.target.value)}
+              placeholder="e.g. EARLYBIRD20"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm uppercase tracking-wider text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
+            />
+          </div>
+        )}
 
+        {/* Submit Button */}
+        <div className="pt-2">
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-50 px-7 py-3.5 text-base bg-brand text-white shadow-[0_8px_30px_-8px_rgba(255,106,26,0.7)] hover:bg-brand-soft hover:-translate-y-0.5 focus-visible:ring-brand w-full"
             disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand px-6 py-3.5 text-base font-semibold text-white shadow-[0_8px_25px_-6px_rgba(255,90,31,0.5)] transition-all hover:bg-brand-soft hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
-            {loading
-              ? waitlistMode
-                ? "Joining…"
-                : isPaid
-                  ? "Processing…"
-                  : "Registering..."
-              : waitlistMode
-                ? "Join the waitlist"
-                : isPaid
-                  ? `Buy ticket · ${priceLabel || "Pay"}`
-                  : "Confirm Registration"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span>{waitlistMode ? "Joining waitlist…" : isPaid ? "Connecting payment…" : "Registering…"}</span>
+              </span>
+            ) : (
+              <span>
+                {waitlistMode
+                  ? "Join the Waitlist"
+                  : isPaid
+                    ? `Proceed to Pay · ${subtotal > 0 ? inr(subtotal) : (priceLabel || "Pay")}`
+                    : "Confirm Registration · Free"}
+              </span>
+            )}
           </button>
+        </div>
 
+        {/* Reassurance Notes */}
+        <div className="space-y-2 pt-1 text-center">
           {isPaid && memberNote && (
-            <p className="text-center text-xs font-medium text-host-soft">
+            <p className="text-xs font-semibold text-host-soft flex items-center justify-center gap-1">
               ✓ {memberNote}
             </p>
           )}
 
-          {/* Membership upsell — the checkout is the moment the discount is
-              most tangible. Shown only to non-members buying a ticket. */}
           {isPaid && !waitlistMode && !memberNote && (
-            <p className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-center text-xs text-muted">
-              💡 Members save <strong className="text-fg">up to 50%</strong> on
-              every ticket.{" "}
-              <a href="/membership" className="font-medium text-brand-soft underline">
-                See plans
+            <p className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-xs text-muted">
+              💡 Members save <strong className="text-fg font-semibold">up to 50%</strong> on tickets.{" "}
+              <a href="/membership" className="font-semibold text-brand-soft hover:underline">
+                View membership
               </a>
             </p>
           )}
 
-          <p className="text-center text-xs text-faint mt-3">
-            By registering, you agree to our Code of Conduct and Terms of Service.
+          <p className="text-[11px] text-faint">
+            By registering, you agree to the Code of Conduct and Terms of Service.
           </p>
-        </form>
+        </div>
+      </form>
     </div>
   );
 }
