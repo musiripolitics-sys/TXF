@@ -1,3 +1,20 @@
+/**
+ * Shared vocabulary: brand constants, enums and the shapes content is read
+ * into. Not content itself.
+ *
+ * This file used to hold the content too — ten leaders with bios and point
+ * totals, three priced membership tiers, eight perks, six activity cards —
+ * and lib/content.ts served those arrays whenever the matching table came
+ * back empty. Every one of those tables WAS empty, so the live site showed
+ * all of it, and editing the database changed nothing. The content now lives
+ * in leader_profiles, membership_plans, plan_benefits, benefits and
+ * activities, where it can be edited; an empty table is an empty section.
+ *
+ * What stays here is what is not content: the brand record, the category and
+ * role enums that the database columns are typed against, the stat labels
+ * that name the numbers public_stats() returns, and the marketing copy on the
+ * static pages that has no table behind it.
+ */
 // ─────────────────────────────────────────────
 // Techxfluence content / sample data
 // Single source of truth for the marketing site.
@@ -95,12 +112,6 @@ export type TicketType = {
   salesNotStarted: boolean;
 };
 
-export const events: TXFEvent[] = [];
-
-export function getEvent(slug: string): TXFEvent | undefined {
-  return events.find((e) => e.slug === slug);
-}
-
 export const eventCategories: EventCategory[] = [
   "Meetup",
   "Workshop",
@@ -136,108 +147,12 @@ export type Tier = {
   perks: string[];
 };
 
-export const tiers: Tier[] = [
-  {
-    name: "Free Member",
-    price: "₹0",
-    cadence: "forever",
-    tagline: "Come to anything. Always.",
-    cta: "Join Free",
-    perks: [
-      "Attend any event — free tier never gates the door",
-      "Your ticket, QR check-in and attendance history",
-      "The private group for every event you attend",
-      "Community feed and monthly newsletter",
-    ],
-  },
-  {
-    name: "Pro Member",
-    price: "₹499",
-    cadence: "per month",
-    tagline: "See the room before you walk into it.",
-    highlight: true,
-    cta: "Go Pro",
-    perks: [
-      "Everything in Free",
-      "See who's attending, on every event",
-      "The full member directory",
-      "Priority registration on limited seats",
-      "Member pricing on paid events",
-    ],
-  },
-  {
-    name: "Elite Member",
-    price: "₹1,499",
-    cadence: "per month",
-    tagline: "Be someone in the community.",
-    cta: "Become Elite",
-    perks: [
-      "Everything in Pro",
-      "Speaking slots and session hosting",
-      "1:1 mentorship matching",
-      "Chapter leadership opportunities",
-      "Featured profile in the directory",
-    ],
-  },
-];
-
 export type MemberBenefit = {
   title: string;
   desc: string;
   icon: string;
   tag: string;
 };
-
-export const memberBenefits: MemberBenefit[] = [
-  {
-    title: "Free / Discounted Access",
-    desc: "Walk into select events on us, or grab member-only pricing on everything else — from meetups to flagship summits.",
-    icon: "ticket",
-    tag: "Save money",
-  },
-  {
-    title: "Priority Registration",
-    desc: "Skip the queue for limited-seat workshops and hackathons. Members register first, every time.",
-    icon: "clock",
-    tag: "Skip the line",
-  },
-  {
-    title: "Exclusive Events",
-    desc: "Member-only sessions, founder dinners and late-night hack nights you won't find anywhere else.",
-    icon: "sparkle",
-    tag: "Insider access",
-  },
-  {
-    title: "Networking",
-    desc: "Curated introductions to founders, engineers, designers and investors who can move your work forward.",
-    icon: "nodes",
-    tag: "Connections",
-  },
-  {
-    title: "Learning Resources",
-    desc: "Templates, session recordings and playbooks from every event — yours to keep and reuse.",
-    icon: "book",
-    tag: "Level up",
-  },
-  {
-    title: "Partner Discounts",
-    desc: "Deals on developer tools, cloud credits and courses from our partner ecosystem.",
-    icon: "tag",
-    tag: "Perks",
-  },
-  {
-    title: "Leadership Opportunities",
-    desc: "Host tracks, mentor peers and represent Techxfluence as a community ambassador.",
-    icon: "trophy",
-    tag: "Grow",
-  },
-  {
-    title: "Badges & Recognition",
-    desc: "Earn points, badges and certificates for everything you contribute to the community.",
-    icon: "medal",
-    tag: "Status",
-  },
-];
 
 export type LeaderRole =
   | "Founder"
@@ -270,137 +185,6 @@ export function leaderLinkedIn(leader: Leader): string {
   );
 }
 
-export const leaders: Leader[] = [
-  {
-    name: "Kumaresan",
-    role: "Founder",
-    initials: "K",
-    city: "Chennai",
-    events: 64,
-    points: 9820,
-    focus: "Vision & Strategy",
-    bio: "Leading Techxfluence to build India's strongest community for creators and innovators.",
-    image: "/team/kumaresan.png",
-  },
-  {
-    name: "Priyanka",
-    role: "Manager",
-    initials: "P",
-    city: "Chennai",
-    events: 28,
-    points: 5200,
-    focus: "Operations & Programs",
-    bio: "Keeping Techxfluence running — coordinating events, partnerships and the team behind every gathering.",
-    image: "/team/priyanka.jpg",
-  },
-  {
-    name: "Mahalakshmi",
-    role: "Community Lead",
-    initials: "M",
-    city: "Chennai",
-    events: 41,
-    points: 7430,
-    focus: "Member Experience",
-    bio: "Fostering collaboration and growing the Techxfluence volunteer network.",
-    image: "/team/mahalakshmi.png",
-  },
-  {
-    name: "Abishek",
-    role: "Community Lead",
-    initials: "A",
-    city: "Bengaluru",
-    events: 35,
-    points: 6610,
-    focus: "Ambassador Relations",
-    bio: "Connecting campus leads and driving technology events across chapters.",
-    image: "/team/abishek.png",
-  },
-  {
-    name: "Open Coordinator (Chennai)",
-    role: "Event Coordinator",
-    initials: "+",
-    city: "Chennai",
-    events: 0,
-    points: 0,
-    focus: "Event Ops",
-    bio: "Join as Event Coordinator to organize hackathons, meetups and tech events.",
-    isHiring: true,
-  },
-  {
-    name: "Open Ambassador (Chennai)",
-    role: "Ambassador",
-    initials: "+",
-    city: "Chennai",
-    events: 0,
-    points: 0,
-    focus: "Community Growth",
-    bio: "Join as Community Ambassador to lead your local chapter.",
-    isHiring: true,
-  },
-  {
-    name: "Open Mentor (Chennai)",
-    role: "Mentor",
-    initials: "+",
-    city: "Chennai",
-    events: 0,
-    points: 0,
-    focus: "Technical Guidance",
-    bio: "Join as Tech Mentor to support builders in system design and product.",
-    isHiring: true,
-  },
-  {
-    name: "Open Coordinator (Bengaluru)",
-    role: "Event Coordinator",
-    initials: "+",
-    city: "Bengaluru",
-    events: 0,
-    points: 0,
-    focus: "Event Ops",
-    bio: "Join as Event Coordinator to organize hackathons, meetups and tech events.",
-    isHiring: true,
-  },
-  {
-    name: "Open Ambassador (Bengaluru)",
-    role: "Ambassador",
-    initials: "+",
-    city: "Bengaluru",
-    events: 0,
-    points: 0,
-    focus: "Community Growth",
-    bio: "Join as Community Ambassador to lead your local chapter.",
-    isHiring: true,
-  },
-  {
-    name: "Open Mentor (Bengaluru)",
-    role: "Mentor",
-    initials: "+",
-    city: "Bengaluru",
-    events: 0,
-    points: 0,
-    focus: "Technical Guidance",
-    bio: "Join as Tech Mentor to support builders in system design and product.",
-    isHiring: true,
-  },
-];
-
-export const leaderRoles: LeaderRole[] = [
-  "Founder",
-  "Manager",
-  "Community Lead",
-  "Event Coordinator",
-  "Ambassador",
-  "Mentor",
-];
-
-export const roleBlurbs: Record<LeaderRole, string> = {
-  Founder: "Sets the vision and holds the community together.",
-  Manager: "Runs day-to-day operations and keeps events and programs on track.",
-  "Community Lead": "Owns member experience, partnerships and day-to-day momentum.",
-  "Event Coordinator": "Plans and runs events end-to-end so they go off without a hitch.",
-  Ambassador: "Grows local chapters and represents TXF in their city and campus.",
-  Mentor: "Gives time 1:1 to help members learn, build and grow.",
-};
-
 export const partnerTypes = [
   "Technology Companies",
   "Startups",
@@ -413,17 +197,6 @@ export const partnerTypes = [
 // hold twelve invented companies, which appeared on pages that take money.
 // Real partners belong in the `partners` table, which getPartners() reads;
 // the marquee hides itself when there are none.
-export const partners: string[] = [];
-
-export const activities = [
-  { title: "Monthly Meetups", desc: "Recurring city meetups, wherever our community gathers.", accent: "brand" },
-  { title: "Hackathons", desc: "Weekend build sprints with real prizes.", accent: "join" },
-  { title: "Workshops", desc: "Hands-on, expert-led skill sessions.", accent: "host" },
-  { title: "Startup Showcases", desc: "A stage for early teams to launch.", accent: "brand" },
-  { title: "Mentorship", desc: "1:1 guidance from senior operators.", accent: "join" },
-  { title: "Innovation Challenges", desc: "Monthly contests & open-source bounties.", accent: "host" },
-] as const;
-
 export const impactSteps = [
   { title: "Connect", sub: "People" },
   { title: "Learn", sub: "New Skills" },

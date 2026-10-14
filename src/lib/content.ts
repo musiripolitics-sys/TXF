@@ -2,16 +2,24 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import {
-  leaders as staticLeaders,
-  partners as staticPartners,
-  activities as staticActivities,
-  tiers as staticTiers,
-  memberBenefits as staticBenefits,
   type Leader,
   type LeaderRole,
   type Tier,
   type MemberBenefit,
 } from "@/lib/data";
+
+/**
+ * These used to fall back to hardcoded arrays in lib/data.ts whenever a table
+ * came back empty — ten named leaders with event counts and point totals,
+ * three priced membership tiers, eight perks, six activity cards. Every one of
+ * those tables WAS empty, so the whole of that content was being served to
+ * visitors as though it had been entered somewhere, and no amount of editing
+ * the database would have changed a word of it.
+ *
+ * The content has been moved into the tables it belongs in. An empty table now
+ * means an empty section, which the pages already handle, and is the honest
+ * answer: nothing here invents a leader, a price or a perk.
+ */
 
 type Activity = { title: string; desc: string; accent: string };
 
@@ -38,12 +46,6 @@ function initialsFor(name: string, isHiring: boolean): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const staticActivitiesArr: Activity[] = staticActivities.map((a) => ({
-  title: a.title,
-  desc: a.desc,
-  accent: a.accent,
-}));
-
 /** Leadership board / team — from `leader_profiles`, falls back to static data. */
 export const getLeaders = unstable_cache(
   async (): Promise<Leader[]> => {
@@ -55,7 +57,7 @@ export const getLeaders = unstable_cache(
         )
         .order("sort_order", { ascending: true });
 
-      if (error || !data || data.length === 0) return staticLeaders;
+      if (error || !data) return [];
       return data.map((r) => ({
         name: r.display_name,
         role: r.role as LeaderRole,
@@ -70,7 +72,7 @@ export const getLeaders = unstable_cache(
         image: r.image_url ?? undefined,
       }));
     } catch {
-      return staticLeaders;
+      return [];
     }
   },
   ["content:leaders"],
@@ -87,10 +89,10 @@ export const getPartners = unstable_cache(
         .eq("is_active", true)
         .order("sort_order", { ascending: true });
 
-      if (error || !data || data.length === 0) return staticPartners;
+      if (error || !data) return [];
       return data.map((p) => p.name);
     } catch {
-      return staticPartners;
+      return [];
     }
   },
   ["content:partners"],
@@ -126,14 +128,14 @@ export const getActivities = unstable_cache(
         .select("title,description,accent,sort_order")
         .order("sort_order", { ascending: true });
 
-      if (error || !data || data.length === 0) return staticActivitiesArr;
+      if (error || !data) return [];
       return data.map((a) => ({
         title: a.title,
         desc: a.description ?? "",
         accent: a.accent ?? "brand",
       }));
     } catch {
-      return staticActivitiesArr;
+      return [];
     }
   },
   ["content:activities"],
@@ -149,7 +151,7 @@ export const getMemberBenefits = unstable_cache(
         .select("title,description,icon,tag,sort_order")
         .order("sort_order", { ascending: true });
 
-      if (error || !data || data.length === 0) return staticBenefits;
+      if (error || !data) return [];
       return data.map((b) => ({
         title: b.title,
         desc: b.description ?? "",
@@ -157,7 +159,7 @@ export const getMemberBenefits = unstable_cache(
         tag: b.tag ?? "",
       }));
     } catch {
-      return staticBenefits;
+      return [];
     }
   },
   ["content:benefits"],
@@ -175,7 +177,7 @@ export const getTiers = unstable_cache(
         )
         .order("sort_order", { ascending: true });
 
-      if (error || !data || data.length === 0) return staticTiers;
+      if (error || !data) return [];
       return data.map((p) => ({
         name: p.name,
         price: `₹${((p.price_amount ?? 0) / 100).toLocaleString("en-IN")}`,
@@ -190,7 +192,7 @@ export const getTiers = unstable_cache(
           .filter((t): t is string => !!t),
       }));
     } catch {
-      return staticTiers;
+      return [];
     }
   },
   ["content:tiers"],
