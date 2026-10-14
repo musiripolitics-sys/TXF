@@ -11,6 +11,7 @@ import { EventActions } from "@/components/EventActions";
 import { EventJsonLd } from "@/components/EventJsonLd";
 import { EventFacts } from "@/components/EventFacts";
 import { EventWhereBlock } from "@/components/EventWhereBlock";
+import { EventProse } from "@/components/EventProse";
 import { EventOrganizer } from "@/components/EventOrganizer";
 import { RelatedEvents } from "@/components/RelatedEvents";
 import { getEvents, getAttendance } from "@/lib/events";
@@ -287,25 +288,45 @@ export default async function EventDetailPage({
         {/* Main column */}
         <div className="space-y-10">
           <section>
-            <h2 className="font-display text-xl font-semibold text-fg">
-              About this event
-            </h2>
-            <p className="mt-3 leading-relaxed text-muted">{event.about}</p>
+            <SectionTitle>About this event</SectionTitle>
+            <EventProse text={event.about} />
           </section>
 
           {agenda.length > 0 && (
           <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Agenda</h2>
-            <ol className="mt-4 space-y-3">
-              {agenda.map((item) => (
-                <li
-                  key={item.when}
-                  className="flex gap-4 rounded-xl border border-line bg-surface px-4 py-3"
-                >
-                  <span className="w-28 shrink-0 text-sm font-medium text-brand-soft">
-                    {item.when}
-                  </span>
-                  <span className="text-sm text-muted">{item.what}</span>
+            <SectionTitle>
+              {/* "Agenda" for a single sitting, "Schedule" once there is more
+                  than a day's worth. Read off the rows, not off this event. */}
+              {agenda.length > 3 ? "Schedule" : "Agenda"}
+            </SectionTitle>
+            {/*
+              * A timeline rather than a two-column table.
+              *
+              * The old shape gave the label a fixed 7rem column and ran the
+              * detail beside it, which works for "Doors open — registration"
+              * and collapses the moment a row carries a real description: four
+              * weeks of curriculum arrived as four dense paragraphs wearing
+              * narrow labels. Stacking the label above its detail gives the
+              * text the full column and turns the rail into something you can
+              * run your eye down.
+              */}
+            <ol className="mt-4 space-y-0">
+              {agenda.map((item, i) => (
+                <li key={item.when} className="relative flex gap-4 pb-5 last:pb-0">
+                  <div className="flex shrink-0 flex-col items-center">
+                    <span className="grid h-7 w-7 place-items-center rounded-full border border-brand/30 bg-brand/10 text-[11px] font-semibold tabular-nums text-brand-soft">
+                      {i + 1}
+                    </span>
+                    {i < agenda.length - 1 && (
+                      <span className="mt-1 w-px flex-1 bg-line" aria-hidden />
+                    )}
+                  </div>
+                  <div className="min-w-0 pb-1">
+                    <p className="font-display text-sm font-semibold text-fg">
+                      {item.when}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted">{item.what}</p>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -314,7 +335,7 @@ export default async function EventDetailPage({
 
           {event.speakers.length > 0 && (
           <section>
-            <h2 className="font-display text-xl font-semibold text-fg">Speakers</h2>
+            <SectionTitle>Speakers</SectionTitle>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {event.speakers.map((s) => (
                 <div
@@ -344,7 +365,7 @@ export default async function EventDetailPage({
 
           {event.highlights && event.highlights.length > 0 && (
             <section>
-              <h2 className="font-display text-xl font-semibold text-fg">Good to know</h2>
+              <SectionTitle>Good to know</SectionTitle>
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                 {event.highlights.map((h) => (
                   <li
@@ -368,9 +389,7 @@ export default async function EventDetailPage({
 
           {!isFree && event.refundPolicy && (
             <section>
-              <h2 className="font-display text-xl font-semibold text-fg">
-                Refunds &amp; cancellation
-              </h2>
+              <SectionTitle>Refunds &amp; cancellation</SectionTitle>
               <p className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-surface px-4 py-4 text-sm leading-relaxed text-muted">
                 {event.refundPolicy}
               </p>
@@ -378,20 +397,20 @@ export default async function EventDetailPage({
           )}
 
           {event.tags && event.tags.length > 0 && (
-            <section>
-              <h2 className="font-display text-xl font-semibold text-fg">Tags</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {event.tags.map((t) => (
-                  <Link
-                    key={t}
-                    href={`/events?tag=${encodeURIComponent(t)}`}
-                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand"
-                  >
-                    {t}
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-6">
+              <span className="text-xs font-semibold uppercase tracking-wider text-faint">
+                Topics
+              </span>
+              {event.tags.map((t) => (
+                <Link
+                  key={t}
+                  href={`/events?tag=${encodeURIComponent(t)}`}
+                  className="rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted transition-colors hover:border-brand hover:text-brand"
+                >
+                  {t}
+                </Link>
+              ))}
+            </div>
           )}
 
 
@@ -593,22 +612,19 @@ export default async function EventDetailPage({
   );
 }
 
-function Detail({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
+/**
+ * One section heading for the whole page.
+ *
+ * The same four classes were retyped on eight <h2>s, which is how they drift:
+ * change the scale in one place and the page grows two sizes of the same
+ * thing. It also lets the rule "a section heading is a section heading" be
+ * stated once rather than implied eight times.
+ */
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wider text-faint">
-        {label}
-      </dt>
-      <dd className="mt-1 font-medium text-fg">{value}</dd>
-      {sub && <dd className="text-xs text-muted">{sub}</dd>}
-    </div>
+    <h2 className="font-display text-lg font-semibold tracking-tight text-fg">
+      {children}
+    </h2>
   );
 }
+
