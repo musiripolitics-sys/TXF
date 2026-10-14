@@ -2,25 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * Jump-links down the event page, with the section you are reading marked.
- *
- * "When it's required" is the whole design: an event with a description and
- * nothing else does not need a table of contents, and showing one makes a
- * thin page look emptier. Below MIN_SECTIONS this renders nothing, and the
- * list is built from the sections the page actually rendered — an event with
- * no speakers has no Speakers link, because the caller never passed one.
- *
- * The active item is the LAST section whose top has passed the reading line,
- * not the first one intersecting the viewport. That distinction is the whole
- * of it: About is usually the tallest section on the page, so it intersects
- * at almost every scroll position, and "first visible" marked it current from
- * the top of the page to the bottom — a highlight that never moves, which is
- * worse than no highlight because it looks like it is working.
- *
- * An IntersectionObserver still drives the updates, since it fires only when
- * something crosses a boundary, but the answer is read off the positions.
- */
 const MIN_SECTIONS = 3;
 
 export function EventSectionNav({
@@ -41,10 +22,8 @@ export function EventSectionNav({
         const el = document.getElementById(s.id);
         if (el && el.getBoundingClientRect().top <= line) current = s.id;
       }
-      // At the very bottom nothing further can cross the line, so the last
-      // section is current whether or not its top ever reached it.
       const atBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
       if (atBottom) current = sections[sections.length - 1].id;
       setActive(current);
     };
@@ -68,11 +47,11 @@ export function EventSectionNav({
   if (sections.length < MIN_SECTIONS) return null;
 
   return (
-    <nav aria-label="On this page" className="hidden lg:block">
-      <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-faint">
+    <nav aria-label="On this page" className="hidden lg:block rounded-2xl border border-line bg-surface p-4 shadow-soft">
+      <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-wider text-faint border-b border-line/60 mb-2">
         On this page
       </p>
-      <ul className="space-y-0.5">
+      <ul className="space-y-1">
         {sections.map((s) => {
           const current = active === s.id;
           return (
@@ -80,19 +59,27 @@ export function EventSectionNav({
               <a
                 href={`#${s.id}`}
                 aria-current={current ? "true" : undefined}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                onClick={(e) => {
+                  e.preventDefault();
+                  const el = document.getElementById(s.id);
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    history.replaceState(null, "", `#${s.id}`);
+                  }
+                }}
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${
                   current
-                    ? "bg-brand/10 font-medium text-brand-soft"
+                    ? "bg-brand/10 font-semibold text-brand-soft"
                     : "text-muted hover:bg-ink-2 hover:text-fg"
                 }`}
               >
                 <span
                   aria-hidden
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
-                    current ? "bg-brand" : "bg-line"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all ${
+                    current ? "bg-brand scale-125" : "bg-line"
                   }`}
                 />
-                {s.label}
+                <span>{s.label}</span>
               </a>
             </li>
           );

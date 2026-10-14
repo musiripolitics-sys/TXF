@@ -2,11 +2,9 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/Button";
 import { getEventBySlug } from "@/lib/events";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { RegistrationForm } from "@/components/RegistrationForm";
 import { EventActions } from "@/components/EventActions";
 import { EventJsonLd } from "@/components/EventJsonLd";
 import { EventFacts } from "@/components/EventFacts";
@@ -110,12 +108,6 @@ export default async function EventDetailPage({
   const isFree = event.price === "Free";
   const agenda = event.agenda ?? [];
 
-  /**
-   * What the side nav offers, built from the same conditions the sections
-   * themselves are rendered under. An event with no speakers gets no Speakers
-   * link because the section is not there to link to — the nav cannot drift
-   * from the page because it is derived from it rather than written beside it.
-   */
   const sections = [
     event.about ? { id: "about", label: "About" } : null,
     agenda.length > 0
@@ -126,10 +118,12 @@ export default async function EventDetailPage({
     event.highlights && event.highlights.length > 0
       ? { id: "good-to-know", label: "Good to know" }
       : null,
+    event.hostName ? { id: "organiser", label: "Organiser" } : null,
     !isFree && event.refundPolicy ? { id: "refunds", label: "Refunds" } : null,
   ].filter((x): x is { id: string; label: string } => x !== null);
+
   const filled = event.capacity - event.spotsLeft;
-  const pct = Math.round((filled / event.capacity) * 100);
+  const pct = Math.max(0, Math.min(100, Math.round((filled / event.capacity) * 100)));
 
   // Siblings for the "you might also like" rail, and the organiser's stats.
   const [allEvents, organizer, attendanceMap] = await Promise.all([
@@ -141,8 +135,6 @@ export default async function EventDetailPage({
   ]);
   const attendance = event.id ? attendanceMap[event.id] : undefined;
 
-  // Somewhere to go once they've registered: the same ranking the bottom rail
-  // uses, trimmed to what fits beside a ticket code.
   const nextUp = allEvents
     .filter((e) => e.slug !== event.slug)
     .sort(
@@ -174,9 +166,9 @@ export default async function EventDetailPage({
   }[] = [];
   let memberTier: PaidTier | null = null;
   let memberPriceLabel: string | null = null;
+
   if (user) {
     const supabase = await createClient();
-    // One parallel batch instead of four sequential round trips.
     const [{ data: profile }, { data: regs }, tier, { data: priceRow }] =
       await Promise.all([
         supabase
@@ -205,60 +197,153 @@ export default async function EventDetailPage({
     if (regs) userRegistrations = regs;
     memberTier = tier;
 
-    // Member ticket discount preview (the charge is enforced server-side).
     if (memberTier && priceRow?.price_amount) {
       const discounted = applyMemberDiscount(priceRow.price_amount, memberTier);
       memberPriceLabel = `₹${(discounted / 100).toLocaleString("en-IN")}`;
     }
   }
 
+  const hasTicket = userRegistrations.length > 0;
+
   return (
     <>
       <EventJsonLd event={event} startsAt={event.startsAt} endsAt={event.endsAt} />
 
-      {/* Hero */}
-      <header className="relative overflow-hidden border-b border-line bg-ink-2">
-        {event.image ? (
-          <>
-            <Image src={event.image} alt={event.title} fill priority sizes="100vw" className="object-cover" />
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
-          </>
-        ) : (
-          <div className="pointer-events-none absolute inset-0 glow-brand" aria-hidden />
-        )}
-        <div className={`relative mx-auto max-w-6xl px-5 py-9 sm:px-8 sm:py-14 ${event.image ? "text-white" : "text-fg"}`}>
+      {/* Hero Section */}
+      <header className="relative overflow-hidden border-b border-line bg-ink-2/30">
+        <div className="pointer-events-none absolute inset-0 glow-brand opacity-60" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" aria-hidden />
+
+        <div className="relative mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
+          {/* Breadcrumb Navigation */}
           <Link
             href="/events"
-            className={`text-sm transition-colors ${event.image ? "text-white/70 hover:text-white" : "text-muted hover:text-fg"}`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-brand transition-colors"
           >
-            ← All events
+            <span aria-hidden>←</span>
+            <span>All events</span>
           </Link>
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-3 py-1 text-xs font-medium ${event.image ? "bg-white/15 text-white" : "bg-brand/10 text-brand-soft"}`}>
-              {event.category}
-            </span>
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                isFree
-                  ? (event.image ? "bg-white/25 text-white" : "bg-host/10 text-host-soft")
-                  : (event.image ? "border border-white/20 text-white" : "border border-line text-fg")
-              }`}
-            >
-              {event.priceLabel}
-            </span>
+
+          <div className="mt-5 grid grid-cols-1 gap-8 lg:grid-cols-[1.25fr_1fr] lg:gap-12 lg:items-center">
+            {/* Left: Event Details */}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand-soft">
+                  {event.category}
+                </span>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    isFree
+                      ? "bg-host/10 text-host-soft"
+                      : "border border-line bg-surface text-fg"
+                  }`}
+                >
+                  {isFree ? "Free Admission" : event.priceLabel}
+                </span>
+                {event.spotsLeft <= 0 ? (
+                  <span className="rounded-full bg-ink-2 px-3 py-1 text-xs font-semibold text-muted">
+                    Sold out
+                  </span>
+                ) : event.spotsLeft <= 25 ? (
+                  <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    Only {event.spotsLeft} spots left
+                  </span>
+                ) : null}
+              </div>
+
+              <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-fg sm:text-4xl lg:text-5xl text-balance leading-[1.12]">
+                {event.title}
+              </h1>
+
+              <p className="mt-4 text-base leading-relaxed text-muted sm:text-lg max-w-2xl text-pretty">
+                {event.blurb}
+              </p>
+
+              {/* Host and Attendee Social Proof Bar */}
+              <div className="mt-6 flex flex-wrap items-center gap-4 pt-5 border-t border-line/60">
+                {event.hostName && (
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand to-join text-xs font-bold text-white shadow-sm">
+                      {event.hostName.trim().charAt(0).toUpperCase()}
+                    </span>
+                    <div className="text-xs">
+                      <span className="text-faint">Hosted by </span>
+                      {event.hostId ? (
+                        <Link href={`/organizer/${event.hostId}`} className="font-semibold text-fg hover:text-brand transition-colors">
+                          {event.hostName}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-fg">{event.hostName}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {attendance && attendance.going > 0 && (
+                  <div className="flex items-center gap-2 pl-2 sm:border-l sm:border-line/60">
+                    <GoingStrip going={attendance.going} names={attendance.names} size="sm" />
+                    {attendance.names.length === 0 && (
+                      <span className="text-xs text-faint">
+                        {!user ? (
+                          <Link href="/login" className="text-brand-soft hover:underline">
+                            Sign in to view
+                          </Link>
+                        ) : !memberTier ? (
+                          <Link href="/membership" className="text-brand-soft hover:underline">
+                            Go Pro to view
+                          </Link>
+                        ) : null}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Featured Event Banner / Artwork Showcase */}
+            <div className="w-full">
+              {event.image ? (
+                <div className="relative aspect-[16/10] sm:aspect-[16/9] lg:aspect-[4/3] w-full overflow-hidden rounded-2xl border border-line bg-surface shadow-soft group">
+                  <Image
+                    src={event.image}
+                    alt={event.title}
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 500px"
+                    className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+                  />
+                  <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-2xl pointer-events-none" />
+                </div>
+              ) : (
+                <div className="relative aspect-[16/10] sm:aspect-[16/9] lg:aspect-[4/3] w-full overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-surface to-ink-2 p-8 shadow-soft flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+                      {event.category}
+                    </span>
+                    <span className="text-xs font-bold text-faint">
+                      {event.dateLabel}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-3xl font-black italic tracking-tighter text-brand/20 select-none">
+                      TXF
+                    </span>
+                    <p className="mt-2 font-display text-xl font-bold text-fg line-clamp-2">
+                      {event.title}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {event.venue}, {event.city}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight sm:text-5xl text-balance">
-            {event.title}
-          </h1>
-          {/* Clamped on a phone. Unclamped, a long blurb pushed the date, the
-              price and the register button entirely below the fold — the hero
-              filled all 812px of an iPhone screen and said nothing actionable. */}
-          <p className={`mt-3 line-clamp-3 max-w-2xl text-base text-pretty sm:mt-4 sm:line-clamp-none sm:text-lg ${event.image ? "text-white/80" : "text-muted"}`}>
-            {event.blurb}
-          </p>
         </div>
       </header>
 
+      {/* Event Facts Strip */}
       <div className="mx-auto max-w-6xl px-5 pt-6 sm:px-8">
         <EventFacts
           dateLabel={event.dateLabel}
@@ -270,43 +355,9 @@ export default async function EventDetailPage({
         />
       </div>
 
-      {attendance && attendance.going > 0 && (
-        <div className="mx-auto max-w-6xl px-5 pt-4 sm:px-8">
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
-            <GoingStrip going={attendance.going} names={attendance.names} size="md" />
-            {attendance.names.length === 0 && (
-              // Names are a Pro perk now, so the prompt depends on who's asking.
-              <span className="text-xs text-faint">
-                {!user ? (
-                  <>
-                    <Link href="/login" className="text-brand-soft hover:underline">
-                      Sign in
-                    </Link>{" "}
-                    to see who else is coming.
-                  </>
-                ) : !memberTier ? (
-                  <>
-                    <Link href="/membership" className="text-brand-soft hover:underline">
-                      Go Pro
-                    </Link>{" "}
-                    to see who else is coming.
-                  </>
-                ) : null}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/*
-        * max-w-6xl, not 5xl, and a rail with a fixed width rather than a
-        * fraction. At 1440 the old grid gave the prose column 566px inside a
-        * 1024px container, leaving 160px of gutter unused on each side while
-        * the booking card was squeezed to 354px. A measure of ~700px reads
-        * better and the rail stops shrinking on narrower laptops.
-        */}
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 pb-28 sm:px-8 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,380px)] lg:gap-12 lg:py-10 lg:pb-14">
-        {/* Main column */}
+      {/* Main Grid: Content Column + Sticky Booking Rail */}
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-8 pb-20 sm:px-8 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,380px)] lg:gap-12 lg:py-10">
+        {/* Main Column */}
         <div className="space-y-10">
           <section id="about" className="scroll-mt-24">
             <SectionTitle>About this event</SectionTitle>
@@ -314,223 +365,199 @@ export default async function EventDetailPage({
           </section>
 
           {agenda.length > 0 && (
-          <section id="schedule" className="scroll-mt-24">
-            <SectionTitle>
-              {/* "Agenda" for a single sitting, "Schedule" once there is more
-                  than a day's worth. Read off the rows, not off this event. */}
-              {agenda.length > 3 ? "Schedule" : "Agenda"}
-            </SectionTitle>
-            {/*
-              * A timeline rather than a two-column table.
-              *
-              * The old shape gave the label a fixed 7rem column and ran the
-              * detail beside it, which works for "Doors open — registration"
-              * and collapses the moment a row carries a real description: four
-              * weeks of curriculum arrived as four dense paragraphs wearing
-              * narrow labels. Stacking the label above its detail gives the
-              * text the full column and turns the rail into something you can
-              * run your eye down.
-              */}
-            <ol className="mt-4 space-y-0">
-              {agenda.map((item, i) => (
-                <li key={item.when} className="relative flex gap-4 pb-5 last:pb-0">
-                  <div className="flex shrink-0 flex-col items-center">
-                    <span className="grid h-7 w-7 place-items-center rounded-full border border-brand/30 bg-brand/10 text-[11px] font-semibold tabular-nums text-brand-soft">
-                      {i + 1}
-                    </span>
-                    {i < agenda.length - 1 && (
-                      <span className="mt-1 w-px flex-1 bg-line" aria-hidden />
-                    )}
-                  </div>
-                  <div className="min-w-0 pb-1">
-                    <p className="font-display text-sm font-semibold text-fg">
-                      {item.when}
-                    </p>
-                    <p className="mt-1 text-sm leading-relaxed text-muted">{item.what}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
+            <section id="schedule" className="scroll-mt-24">
+              <SectionTitle>
+                {agenda.length > 3 ? "Schedule" : "Agenda"}
+              </SectionTitle>
+              <ol className="mt-4 space-y-0">
+                {agenda.map((item, i) => (
+                  <li key={item.when} className="relative flex gap-4 pb-5 last:pb-0">
+                    <div className="flex shrink-0 flex-col items-center">
+                      <span className="grid h-7 w-7 place-items-center rounded-full border border-brand/30 bg-brand/10 text-[11px] font-semibold tabular-nums text-brand-soft">
+                        {i + 1}
+                      </span>
+                      {i < agenda.length - 1 && (
+                        <span className="mt-1 w-px flex-1 bg-line" aria-hidden />
+                      )}
+                    </div>
+                    <div className="min-w-0 pb-1">
+                      <p className="font-display text-sm font-semibold text-fg">
+                        {item.when}
+                      </p>
+                      <p className="mt-1 text-sm leading-relaxed text-muted">{item.what}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
           )}
 
           {event.speakers.length > 0 && (
-          <section id="speakers" className="scroll-mt-24">
-            <SectionTitle>Speakers</SectionTitle>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {event.speakers.map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white">
-                    {s.initials}
-                  </span>
-                  <div>
-                    <p className="font-medium text-fg">{s.name}</p>
-                    <p className="text-xs text-faint">{s.role}</p>
+            <section id="speakers" className="scroll-mt-24">
+              <SectionTitle>Speakers</SectionTitle>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {event.speakers.map((s) => (
+                  <div
+                    key={s.name}
+                    className="flex items-center gap-3.5 rounded-2xl border border-line bg-surface p-4 shadow-soft transition-all hover:border-brand/40"
+                  >
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-join text-sm font-bold text-white shadow-sm">
+                      {s.initials}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-fg truncate">{s.name}</p>
+                      <p className="text-xs text-muted truncate mt-0.5">{s.role}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
           )}
 
           <div id="where" className="scroll-mt-24">
-          <EventWhereBlock
-            venue={event.venue}
-            address={event.address}
-            city={event.city}
-            latitude={event.latitude}
-            longitude={event.longitude}
-          />
+            <EventWhereBlock
+              venue={event.venue}
+              address={event.address}
+              city={event.city}
+              latitude={event.latitude}
+              longitude={event.longitude}
+            />
           </div>
 
           {event.highlights && event.highlights.length > 0 && (
             <section id="good-to-know" className="scroll-mt-24">
               <SectionTitle>Good to know</SectionTitle>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
                 {event.highlights.map((h) => (
                   <li
                     key={h}
-                    className="flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
+                    className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-muted shadow-soft"
                   >
-                    <span className="mt-0.5 shrink-0 text-brand-soft" aria-hidden>✓</span>
-                    {h}
+                    <span className="mt-0.5 shrink-0 font-bold text-brand" aria-hidden>✓</span>
+                    <span className="text-fg/90">{h}</span>
                   </li>
                 ))}
               </ul>
             </section>
           )}
 
-          <EventOrganizer
-            hostId={event.hostId}
-            hostName={event.hostName}
-            eventsHosted={organizer?.hosted}
-            followers={organizer?.followers}
-          />
+          <div id="organiser" className="scroll-mt-24">
+            <EventOrganizer
+              hostId={event.hostId}
+              hostName={event.hostName}
+              eventsHosted={organizer?.hosted}
+              followers={organizer?.followers}
+            />
+          </div>
 
           {!isFree && event.refundPolicy && (
             <section id="refunds" className="scroll-mt-24">
               <SectionTitle>Refunds &amp; cancellation</SectionTitle>
-              <p className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-surface px-4 py-4 text-sm leading-relaxed text-muted">
-                {event.refundPolicy}
-              </p>
+              <div className="mt-3 rounded-2xl border border-line bg-surface p-5 text-sm leading-relaxed text-muted shadow-soft">
+                <div className="flex items-center gap-2 mb-2 text-fg font-semibold text-xs uppercase tracking-wider">
+                  <svg className="h-4 w-4 text-brand" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.649 2 6.319 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.35-.166-2.001A11.954 11.954 0 0110 1.944zM11 14a1 1 0 11-2 0 1 1 0 012 0zm0-7a1 1 0 10-2 0v3a1 1 0 102 0V7z" clipRule="evenodd" />
+                  </svg>
+                  <span>Policy &amp; Terms</span>
+                </div>
+                <p className="whitespace-pre-wrap">{event.refundPolicy}</p>
+              </div>
             </section>
           )}
 
           {event.tags && event.tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-6">
-              <span className="text-xs font-semibold uppercase tracking-wider text-faint">
+              <span className="text-xs font-semibold uppercase tracking-wider text-faint mr-1">
                 Topics
               </span>
               {event.tags.map((t) => (
                 <Link
                   key={t}
                   href={`/events?tag=${encodeURIComponent(t)}`}
-                  className="rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted transition-colors hover:border-brand hover:text-brand"
+                  className="rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted transition-colors hover:border-brand hover:text-brand shadow-sm"
                 >
                   {t}
                 </Link>
               ))}
             </div>
           )}
-
-
         </div>
 
-        {/*
-          * The booking rail.
-          *
-          * It began as one sticky card holding price, host, add-to-calendar,
-          * share, the seats bar, your tickets, the whole registration form and
-          * a membership note: 972px of it, pinned at top:96px in a 900px
-          * window, with the bottom 168px — including "By registering, you
-          * agree to our Code of Conduct and Terms" — permanently below the
-          * fold, because a stuck element does not move.
-          *
-          * Capping it at the viewport fixed the clipping and left the real
-          * problem, which is that a form belongs where you are filling it in,
-          * not where you are deciding. The form is a dialog now. What stays on
-          * screen while you read is the three things the decision needs —
-          * price, seats, a button — and the rail is short enough that sticking
-          * it is free rather than something to be managed.
-          *
-          * Your tickets stay out here on purpose: that is status, not an
-          * action, and hiding a ticket code behind a button nobody has reason
-          * to press is how people conclude they never got one.
-          */}
-        <aside className="space-y-4 lg:pt-2">
-          {/*
-            * One sticky unit, not two. The booking card and the page nav
-            * travel together: made sticky separately they pin to the same
-            * offset and sit on top of each other, and the fix for that is not
-            * a second magic number but a single container.
-            *
-            * Capped at the viewport with its own scrollbar, which now only
-            * matters for a very long nav on a short window — the card itself
-            * is three lines and a button since the form moved into a dialog.
-            */}
-          <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
-          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-faint">
-                  Price
-                </p>
-                <p className="mt-0.5 font-display text-2xl font-bold text-fg">
-                  {isFree ? "Free" : event.priceLabel}
-                </p>
+        {/* Unified Sticky Booking Rail */}
+        <aside className="space-y-4 lg:pt-0">
+          <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100svh-5rem)] lg:overflow-y-auto pr-0.5">
+            {/* Unified Booking Card */}
+            <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6 space-y-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
+                    Admission
+                  </p>
+                  <p className="mt-0.5 font-display text-2xl font-bold text-fg">
+                    {isFree ? "Free" : event.priceLabel}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="shrink-0 text-xs font-semibold text-muted">
+                    {event.spotsLeft} of {event.capacity} left
+                  </span>
+                  <p className="text-[10px] text-faint">seats remaining</p>
+                </div>
               </div>
-              <span className="shrink-0 text-xs text-muted">
-                {event.spotsLeft} of {event.capacity} left
-              </span>
-            </div>
 
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-2">
-              <div
-                className="h-full rounded-full bg-brand"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
+              {/* Capacity Progress Bar */}
+              <div className="h-2 overflow-hidden rounded-full bg-ink-2">
+                <div
+                  className="h-full rounded-full bg-brand transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
 
-            <div className="mt-5">
+              {/* Already Registered Tickets Panel */}
               {userRegistrations.length > 0 && (
-                <div className="mb-6 space-y-3">
-                  <h3 className="font-semibold text-fg mb-3 text-center text-sm">Your Tickets</h3>
+                <div className="space-y-3 rounded-2xl border border-brand/20 bg-brand/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-brand">
+                      Your Ticket
+                    </span>
+                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                      Confirmed
+                    </span>
+                  </div>
+
                   {userRegistrations.map((reg) => {
                     const isWaitlisted = reg.status === "waitlisted";
                     return (
                       <div
                         key={reg.id}
-                        className={`flex flex-col items-center justify-center rounded-xl bg-ink-2 p-4 border ${isWaitlisted ? "border-amber-500/30" : "border-brand/20"}`}
+                        className={`flex flex-col items-center justify-center rounded-xl bg-surface p-4 border shadow-sm ${
+                          isWaitlisted ? "border-amber-500/30" : "border-brand/20"
+                        }`}
                       >
                         {isWaitlisted ? (
                           <>
                             <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
                               Waitlisted
                             </span>
-                            <span className="mt-2 text-xs text-muted">
-                              {reg.attendee_name} — we&apos;ll email you if a spot opens.
+                            <span className="mt-2 text-xs text-muted text-center">
+                              {reg.attendee_name} — we&apos;ll notify you if a spot opens.
                             </span>
                           </>
                         ) : (
                           <>
-                            <span className="text-xs font-medium text-brand-soft mb-1">TICKET CODE</span>
-                            <span className="font-mono text-2xl font-bold text-fg tracking-wider">{reg.ticket_code.toUpperCase()}</span>
-                            <span className="text-xs text-muted mt-2 mb-4">{reg.attendee_name}</span>
+                            <span className="text-[10px] font-bold tracking-wider text-faint mb-1">TICKET PASS</span>
+                            <span className="font-mono text-xl font-bold text-fg tracking-widest">{reg.ticket_code.toUpperCase()}</span>
+                            <span className="text-xs text-muted mt-1 mb-3">{reg.attendee_name}</span>
                             <DownloadTicketBtn event={event} ticketCode={reg.ticket_code} attendeeName={reg.attendee_name} />
                           </>
                         )}
-                        <div className="mt-3">
+                        <div className="mt-2">
                           {reg.payment_id ? (
-                            // Paid ticket: self-cancel would silently forfeit the
-                            // payment — route through support for a refund instead.
                             <a
                               href="/contact"
                               className="text-xs text-faint underline hover:text-muted"
                             >
-                              Need to cancel? Contact support for a refund
+                              Need to cancel? Contact support
                             </a>
                           ) : (
                             <CancelRegistrationBtn registrationId={reg.id} />
@@ -541,7 +568,8 @@ export default async function EventDetailPage({
                   })}
                 </div>
               )}
-              
+
+              {/* Primary Register CTA Button */}
               <RegisterCta
                 eventTitle={event.title}
                 eventId={event.id || ""}
@@ -549,6 +577,7 @@ export default async function EventDetailPage({
                 isPaid={event.price === "Paid"}
                 priceLabel={memberPriceLabel ?? event.priceLabel}
                 spotsLeft={event.spotsLeft}
+                hasTicket={hasTicket}
                 ticketTypes={event.ticketTypes}
                 questions={event.questions}
                 memberNote={
@@ -571,67 +600,56 @@ export default async function EventDetailPage({
                   chapter,
                 }}
               />
-            </div>
-          </div>
 
-            {/* Renders itself only when there is enough page to be worth
-                navigating — see EventSectionNav. */}
-            <EventSectionNav sections={sections} />
-          </div>
+              {/* Integrated Actions: Add to Calendar and Share */}
+              <div className="border-t border-line/70 pt-4">
+                <EventActions
+                  title={event.title}
+                  dateISO={event.date}
+                  time={event.time}
+                  location={`${event.venue}, ${event.address}`}
+                  details={event.blurb}
+                />
+              </div>
 
-          {/* Reference, not decision: nothing here is worth costing the
-              register button its place on screen. */}
-          <div className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
-            {event.hostName && (
-              <div className="mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-faint">
-                  Host
-                </p>
-                <p className="mt-0.5 text-fg">
+              {/* Organizer Micro-line */}
+              {event.hostName && (
+                <div className="flex items-center justify-between text-xs border-t border-line/70 pt-3 text-muted">
+                  <span>Host</span>
                   {event.hostId ? (
                     <Link
                       href={`/organizer/${event.hostId}`}
-                      className="font-medium text-brand-soft hover:underline"
+                      className="font-semibold text-brand-soft hover:underline"
                     >
                       {event.hostName} →
                     </Link>
                   ) : (
-                    event.hostName
+                    <span className="font-semibold text-fg">{event.hostName}</span>
                   )}
-                </p>
-              </div>
-            )}
-            <EventActions
-              title={event.title}
-              dateISO={event.date}
-              time={event.time}
-              location={`${event.venue}, ${event.address}`}
-              details={event.blurb}
-            />
-            <p className="mt-4 text-center text-xs text-faint">
-              Members get priority registration & discounts.{" "}
-              <Link href="/membership" className="text-brand-soft underline">
-                Join
-              </Link>
-            </p>
+                </div>
+              )}
+
+              {/* Member Perk Reassurance */}
+              <p className="text-center text-xs text-faint">
+                Members get priority registration &amp; discounts.{" "}
+                <Link href="/membership" className="text-brand-soft underline font-medium">
+                  Join
+                </Link>
+              </p>
+            </div>
+
+            {/* "On this page" Navigation Card */}
+            <EventSectionNav sections={sections} />
           </div>
         </aside>
       </div>
 
+      {/* Related Events Section */}
       <RelatedEvents current={event} all={allEvents} />
-
     </>
   );
 }
 
-/**
- * One section heading for the whole page.
- *
- * The same four classes were retyped on eight <h2>s, which is how they drift:
- * change the scale in one place and the page grows two sizes of the same
- * thing. It also lets the rule "a section heading is a section heading" be
- * stated once rather than implied eight times.
- */
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="font-display text-lg font-semibold tracking-tight text-fg">
@@ -639,4 +657,3 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     </h2>
   );
 }
-
