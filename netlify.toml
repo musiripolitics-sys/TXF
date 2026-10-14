@@ -12,3 +12,27 @@
 # repo root rather than only to whoever opens the function.
 [functions."reminders"]
   schedule = "0 3 * * *"
+
+# ------------------------------------------------------------------
+# Secrets scanning
+#
+# The build fails if the value of any declared environment variable is found
+# in the repo or the build output. Three of ours are not secrets and are in
+# the repo on purpose, so they are named here rather than switching the scan
+# off — the scan is what would catch SUPABASE_SERVICE_ROLE_KEY or
+# RAZORPAY_KEY_SECRET escaping into a bundle, and that is worth keeping.
+#
+#   NEXT_PUBLIC_*     public by definition. Next inlines them into the
+#                     browser bundle at build time, so they are guaranteed to
+#                     be in the output; NEXT_PUBLIC_SITE_URL is also the
+#                     fallback literal in a dozen files, because an unset one
+#                     turned every link in every email into a relative path.
+#   SMTP_HOST         smtp-relay.gmail.com — a public Google hostname, named
+#                     in a comment explaining the two relay shapes.
+#   EMAIL_FROM        the public From address on everything the site sends.
+#
+# Everything else stays scanned: SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY,
+# RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, CRON_SECRET, SMTP_PASS.
+# ------------------------------------------------------------------
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SITE_URL,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SMTP_HOST,EMAIL_FROM"
