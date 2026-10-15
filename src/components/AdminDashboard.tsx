@@ -194,11 +194,15 @@ export function AdminDashboard({
 
   // Ticket tiers. Price is entered in rupees and stored in paise.
   type TierRow = {
+    /** Present for a tier that already exists. Absent for a new one. */
+    id?: string;
     name: string;
     price: number;
     capacity: number;
     salesEnd: string;
     maxPerOrder: number;
+    /** How many are already sold. A tier with sales cannot be removed. */
+    sold?: number;
   };
   const blankTier: TierRow = {
     name: "General Admission",
@@ -208,6 +212,16 @@ export function AdminDashboard({
     maxPerOrder: 10,
   };
   const [tiers, setTiers] = useState<TierRow[]>([blankTier]);
+  /**
+   * The event being edited, or null when creating.
+   *
+   * The create form already had every field an event has; there was simply no
+   * way to load an existing one into it, so a title typed wrongly was
+   * permanent and "Content" — agenda, speakers, tags — was the only thing an
+   * admin could change after publishing.
+   */
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   type HostEarning = {
     host_id: string;
@@ -246,20 +260,140 @@ export function AdminDashboard({
     setTiers((rows) => (rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows));
 
   /** Writes ticket tiers for a freshly created event. */
+  /**
+   * Load an existing event into the create form, which then saves as an edit.
+   *
+   * Reads the row and its tiers fresh rather than using the list's copy: the
+   * table only carries the columns it displays, and an edit that saved from
+   * those would blank every field it never loaded.
+   */
+  /** Clear the event form. Shared by Cancel and by a successful save. */
+  const resetEventForm = () => {
+      setEventForm({
+        title: "",
+        category: "Meetup",
+        tags: "",
+        highlights: "",
+        refundPolicy: "",
+        latitude: "",
+        longitude: "",
+        date: "",
+        time: "",
+        city: "",
+        venue: "",
+        address: "",
+        price: "Free",
+        priceLabel: "Free",
+        blurb: "",
+        about: "",
+        capacity: 100,
+      });
+      setSpeakers([{ name: "", role: "" }]);
+      setTiers([blankTier]);
+      setAgenda([
+        { when: "", what: "" },
+      ]);
+  };
+
+  const loadEventForEdit = async (id: string) => {
+    setBusyId(id);
+    const [{ data: ev }, { data: tt }] = await Promise.all([
+      supabase.from("events").select("*").eq("id", id).maybeSingle(),
+      supabase
+        .from("ticket_types")
+        .select("id,name,price_amount,capacity,sold,max_per_order,sales_end")
+        .eq("event_id", id)
+        .order("sort_order", { ascending: true }),
+    ]);
+    setBusyId(null);
+    if (!ev) return toast("Could not load that event.", "error");
+
+    setEditingEventId(ev.id);
+    setEditingSlug(ev.slug);
+    setEventForm({
+      title: ev.title ?? "",
+      category: (ev.category ?? "Meetup") as EventCategory,
+      date: ev.date ?? "",
+      time: ev.time ?? "",
+      city: ev.city ?? "",
+      venue: ev.venue ?? "",
+      address: ev.address ?? "",
+      price: (ev.price_type ?? "Free") as "Free" | "Paid",
+      priceLabel: ev.price_label ?? "Free",
+      blurb: ev.blurb ?? "",
+      about: ev.about ?? "",
+      capacity: ev.capacity ?? 100,
+      tags: (ev.tags ?? []).join(", "),
+      highlights: (ev.highlights ?? []).join("\n"),
+      refundPolicy: ev.refund_policy ?? "",
+      latitude: ev.latitude != null ? String(ev.latitude) : "",
+      longitude: ev.longitude != null ? String(ev.longitude) : "",
+    });
+    setTiers(
+      (tt ?? []).length
+        ? (tt ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            price: (t.price_amount ?? 0) / 100,
+            capacity: t.capacity ?? 0,
+            sold: t.sold ?? 0,
+            maxPerOrder: t.max_per_order ?? 10,
+            salesEnd: t.sales_end ? String(t.sales_end).slice(0, 10) : "",
+          }))
+        : [blankTier],
+    );
+    setActiveTab("create");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /**
+   * Write the tiers for an event.
+   *
+   * A tier that already exists is UPDATED in place rather than replaced.
+   * Deleting and re-inserting would be simpler and would quietly damage
+   * anyone who had already bought: registrations.ticket_type_id is ON DELETE
+   * SET NULL, so every existing pass would lose which tier it was, and
+   * ticket_types.sold would reset to zero and free seats that are taken.
+   *
+   * A tier that has been removed in the form is only deleted when nothing has
+   * been sold from it. One with sales stays, because the alternative is
+   * orphaning real passes to tidy a list.
+   */
   const saveTiers = async (eventId: string, rows: TierRow[]) => {
     const valid = rows.filter((r) => r.name.trim() && r.capacity > 0);
     const list = valid.length > 0 ? valid : [blankTier];
-    await supabase.from("ticket_types").insert(
-      list.map((r, idx) => ({
-        event_id: eventId,
+
+    const existing = await supabase
+      .from("ticket_types")
+      .select("id,sold")
+      .eq("event_id", eventId);
+    const keptIds = new Set(list.map((r) => r.id).filter(Boolean));
+
+    for (const [idx, r] of list.entries()) {
+      const row = {
         name: r.name.trim() || "General Admission",
         price_amount: Math.round((r.price || 0) * 100),
         capacity: Number(r.capacity),
         max_per_order: Number(r.maxPerOrder) || 10,
         sales_end: r.salesEnd ? new Date(r.salesEnd).toISOString() : null,
         sort_order: idx,
-      })),
-    );
+      };
+      if (r.id) await supabase.from("ticket_types").update(row).eq("id", r.id);
+      else await supabase.from("ticket_types").insert({ event_id: eventId, ...row });
+    }
+
+    const orphaned = (existing.data ?? []).filter((t) => !keptIds.has(t.id));
+    const removable = orphaned.filter((t) => (t.sold ?? 0) === 0).map((t) => t.id);
+    if (removable.length) {
+      await supabase.from("ticket_types").delete().in("id", removable);
+    }
+    const kept = orphaned.length - removable.length;
+    if (kept > 0) {
+      toast(
+        `${kept} tier${kept > 1 ? "s" : ""} kept: passes have already been sold from ${kept > 1 ? "them" : "it"}.`,
+        "info",
+      );
+    }
   };
 
   const refresh = useCallback(async () => {
@@ -556,10 +690,14 @@ export function AdminDashboard({
     const cheapest = Math.min(...tierList.map((t) => Math.round((t.price || 0) * 100)));
     const isFree = cheapest === 0;
 
-    const { data: inserted, error } = await supabase
-      .from("events")
-      .insert({
-        slug: slugify(eventForm.title),
+    /**
+     * The fields an edit may change. The slug is NOT among them: it is the
+     * public URL, and rewriting it when somebody fixes a typo in the title
+     * breaks every link already shared, every QR code printed and the page
+     * Google has indexed. A new event gets a slug from its title; an existing
+     * one keeps the one it was published under.
+     */
+    const fields = {
         title: eventForm.title,
         category: eventForm.category,
         date: eventForm.date,
@@ -589,19 +727,75 @@ export function AdminDashboard({
         latitude: eventForm.latitude.trim() ? Number(eventForm.latitude) : null,
         longitude: eventForm.longitude.trim() ? Number(eventForm.longitude) : null,
         capacity: totalCapacity,
-        spots_left: totalCapacity,
-        status: "published",
-        source: "custom",
-        published_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    };
 
-    if (!error && inserted) {
+    /**
+     * spots_left is recomputed, not reset.
+     *
+     * Setting it to the new capacity — which is what creating does — would
+     * hand back every seat already taken, so an event with sixty passes sold
+     * would advertise itself as empty. This counts what is actually held:
+     * live registrations plus orders somebody is part-way through paying for.
+     */
+    let eventId = editingEventId;
+    let error = null as { message: string } | null;
+
+    if (editingEventId) {
+      const [{ count: live }, { data: pending }] = await Promise.all([
+        supabase
+          .from("registrations")
+          .select("id", { count: "exact", head: true })
+          .eq("event_id", editingEventId)
+          .in("status", ["registered", "attended"]),
+        supabase
+          .from("orders")
+          .select("quantity")
+          .eq("event_id", editingEventId)
+          .eq("status", "pending"),
+      ]);
+      const held =
+        (live ?? 0) + (pending ?? []).reduce((sum, o) => sum + (o.quantity ?? 0), 0);
+      const res = await supabase
+        .from("events")
+        .update({ ...fields, spots_left: Math.max(totalCapacity - held, 0) })
+        .eq("id", editingEventId);
+      error = res.error;
+    } else {
+      const res = await supabase
+        .from("events")
+        .insert({
+          ...fields,
+          slug: slugify(eventForm.title),
+          spots_left: totalCapacity,
+          status: "published",
+          source: "custom",
+          published_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      error = res.error;
+      eventId = res.data?.id ?? null;
+    }
+
+    if (error) {
+      setBusyId(null);
+      return toast(error.message, "error");
+    }
+
+    const inserted = eventId ? { id: eventId } : null;
+    if (inserted) {
       // Without tiers the event can't be registered for at all.
       await saveTiers(inserted.id, tierList);
 
-      const valid = speakers.filter((s) => s.name.trim());
+      /**
+       * Speakers and the agenda are only written when CREATING.
+       *
+       * On an edit they belong to the Content editor, which loads what is
+       * already there and replaces it. Inserting from this form as well would
+       * append a second copy of both every time somebody fixed a typo in the
+       * title.
+       */
+      const valid = editingEventId ? [] : speakers.filter((s) => s.name.trim());
       if (valid.length) {
         const { data: spk } = await supabase
           .from("speakers")
@@ -624,7 +818,9 @@ export function AdminDashboard({
         }
       }
 
-      const validAgenda = agenda.filter((a) => a.when.trim() && a.what.trim());
+      const validAgenda = editingEventId
+        ? []
+        : agenda.filter((a) => a.when.trim() && a.what.trim());
       if (validAgenda.length) {
         await supabase.from("event_agenda").insert(
           validAgenda.map((row, idx) => ({
@@ -637,31 +833,11 @@ export function AdminDashboard({
       }
     }
 
+    toast(editingEventId ? "Event updated." : "Event published.", "success");
     setBusyId(null);
-    setEventForm({
-      title: "",
-      category: "Meetup",
-      tags: "",
-      highlights: "",
-      refundPolicy: "",
-      latitude: "",
-      longitude: "",
-      date: "",
-      time: "",
-      city: "",
-      venue: "",
-      address: "",
-      price: "Free",
-      priceLabel: "Free",
-      blurb: "",
-      about: "",
-      capacity: 100,
-    });
-    setSpeakers([{ name: "", role: "" }]);
-    setTiers([blankTier]);
-    setAgenda([
-      { when: "", what: "" },
-    ]);
+    setEditingEventId(null);
+    setEditingSlug(null);
+    resetEventForm();
     await refresh();
     setActiveTab("manage");
   };
@@ -723,7 +899,7 @@ export function AdminDashboard({
             >
               {tab === "overview" && "Overview"}
               {tab === "submissions" && `Host Submissions (${pendingCount})`}
-              {tab === "create" && "Create Event"}
+              {tab === "create" && (editingEventId ? "Edit Event" : "Create Event")}
               {tab === "manage" && `Manage Events (${events.length})`}
               {tab === "users" && `Users (${users.length})`}
               {tab === "payouts" && "Payouts"}
@@ -940,9 +1116,37 @@ export function AdminDashboard({
         {/* Create */}
         {!loading && activeTab === "create" && (
           <div className="max-w-3xl">
-            <h2 className="mb-6 font-display text-2xl font-bold text-fg">
-              Publish New Event
-            </h2>
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-display text-2xl font-bold text-fg">
+                  {editingEventId ? "Edit Event" : "Publish New Event"}
+                </h2>
+                {editingEventId && (
+                  <p className="mt-1 text-sm text-muted">
+                    Editing{" "}
+                    <span className="font-medium text-fg">{eventForm.title || "this event"}</span>.
+                    {" "}The web address stays{" "}
+                    <code className="rounded bg-ink-2 px-1.5 py-0.5 text-xs">/events/{editingSlug}</code>{" "}
+                    even if you change the title, so links already shared keep working.
+                    Agenda and speakers are edited under Content.
+                  </p>
+                )}
+              </div>
+              {editingEventId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingEventId(null);
+                    setEditingSlug(null);
+                    resetEventForm();
+                    setActiveTab("manage");
+                  }}
+                  className="shrink-0 rounded-full border border-line px-4 py-2 text-xs font-semibold text-muted transition-colors hover:border-brand hover:text-brand"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
             <form
               onSubmit={createEvent}
               className="space-y-6 rounded-3xl border border-line bg-surface p-6 shadow-soft sm:p-8"
@@ -1323,7 +1527,9 @@ export function AdminDashboard({
                 disabled={busyId === "create"}
                 className="w-full rounded-full bg-brand px-7 py-3.5 text-base font-medium text-white transition-all hover:bg-brand-soft hover:-translate-y-0.5 disabled:opacity-60"
               >
-                {busyId === "create" ? "Publishing…" : "Create & Publish Event"}
+                {busyId === "create"
+                  ? editingEventId ? "Saving…" : "Publishing…"
+                  : editingEventId ? "Save Changes" : "Create & Publish Event"}
               </button>
             </form>
           </div>
@@ -1386,8 +1592,15 @@ export function AdminDashboard({
                         ) : (
                           <span className="flex items-center justify-end gap-3">
                             <button
+                              onClick={() => loadEventForEdit(ev.id)}
+                              disabled={busyId === ev.id}
+                              className="text-xs font-semibold text-brand-soft hover:underline disabled:opacity-60"
+                            >
+                              {busyId === ev.id ? "…" : "Edit"}
+                            </button>
+                            <button
                               onClick={() => setEditing({ id: ev.id, title: ev.title })}
-                              className="text-xs font-semibold text-brand-soft hover:underline"
+                              className="text-xs font-semibold text-muted hover:text-fg hover:underline"
                             >
                               Content
                             </button>
