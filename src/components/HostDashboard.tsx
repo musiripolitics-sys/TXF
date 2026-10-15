@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { messageAttendees } from "@/app/host/dashboard/actions";
 import { toast } from "./Toast";
+import { EVENT_FIELDS, eventToForm, formToEvent } from "@/lib/event-fields";
 
 type Earnings = {
   gross: number;
@@ -65,14 +66,8 @@ type HostEvent = {
   event_questions: EventQuestion[];
 };
 
-type EventEdits = {
-  title: string;
-  time: string;
-  venue: string;
-  address: string;
-  blurb: string;
-  about: string;
-};
+/** Keyed by EVENT_FIELDS[].key — see lib/event-fields.ts. */
+type EventEdits = Record<string, string>;
 
 const statusStyle: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-600",
@@ -280,18 +275,15 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     await loadQuestions(eventId);
   };
 
-  const openEdit = (ev: HostEvent) => {
+  const openEdit = async (ev: HostEvent) => {
     if (editFor === ev.id) return setEditFor(null);
     setEditFor(ev.id);
     loadQuestions(ev.id);
-    setEdits({
-      title: ev.title ?? "",
-      time: ev.time ?? "",
-      venue: ev.venue ?? "",
-      address: ev.address ?? "",
-      blurb: ev.blurb ?? "",
-      about: ev.about ?? "",
-    });
+    // The list query only carries the columns it displays, so an edit seeded
+    // from it would blank every field it never loaded. Read the row.
+    const { data: full } = await supabase
+      .from("events").select("*").eq("id", ev.id).maybeSingle();
+    setEdits(eventToForm((full ?? ev) as Record<string, unknown>));
   };
 
   const saveEdit = async (eventId: string) => {
@@ -299,14 +291,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     setBusyId(eventId + "edit");
     const { error } = await supabase
       .from("events")
-      .update({
-        title: edits.title.trim(),
-        time: edits.time.trim() || null,
-        venue: edits.venue.trim() || null,
-        address: edits.address.trim() || null,
-        blurb: edits.blurb.trim() || null,
-        about: edits.about.trim() || null,
-      })
+      .update(formToEvent(edits))
       .eq("id", eventId);
     setBusyId(null);
     if (error) return toast("Couldn't save. " + error.message, "error");
@@ -897,40 +882,51 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
                       {editFor === ev.id && edits && (
                         <div className="space-y-3 border-b border-line bg-ink-2 p-5">
-                          {(
-                            [
-                              ["title", "Title"],
-                              ["time", "Time (label)"],
-                              ["venue", "Venue"],
-                              ["address", "Address"],
-                              ["blurb", "Short summary"],
-                            ] as const
-                          ).map(([key, label]) => (
-                            <label key={key} className="block">
-                              <span className="mb-1 block text-[11px] font-medium text-muted">
-                                {label}
-                              </span>
-                              <input
-                                type="text"
-                                value={edits[key]}
-                                onChange={(e) =>
-                                  setEdits({ ...edits, [key]: e.target.value })
-                                }
-                                className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
-                              />
-                            </label>
-                          ))}
-                          <label className="block">
-                            <span className="mb-1 block text-[11px] font-medium text-muted">
-                              Full description
-                            </span>
-                            <textarea
-                              rows={4}
-                              value={edits.about}
-                              onChange={(e) => setEdits({ ...edits, about: e.target.value })}
-                              className="w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
-                            />
-                          </label>
+                          {/* Every field, from EVENT_FIELDS — add one there
+                              and it appears here and is saved, with no change
+                              to this component. */}
+                          {EVENT_FIELDS.map((f) => {
+                            const cls =
+                              "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none";
+                            const set = (v: string) => setEdits({ ...edits, [f.key]: v });
+                            return (
+                              <label key={f.key} className="block">
+                                <span className="mb-1 block text-[11px] font-medium text-muted">
+                                  {f.label}
+                                  {f.hint && (
+                                    <span className="ml-1.5 font-normal text-faint">{f.hint}</span>
+                                  )}
+                                </span>
+                                {f.kind === "textarea" ? (
+                                  <textarea
+                                    rows={f.rows ?? 3}
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={`${cls} resize-none`}
+                                  />
+                                ) : f.kind === "select" ? (
+                                  <select
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={cls}
+                                  >
+                                    {(f.options ?? []).map((o) => (
+                                      <option key={o} value={o}>
+                                        {o}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type={f.kind === "date" ? "date" : "text"}
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={cls}
+                                  />
+                                )}
+                              </label>
+                            );
+                          })}
                           {/* Custom registration questions */}
                           <div className="rounded-xl border border-line bg-surface p-4">
                             <p className="text-sm font-semibold text-fg">
