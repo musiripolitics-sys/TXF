@@ -34,8 +34,13 @@ export type EventField = {
 
 const str = (v: unknown) => (v == null ? "" : String(v));
 const trimmedOrNull = (v: string) => (v.trim() ? v.trim() : null);
-const lines = (v: string) => v.split("\n").map((s) => s.trim()).filter(Boolean);
 
+/**
+ * Topics, "good to know" and the refund policy are NOT here. They live in
+ * EventContentEditor alongside the agenda and the speakers, and a field
+ * belongs to exactly one form: two forms writing the same column means
+ * whichever is saved second silently reverts the first.
+ */
 export const EVENT_FIELDS: EventField[] = [
   { key: "title", label: "Title", kind: "text",
     from: (r) => str(r.title), to: (v) => v.trim() },
@@ -57,16 +62,6 @@ export const EVENT_FIELDS: EventField[] = [
   { key: "about", label: "Full description", kind: "textarea", rows: 8,
     hint: "Blank lines separate paragraphs; a short line on its own becomes a heading",
     from: (r) => str(r.about), to: trimmedOrNull },
-  { key: "highlights", label: "Good to know", kind: "textarea", rows: 4,
-    hint: "One per line", column: "highlights",
-    from: (r) => (Array.isArray(r.highlights) ? (r.highlights as string[]).join("\n") : ""),
-    to: lines },
-  { key: "tags", label: "Topics", kind: "text", hint: "Comma separated", column: "tags",
-    from: (r) => (Array.isArray(r.tags) ? (r.tags as string[]).join(", ") : ""),
-    to: (v) => Array.from(new Set(v.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))) },
-  { key: "refundPolicy", label: "Refunds & cancellation", kind: "textarea", rows: 3,
-    column: "refund_policy",
-    from: (r) => str(r.refund_policy), to: trimmedOrNull },
   { key: "latitude", label: "Latitude", kind: "text", hint: "Optional, for the map",
     from: (r) => str(r.latitude), to: (v) => (v.trim() ? Number(v) : null) },
   { key: "longitude", label: "Longitude", kind: "text", hint: "Optional, for the map",

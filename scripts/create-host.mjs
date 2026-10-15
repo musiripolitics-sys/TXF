@@ -168,7 +168,7 @@ for (const [fn, what] of [
   if (!pass) bad++;
   say(`${pass ? "✅" : "❌"} ${fn}() → ${error ? error.message : data}   ${what}`);
 }
-const { data: evts, error: eErr } = await asUser.from("events").select("id", { count: "exact", head: true });
+const { error: eErr } = await asUser.from("events").select("id", { count: "exact", head: true });
 say(`${eErr ? "❌" : "✅"} can read events${eErr ? ": " + eErr.message : ""}`);
 if (eErr) bad++;
 await asUser.auth.signOut();

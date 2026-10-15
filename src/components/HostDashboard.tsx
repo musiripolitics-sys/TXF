@@ -7,6 +7,8 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { messageAttendees } from "@/app/host/dashboard/actions";
 import { toast } from "./Toast";
 import { EVENT_FIELDS, eventToForm, formToEvent } from "@/lib/event-fields";
+import { TicketTierEditor } from "@/components/TicketTierEditor";
+import { EventContentEditor } from "@/components/EventContentEditor";
 
 type Earnings = {
   gross: number;
@@ -122,6 +124,8 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
   const [editFor, setEditFor] = useState<string | null>(null);
   const [edits, setEdits] = useState<EventEdits | null>(null);
+  /** The event whose agenda, speakers and topics are open, if any. */
+  const [contentFor, setContentFor] = useState<{ id: string; title: string } | null>(null);
 
   // ── Create a new event (approved hosts publish their own) ──
   type NewTier = { name: string; price: number; capacity: number };
@@ -400,6 +404,16 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
   return (
     <>
+      {contentFor && (
+        <EventContentEditor
+          eventId={contentFor.id}
+          eventTitle={contentFor.title}
+          onClose={() => {
+            setContentFor(null);
+            void refresh();
+          }}
+        />
+      )}
       {dialog}
       <header className="border-b border-line bg-ink-2">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-5 py-8 sm:px-8">
@@ -997,6 +1011,38 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                                 Add question
                               </button>
                             </div>
+                          </div>
+
+                          {/* Agenda, speakers and topics — the same editor
+                              the admin console uses. A host may now write to
+                              event_agenda and event_speakers for their own
+                              event; see migration 0058. */}
+                          <div className="rounded-xl border border-line bg-surface p-4">
+                            <p className="text-sm font-semibold text-fg">
+                              Agenda, speakers &amp; topics
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted">
+                              The run of show, who is speaking, the topics people search by,
+                              what is good to know, and the refund policy.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setContentFor({ id: ev.id, title: ev.title })}
+                              className="mt-3 rounded-full border border-line px-4 py-2 text-xs font-semibold text-muted transition-colors hover:border-brand hover:text-brand"
+                            >
+                              Edit content
+                            </button>
+                          </div>
+
+                          {/* Passes and pricing, last: it is the thing most
+                              worth a second look before saving. */}
+                          <div className="rounded-xl border border-line bg-surface p-4">
+                            <p className="text-sm font-semibold text-fg">Passes &amp; pricing</p>
+                            <p className="mb-3 mt-0.5 text-xs text-muted">
+                              What people can buy, what it costs, and how many there are.
+                              Saved on its own button.
+                            </p>
+                            <TicketTierEditor eventId={ev.id} />
                           </div>
 
                           <div className="flex justify-end gap-2">
