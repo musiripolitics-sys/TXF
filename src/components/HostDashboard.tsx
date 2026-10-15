@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { messageAttendees } from "@/app/host/dashboard/actions";
 import { toast } from "./Toast";
+import { EVENT_FIELDS, eventToForm, formToEvent } from "@/lib/event-fields";
+import { TicketTierEditor } from "@/components/TicketTierEditor";
+import { EventContentEditor } from "@/components/EventContentEditor";
 
 type Earnings = {
   gross: number;
@@ -65,14 +68,8 @@ type HostEvent = {
   event_questions: EventQuestion[];
 };
 
-type EventEdits = {
-  title: string;
-  time: string;
-  venue: string;
-  address: string;
-  blurb: string;
-  about: string;
-};
+/** Keyed by EVENT_FIELDS[].key — see lib/event-fields.ts. */
+type EventEdits = Record<string, string>;
 
 const statusStyle: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-600",
@@ -127,6 +124,8 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
   const [editFor, setEditFor] = useState<string | null>(null);
   const [edits, setEdits] = useState<EventEdits | null>(null);
+  /** The event whose agenda, speakers and topics are open, if any. */
+  const [contentFor, setContentFor] = useState<{ id: string; title: string } | null>(null);
 
   // ── Create a new event (approved hosts publish their own) ──
   type NewTier = { name: string; price: number; capacity: number };
@@ -280,18 +279,15 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     await loadQuestions(eventId);
   };
 
-  const openEdit = (ev: HostEvent) => {
+  const openEdit = async (ev: HostEvent) => {
     if (editFor === ev.id) return setEditFor(null);
     setEditFor(ev.id);
     loadQuestions(ev.id);
-    setEdits({
-      title: ev.title ?? "",
-      time: ev.time ?? "",
-      venue: ev.venue ?? "",
-      address: ev.address ?? "",
-      blurb: ev.blurb ?? "",
-      about: ev.about ?? "",
-    });
+    // The list query only carries the columns it displays, so an edit seeded
+    // from it would blank every field it never loaded. Read the row.
+    const { data: full } = await supabase
+      .from("events").select("*").eq("id", ev.id).maybeSingle();
+    setEdits(eventToForm((full ?? ev) as Record<string, unknown>));
   };
 
   const saveEdit = async (eventId: string) => {
@@ -299,14 +295,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     setBusyId(eventId + "edit");
     const { error } = await supabase
       .from("events")
-      .update({
-        title: edits.title.trim(),
-        time: edits.time.trim() || null,
-        venue: edits.venue.trim() || null,
-        address: edits.address.trim() || null,
-        blurb: edits.blurb.trim() || null,
-        about: edits.about.trim() || null,
-      })
+      .update(formToEvent(edits))
       .eq("id", eventId);
     setBusyId(null);
     if (error) return toast("Couldn't save. " + error.message, "error");
@@ -415,6 +404,16 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
   return (
     <>
+      {contentFor && (
+        <EventContentEditor
+          eventId={contentFor.id}
+          eventTitle={contentFor.title}
+          onClose={() => {
+            setContentFor(null);
+            void refresh();
+          }}
+        />
+      )}
       {dialog}
       <header className="border-b border-line bg-ink-2">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-5 py-8 sm:px-8">
@@ -897,40 +896,51 @@ export function HostDashboard({ hostId }: { hostId: string }) {
 
                       {editFor === ev.id && edits && (
                         <div className="space-y-3 border-b border-line bg-ink-2 p-5">
-                          {(
-                            [
-                              ["title", "Title"],
-                              ["time", "Time (label)"],
-                              ["venue", "Venue"],
-                              ["address", "Address"],
-                              ["blurb", "Short summary"],
-                            ] as const
-                          ).map(([key, label]) => (
-                            <label key={key} className="block">
-                              <span className="mb-1 block text-[11px] font-medium text-muted">
-                                {label}
-                              </span>
-                              <input
-                                type="text"
-                                value={edits[key]}
-                                onChange={(e) =>
-                                  setEdits({ ...edits, [key]: e.target.value })
-                                }
-                                className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
-                              />
-                            </label>
-                          ))}
-                          <label className="block">
-                            <span className="mb-1 block text-[11px] font-medium text-muted">
-                              Full description
-                            </span>
-                            <textarea
-                              rows={4}
-                              value={edits.about}
-                              onChange={(e) => setEdits({ ...edits, about: e.target.value })}
-                              className="w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none"
-                            />
-                          </label>
+                          {/* Every field, from EVENT_FIELDS — add one there
+                              and it appears here and is saved, with no change
+                              to this component. */}
+                          {EVENT_FIELDS.map((f) => {
+                            const cls =
+                              "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none";
+                            const set = (v: string) => setEdits({ ...edits, [f.key]: v });
+                            return (
+                              <label key={f.key} className="block">
+                                <span className="mb-1 block text-[11px] font-medium text-muted">
+                                  {f.label}
+                                  {f.hint && (
+                                    <span className="ml-1.5 font-normal text-faint">{f.hint}</span>
+                                  )}
+                                </span>
+                                {f.kind === "textarea" ? (
+                                  <textarea
+                                    rows={f.rows ?? 3}
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={`${cls} resize-none`}
+                                  />
+                                ) : f.kind === "select" ? (
+                                  <select
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={cls}
+                                  >
+                                    {(f.options ?? []).map((o) => (
+                                      <option key={o} value={o}>
+                                        {o}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type={f.kind === "date" ? "date" : "text"}
+                                    value={edits[f.key] ?? ""}
+                                    onChange={(e) => set(e.target.value)}
+                                    className={cls}
+                                  />
+                                )}
+                              </label>
+                            );
+                          })}
                           {/* Custom registration questions */}
                           <div className="rounded-xl border border-line bg-surface p-4">
                             <p className="text-sm font-semibold text-fg">
@@ -1001,6 +1011,38 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                                 Add question
                               </button>
                             </div>
+                          </div>
+
+                          {/* Agenda, speakers and topics — the same editor
+                              the admin console uses. A host may now write to
+                              event_agenda and event_speakers for their own
+                              event; see migration 0058. */}
+                          <div className="rounded-xl border border-line bg-surface p-4">
+                            <p className="text-sm font-semibold text-fg">
+                              Agenda, speakers &amp; topics
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted">
+                              The run of show, who is speaking, the topics people search by,
+                              what is good to know, and the refund policy.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setContentFor({ id: ev.id, title: ev.title })}
+                              className="mt-3 rounded-full border border-line px-4 py-2 text-xs font-semibold text-muted transition-colors hover:border-brand hover:text-brand"
+                            >
+                              Edit content
+                            </button>
+                          </div>
+
+                          {/* Passes and pricing, last: it is the thing most
+                              worth a second look before saving. */}
+                          <div className="rounded-xl border border-line bg-surface p-4">
+                            <p className="text-sm font-semibold text-fg">Passes &amp; pricing</p>
+                            <p className="mb-3 mt-0.5 text-xs text-muted">
+                              What people can buy, what it costs, and how many there are.
+                              Saved on its own button.
+                            </p>
+                            <TicketTierEditor eventId={ev.id} />
                           </div>
 
                           <div className="flex justify-end gap-2">
