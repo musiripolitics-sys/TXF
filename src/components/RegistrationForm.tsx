@@ -158,7 +158,7 @@ export function RegistrationForm({
         amount: order.amount,
         currency: order.currency,
         name: "Techxfluence",
-        description: eventTitle || "Event ticket",
+        description: eventTitle || "Event pass",
         order_id: order.orderId,
         prefill: {
           name: attendee.attendee_name,
@@ -241,7 +241,7 @@ export function RegistrationForm({
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-faint">Ticket Code</p>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-faint">Pass Code</p>
               <p className="font-mono text-2xl font-bold tracking-wider text-fg mt-0.5 truncate">
                 {success}
               </p>
@@ -365,7 +365,7 @@ export function RegistrationForm({
             </svg>
             <span>
               {isPaid
-                ? "This event is sold out. Join the waitlist — if a seat frees up, you are first in line to buy it."
+                ? "This event is sold out. Join the waitlist — if a place frees up, you are first in line to claim it."
                 : "This event is at capacity. Join the waitlist and we will notify you as soon as a spot opens."}
             </span>
           </div>
@@ -384,7 +384,7 @@ export function RegistrationForm({
         {!waitlistMode && sellable.length > 1 && (
           <fieldset className="space-y-2">
             <legend className="mb-1 block text-xs font-bold uppercase tracking-wider text-muted">
-              Select Ticket Tier
+              Select Your Pass
             </legend>
             <div className="space-y-2">
               {sellable.map((t) => {
@@ -522,12 +522,13 @@ export function RegistrationForm({
 
           <div>
             <label htmlFor="reg_attendee_phone" className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-              Phone Number <span className="text-faint font-normal">(Optional)</span>
+              Phone Number
             </label>
             <input
               type="tel"
               id="reg_attendee_phone"
               name="attendee_phone"
+              required
               placeholder="+91 98765 43210"
               defaultValue={userProfile?.phone || ""}
               className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg placeholder:text-faint outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/15"
@@ -637,7 +638,7 @@ export function RegistrationForm({
 
           {isPaid && !waitlistMode && !memberNote && (
             <p className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-xs text-muted">
-              💡 Members save <strong className="text-fg font-semibold">up to 50%</strong> on tickets.{" "}
+              💡 Members save <strong className="text-fg font-semibold">up to 50%</strong> on passes.{" "}
               <a href="/membership" className="font-semibold text-brand-soft hover:underline">
                 View membership
               </a>

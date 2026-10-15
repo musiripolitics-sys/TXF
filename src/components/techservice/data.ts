@@ -5,7 +5,7 @@
  * DRAFT below states a business policy and should be confirmed before launch.
  */
 
-export const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
+export { SITE_URL as SITE } from "@/lib/site";
 
 /** Where every "Start a Project" button lands — the enquiry form on the page. */
 export const START = "#start-project";

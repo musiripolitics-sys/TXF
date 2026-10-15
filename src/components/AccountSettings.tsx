@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { deleteAccount } from "@/app/account/actions";
+import { redirectOrigin } from "@/lib/site";
 
 export function AccountSettings({ currentEmail }: { currentEmail: string }) {
   const router = useRouter();
@@ -25,7 +26,7 @@ export function AccountSettings({ currentEmail }: { currentEmail: string }) {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser(
       { email },
-      { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/confirm?next=/profile` },
+      { emailRedirectTo: `${redirectOrigin()}/auth/confirm?next=/profile` },
     );
     setEmailSaving(false);
     if (error) return setEmailErr(error.message);

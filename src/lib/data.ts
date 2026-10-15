@@ -32,7 +32,6 @@ export const brand = {
     { label: "Instagram", href: "https://instagram.com" },
     { label: "YouTube", href: "https://youtube.com" },
     { label: "Discord", href: "https://discord.com" },
-    { label: "WhatsApp", href: "https://whatsapp.com" },
   ],
 };
 

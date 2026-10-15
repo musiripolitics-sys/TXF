@@ -59,7 +59,7 @@ export default function ContactPage() {
               Join the newsletter
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Events, opportunities and resources — once a month, no spam.
+              Events, opportunities and resources every week, no spam.
             </p>
             <div className="mt-4">
               <Newsletter compact />

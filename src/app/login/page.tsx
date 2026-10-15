@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { redirectOrigin } from "@/lib/site";
 
 function LoginForm() {
   const router = useRouter();
@@ -38,7 +39,7 @@ function LoginForm() {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email,
         {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/confirm?next=/account/new-password`,
+          redirectTo: `${redirectOrigin()}/auth/confirm?next=/account/new-password`,
         },
       );
       setLoading(false);
@@ -55,7 +56,7 @@ function LoginForm() {
         password,
         options: { 
           data: { full_name: fullName, phone, city, role },
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/confirm?next=/profile`
+          emailRedirectTo: `${redirectOrigin()}/auth/confirm?next=/profile`
         },
       });
       setLoading(false);

@@ -45,7 +45,7 @@ export function Footer() {
               Stay in the loop
             </h3>
             <p className="mt-1 text-sm text-muted">
-              Upcoming events, opportunities and resources — once a month.
+              Upcoming events, opportunities and resources every week.
             </p>
           </div>
           <Newsletter compact />

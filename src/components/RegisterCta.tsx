@@ -37,13 +37,15 @@ export function RegisterCta({
 }) {
   const [open, setOpen] = useState(false);
 
+  // "Pass", not "ticket": one booking covers a session of a programme rather
+  // than admission to a single thing, and the word is the organiser's.
   const label = hasTicket
-    ? "Book another ticket"
+    ? "Book another pass"
     : isFull
       ? "Join the waitlist"
       : isPaid
-        ? `Register now · ${priceLabel ?? ""}`.trim()
-        : "Register now · Free";
+        ? `Join the Session · ${priceLabel ?? ""}`.trim()
+        : "Join the Session · Free";
 
   return (
     <>

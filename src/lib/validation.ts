@@ -3,12 +3,23 @@ import { z } from "zod";
 // Reusable field pieces
 const name = z.string().trim().min(1, "Name is required").max(120);
 const email = z.string().trim().email("A valid email is required").max(200);
+/**
+ * The attendee's phone, now required.
+ *
+ * Session links and venue details go out by SMS as well as email, so a
+ * registration without a number is one the organiser cannot reach. All three
+ * schemas that use this are attendee paths — register, ticket-order,
+ * ticket-verify — so tightening it here is the whole rule rather than one
+ * form's opinion.
+ *
+ * Marking the input `required` only binds a browser; this is what stops a
+ * direct POST from booking a place nobody can be told about.
+ */
 const phone = z
   .string()
   .trim()
-  .max(20)
-  .optional()
-  .transform((v) => (v ? v : null));
+  .min(6, "A phone number is required")
+  .max(20);
 const uuid = z.string().uuid("Invalid id");
 
 export const registerSchema = z.object({

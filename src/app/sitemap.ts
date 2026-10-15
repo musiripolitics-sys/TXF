@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getEvents } from "@/lib/events";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://techxfluence.com";
+import { SITE_URL as SITE } from "@/lib/site";
 
 /** Static marketing routes, highest priority first. */
 const STATIC: { path: string; priority: number; freq: "daily" | "weekly" | "monthly" }[] = [
