@@ -238,33 +238,93 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     setStats((s) => ({ ...s, [eventId]: data as EventStats }));
   };
 
-  type Question = { id: string; label: string; type: string; required: boolean };
+  type Question = {
+    id: string;
+    label: string;
+    type: string;
+    options: string[] | null;
+    required: boolean;
+  };
+  /** A question being written, before it is a row. Options are still text. */
+  type QuestionDraft = {
+    label: string;
+    type: string;
+    options: string;
+    required: boolean;
+  };
+  const BLANK_Q: QuestionDraft = {
+    label: "",
+    type: "text",
+    options: "",
+    required: false,
+  };
+
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [newQ, setNewQ] = useState({ label: "", type: "text", required: false });
+  const [newQ, setNewQ] = useState<QuestionDraft>(BLANK_Q);
+  const [editQ, setEditQ] = useState<(QuestionDraft & { id: string }) | null>(null);
+
+  /**
+   * One choice per line rather than comma-separated. "Week 1 — prompting, in
+   * practice" is an ordinary session name and a comma would split it in half.
+   */
+  const parseOptions = (s: string) =>
+    s.split("\n").map((o) => o.trim()).filter(Boolean);
+
+  /**
+   * What a draft owes the database. Options are nulled for anything that is
+   * not a list, so a question switched to free text and back does not
+   * resurrect the choices it had two edits ago.
+   */
+  const questionRow = (d: QuestionDraft) => ({
+    label: d.label.trim(),
+    type: d.type,
+    options: d.type === "select" ? parseOptions(d.options) : null,
+    required: d.required,
+  });
+
+  /** Refused rather than saved: both of these reach the registration form. */
+  const questionProblem = (d: QuestionDraft): string | null => {
+    if (!d.label.trim()) return "Give the question a label.";
+    if (d.type === "select" && parseOptions(d.options).length < 2)
+      return "A list needs at least two choices — one per line.";
+    return null;
+  };
 
   const loadQuestions = async (eventId: string) => {
     const { data } = await supabase
       .from("event_questions")
-      .select("id,label,type,required")
+      .select("id,label,type,options,required")
       .eq("event_id", eventId)
       .order("sort_order", { ascending: true });
     setQuestions((data as Question[]) ?? []);
   };
 
   const addQuestion = async (eventId: string) => {
-    const label = newQ.label.trim();
-    if (!label) return;
+    const problem = questionProblem(newQ);
+    if (problem) return toast(problem, "info");
     const { error } = await supabase.from("event_questions").insert({
       event_id: eventId,
-      label,
-      type: newQ.type,
-      required: newQ.required,
+      ...questionRow(newQ),
       sort_order: questions.length,
     });
     if (error) return toast("Couldn't add question. " + error.message, "error");
-    setNewQ({ label: "", type: "text", required: false });
+    setNewQ(BLANK_Q);
     await loadQuestions(eventId);
     toast("Question added.", "success");
+  };
+
+  const saveQuestion = async (eventId: string) => {
+    if (!editQ) return;
+    const problem = questionProblem(editQ);
+    if (problem) return toast(problem, "info");
+    const { error } = await supabase
+      .from("event_questions")
+      .update(questionRow(editQ))
+      .eq("id", editQ.id);
+    if (error) return toast("Couldn't save it. " + error.message, "error");
+    setEditQ(null);
+    await loadQuestions(eventId);
+    toast("Question saved.", "success");
   };
 
   const removeQuestion = async (eventId: string, id: string) => {
@@ -276,8 +336,62 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     });
     if (!ok) return;
     await supabase.from("event_questions").delete().eq("id", id);
+    setEditQ((e) => (e?.id === id ? null : e));
     await loadQuestions(eventId);
   };
+
+  /**
+   * The same fields for a new question and an existing one, so the two cannot
+   * drift apart. A plain function and not a component: a component declared in
+   * here is a new type on every render, which would unmount the input the host
+   * is typing into after every keystroke.
+   */
+  const questionFields = (
+    d: QuestionDraft,
+    set: (d: QuestionDraft) => void,
+  ) => (
+    <>
+      <input
+        type="text"
+        value={d.label}
+        onChange={(e) => set({ ...d, label: e.target.value })}
+        placeholder="e.g. Which session are you booking?"
+        className="min-w-40 flex-1 rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg placeholder:text-faint focus:border-brand focus:outline-none"
+      />
+      <select
+        value={d.type}
+        onChange={(e) => set({ ...d, type: e.target.value })}
+        className="rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg focus:border-brand focus:outline-none"
+      >
+        <option value="text">Short text</option>
+        <option value="textarea">Long text</option>
+        <option value="select">Choose from a list</option>
+      </select>
+      <label className="flex items-center gap-1.5 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={d.required}
+          onChange={(e) => set({ ...d, required: e.target.checked })}
+          className="accent-[var(--color-brand)]"
+        />
+        Required
+      </label>
+      {d.type === "select" && (
+        <div className="basis-full">
+          <textarea
+            value={d.options}
+            onChange={(e) => set({ ...d, options: e.target.value })}
+            rows={3}
+            placeholder={"One choice per line:\nSession 1 — Prompting basics\nSession 2 — Building with tools\nAll four sessions"}
+            className="w-full rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg placeholder:text-faint focus:border-brand focus:outline-none"
+          />
+          <p className="mt-1 text-[11px] text-faint">
+            One choice per line. Attendees pick exactly one when they register.
+          </p>
+        </div>
+      )}
+    </>
+  );
 
   const openEdit = async (ev: HostEvent) => {
     if (editFor === ev.id) return setEditFor(null);
@@ -947,62 +1061,88 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                               Registration questions
                             </p>
                             <p className="mt-0.5 text-xs text-muted">
-                              Extra fields attendees fill in when they register
-                              (dietary needs, company, t-shirt size…).
+                              Extra fields attendees fill in when they
+                              register — dietary needs, company, or a list to
+                              pick from, like which session they are booking.
                             </p>
 
                             {questions.length > 0 && (
                               <ul className="mt-3 space-y-2">
-                                {questions.map((q) => (
-                                  <li
-                                    key={q.id}
-                                    className="flex items-center justify-between gap-3 rounded-lg bg-ink-2 px-3 py-2"
-                                  >
-                                    <span className="min-w-0 text-xs text-fg">
-                                      {q.label}
-                                      <span className="ml-2 text-faint">
-                                        {q.type}
-                                        {q.required ? " · required" : ""}
-                                      </span>
-                                    </span>
-                                    <button
-                                      onClick={() => removeQuestion(ev.id, q.id)}
-                                      className="shrink-0 text-[11px] font-medium text-red-500 hover:underline"
+                                {questions.map((q) =>
+                                  editQ?.id === q.id ? (
+                                    <li
+                                      key={q.id}
+                                      className="rounded-lg border border-brand/40 bg-ink-2 p-3"
                                     >
-                                      Remove
-                                    </button>
-                                  </li>
-                                ))}
+                                      <div className="flex flex-wrap items-end gap-2">
+                                        {questionFields(editQ, (d) =>
+                                          setEditQ({ ...d, id: q.id }),
+                                        )}
+                                      </div>
+                                      <div className="mt-2 flex items-center gap-2">
+                                        <button
+                                          onClick={() => saveQuestion(ev.id)}
+                                          className="rounded-full bg-brand px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-soft"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          onClick={() => setEditQ(null)}
+                                          className="text-[11px] font-medium text-muted hover:text-fg"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </li>
+                                  ) : (
+                                    <li
+                                      key={q.id}
+                                      className="flex items-start justify-between gap-3 rounded-lg bg-ink-2 px-3 py-2"
+                                    >
+                                      <div className="min-w-0 text-xs text-fg">
+                                        {q.label}
+                                        <span className="ml-2 text-faint">
+                                          {q.type === "select" ? "list" : q.type}
+                                          {q.required ? " · required" : ""}
+                                        </span>
+                                        {q.type === "select" && (
+                                          <p className="mt-0.5 truncate text-[11px] text-faint">
+                                            {(q.options ?? []).length > 0
+                                              ? (q.options ?? []).join(" · ")
+                                              : "No choices yet — attendees see an empty list."}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-3">
+                                        <button
+                                          onClick={() =>
+                                            setEditQ({
+                                              id: q.id,
+                                              label: q.label,
+                                              type: q.type,
+                                              options: (q.options ?? []).join("\n"),
+                                              required: q.required,
+                                            })
+                                          }
+                                          className="text-[11px] font-medium text-fg hover:text-brand"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => removeQuestion(ev.id, q.id)}
+                                          className="text-[11px] font-medium text-red-500 hover:underline"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </li>
+                                  ),
+                                )}
                               </ul>
                             )}
 
                             <div className="mt-3 flex flex-wrap items-end gap-2">
-                              <input
-                                type="text"
-                                value={newQ.label}
-                                onChange={(e) => setNewQ({ ...newQ, label: e.target.value })}
-                                placeholder="e.g. Dietary requirements"
-                                className="min-w-40 flex-1 rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg placeholder:text-faint focus:border-brand focus:outline-none"
-                              />
-                              <select
-                                value={newQ.type}
-                                onChange={(e) => setNewQ({ ...newQ, type: e.target.value })}
-                                className="rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg focus:border-brand focus:outline-none"
-                              >
-                                <option value="text">Short text</option>
-                                <option value="textarea">Long text</option>
-                              </select>
-                              <label className="flex items-center gap-1.5 text-xs text-muted">
-                                <input
-                                  type="checkbox"
-                                  checked={newQ.required}
-                                  onChange={(e) =>
-                                    setNewQ({ ...newQ, required: e.target.checked })
-                                  }
-                                  className="accent-[var(--color-brand)]"
-                                />
-                                Required
-                              </label>
+                              {questionFields(newQ, setNewQ)}
                               <button
                                 onClick={() => addQuestion(ev.id)}
                                 disabled={!newQ.label.trim()}
