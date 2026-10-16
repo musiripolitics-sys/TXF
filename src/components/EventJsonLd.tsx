@@ -1,5 +1,6 @@
 import type { TXFEvent } from "@/lib/data";
 
+import { jsonLdSafe } from "@/lib/jsonld";
 import { SITE_URL as SITE } from "@/lib/site";
 
 /**
@@ -90,15 +91,4 @@ export function EventJsonLd({
       dangerouslySetInnerHTML={{ __html: jsonLdSafe(data) }}
     />
   );
-}
-
-/**
- * JSON.stringify does not escape `<`, so a value containing `</script>` closes
- * this tag early and everything after it is parsed as HTML. Event titles reach
- * here from host submissions, which are user input, so that is a live XSS path
- * rather than a theoretical one. Escaping `<` as \u003c keeps the JSON valid
- * and identical to a parser while making the sequence impossible to produce.
- */
-function jsonLdSafe(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
 }

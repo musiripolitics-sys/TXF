@@ -7,7 +7,7 @@ Two steps, in this order. Neither is optional.
 ```
 schema.sql                   -- the public site: events, tickets, members,
                              -- payments, community, credits, chapters
-migrations/0007 … 0055       -- everything since, in filename order
+migrations/0007 … 0059       -- everything since, in filename order
 ```
 
 `schema.sql` is the **base**, not the whole database. It is applied once to a
@@ -122,6 +122,26 @@ select c.id, u.id, 'organizer' from communities c, users u
 update events set community_id = (select id from communities where slug='chennai')
  where city = 'Chennai' and community_id is null;
 ```
+
+## The organiser page — one-time setup
+`migrations/0059_the_public_organiser_page.sql` widens `get_organizer`, which
+is the only way `/organizer/[id]` can reach the facts it shows: registrations
+are readable by the attendee, the host and an admin, and `users` by its owner,
+so an anonymous page cannot count turnout or read an avatar for itself.
+
+Idempotent, no data change — one `create or replace function`. Until it runs
+the page degrades to what it showed before:
+
+| Missing | Behaviour |
+|---|---|
+| `avatar` | Initials monogram, as before |
+| `hosting_since` | No "Hosting since" tile |
+| `attendees` | No "People hosted" tile |
+| `upcoming_count` / `past_count` | "N events hosted" with no upcoming/done split |
+| `cities` / `categories` | No "Runs" or "In" chips |
+
+The events themselves are read straight from `events` under RLS, so the
+upcoming grid and the "Previously" list work either way.
 
 ## Email
 ```
