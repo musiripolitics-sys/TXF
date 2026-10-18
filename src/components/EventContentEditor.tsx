@@ -39,6 +39,9 @@ export function EventContentEditor({
   const [tags, setTags] = useState("");
   const [highlights, setHighlights] = useState("");
   const [refundPolicy, setRefundPolicy] = useState("");
+  const [speakerQuery, setSpeakerQuery] = useState("");
+  const [newSpeaker, setNewSpeaker] = useState({ name: "", role: "" });
+  const [addingSpeaker, setAddingSpeaker] = useState(false);
 
   const fetchAll = useCallback(async () => {
     const [{ data: ev }, { data: ag }, { data: sp }, { data: link }] = await Promise.all([
@@ -99,6 +102,39 @@ export function EventContentEditor({
 
   const removeRow = (i: number) =>
     setAgenda((a) => a.filter((_, k) => k !== i).map((row, k) => ({ ...row, sort_order: k })));
+
+  /**
+   * Put a speaker in the catalogue and on this event.
+   *
+   * The catalogue is shared, so this is the one write here that reaches past
+   * this event: migration 0058 lets a host add to it but not edit or delete
+   * an existing entry, because a rename would reach every event that names
+   * them. Linking is left to the normal save, so an added speaker can still
+   * be unticked before committing.
+   */
+  const addSpeaker = async () => {
+    const name = newSpeaker.name.trim();
+    if (!name) return;
+    setAddingSpeaker(true);
+    const { data, error } = await supabase
+      .from("speakers")
+      .insert({ name, role: newSpeaker.role.trim() || null })
+      .select("id, name, role")
+      .maybeSingle();
+    setAddingSpeaker(false);
+
+    if (error || !data) {
+      return toast(
+        "Couldn't add the speaker. " + (error?.message ?? "").slice(0, 120),
+        "error",
+      );
+    }
+    const added = data as Speaker;
+    setAllSpeakers((all) => [...all, added].sort((x, y) => x.name.localeCompare(y.name)));
+    setLinked((l) => [...l, added.id]);
+    setNewSpeaker({ name: "", role: "" });
+    toast(`${added.name} added and put on this event.`, "success");
+  };
 
   const save = async () => {
     setSaving(true);
@@ -173,6 +209,17 @@ export function EventContentEditor({
   };
 
   const field = "w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-fg placeholder:text-faint focus:border-brand focus:outline-none";
+
+  /** Anyone already on the event stays visible, search or no search. */
+  const q = speakerQuery.trim().toLowerCase();
+  const visibleSpeakers = q
+    ? allSpeakers.filter(
+        (s) =>
+          linked.includes(s.id) ||
+          s.name.toLowerCase().includes(q) ||
+          (s.role ?? "").toLowerCase().includes(q),
+      )
+    : allSpeakers;
 
   return (
     <div className="fixed inset-0 z-[90] overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
@@ -266,29 +313,102 @@ export function EventContentEditor({
             <section>
               <h3 className="text-sm font-semibold text-fg">Speakers</h3>
               <p className="mt-0.5 text-xs text-faint">
-                {allSpeakers.length} in the directory · {linked.length} on this event
+                {linked.length} on this event · {allSpeakers.length} in the
+                shared directory
               </p>
-              <div className="mt-2 flex max-h-44 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-line p-2">
-                {allSpeakers.map((s) => {
-                  const on = linked.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() =>
-                        setLinked((l) => (on ? l.filter((x) => x !== s.id) : [...l, s.id]))
-                      }
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                        on
-                          ? "bg-brand text-white"
-                          : "border border-line text-muted hover:border-brand/50 hover:text-fg"
-                      }`}
-                    >
-                      {s.name}
-                      {s.role ? ` · ${s.role}` : ""}
-                    </button>
-                  );
-                })}
+
+              {allSpeakers.length > 6 && (
+                <input
+                  value={speakerQuery}
+                  onChange={(e) => setSpeakerQuery(e.target.value)}
+                  placeholder="Search the directory…"
+                  className={`${field} mt-2`}
+                />
+              )}
+
+              {/* A row each rather than pills: a role is a sentence here, and
+                  a sentence inside a pill wraps into an unreadable block. */}
+              <div className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                {visibleSpeakers.length === 0 ? (
+                  <p className="p-3 text-xs text-faint">
+                    {allSpeakers.length === 0
+                      ? "Nobody in the directory yet — add your first speaker below."
+                      : "Nobody matches that."}
+                  </p>
+                ) : (
+                  visibleSpeakers.map((s) => {
+                    const on = linked.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-ink-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() =>
+                            setLinked((l) =>
+                              on ? l.filter((x) => x !== s.id) : [...l, s.id],
+                            )
+                          }
+                          className="mt-0.5 accent-[var(--color-brand)]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block truncate text-xs font-medium ${
+                              on ? "text-fg" : "text-muted"
+                            }`}
+                          >
+                            {s.name}
+                          </span>
+                          {s.role && (
+                            <span
+                              className="block truncate text-[11px] text-faint"
+                              title={s.role}
+                            >
+                              {s.role}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
               </div>
+
+              {/* Adding one was always allowed and never offered: 0058 grants
+                  a host insert on speakers precisely so they are not stuck
+                  with whoever an admin happened to enter. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  value={newSpeaker.name}
+                  onChange={(e) =>
+                    setNewSpeaker({ ...newSpeaker, name: e.target.value })
+                  }
+                  placeholder="New speaker's name"
+                  className={`${field} min-w-36 flex-1`}
+                />
+                <input
+                  value={newSpeaker.role}
+                  onChange={(e) =>
+                    setNewSpeaker({ ...newSpeaker, role: e.target.value })
+                  }
+                  placeholder="Their role (optional)"
+                  className={`${field} min-w-36 flex-1`}
+                />
+                <button
+                  onClick={addSpeaker}
+                  disabled={!newSpeaker.name.trim() || addingSpeaker}
+                  className="shrink-0 rounded-full border border-line px-3 py-2 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
+                >
+                  {addingSpeaker ? "Adding…" : "Add speaker"}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-faint">
+                Added straight to the shared directory and ticked here. Editing
+                or removing someone already in it stays with an admin — a
+                rename would reach every event they appear on.
+              </p>
             </section>
 
             {/* Tags */}

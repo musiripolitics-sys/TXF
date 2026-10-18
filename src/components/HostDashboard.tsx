@@ -1013,7 +1013,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                           {/* Every field, from EVENT_FIELDS — add one there
                               and it appears here and is saved, with no change
                               to this component. */}
-                          {EVENT_FIELDS.map((f) => {
+                          {EVENT_FIELDS.filter((f) => !f.hidden).map((f) => {
                             const cls =
                               "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none";
                             const set = (v: string) => setEdits({ ...edits, [f.key]: v });
@@ -1046,7 +1046,11 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                                   </select>
                                 ) : (
                                   <input
-                                    type={f.kind === "date" ? "date" : "text"}
+                                    type={
+                                      f.kind === "date" || f.kind === "time"
+                                        ? f.kind
+                                        : "text"
+                                    }
                                     value={edits[f.key] ?? ""}
                                     onChange={(e) => set(e.target.value)}
                                     className={cls}
