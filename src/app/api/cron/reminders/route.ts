@@ -85,12 +85,24 @@ export async function GET(request: Request) {
     sent++;
   }
 
-  // ---- Lifecycle: archive events whose date has passed ----
+  // ---- Lifecycle: archive events that are over ----
+  //
+  // Over, not started: `date` is the first day, and an event with an end_date
+  // is still running until that day passes. Reading `date` alone archived a
+  // four-week course the morning after its first session, which took it off
+  // every public page while three sessions were still to come -- invisible
+  // until end_date became editable in the host form and anything started
+  // setting it.
+  //
+  // Both clauses are needed. The `date` test keeps an event whose start is
+  // still ahead, so a mistyped end_date cannot retire something that has not
+  // happened; the `or` is what respects a run of days.
   const { data: completed } = await admin
     .from("events")
     .update({ status: "completed" })
     .eq("status", "published")
     .lt("date", from)
+    .or(`end_date.is.null,end_date.lt.${from}`)
     .select("id");
 
   // ---- Membership renewals: nudge at T-3 days and on expiry day ----
