@@ -9,6 +9,8 @@ import { toast } from "./Toast";
 import { EVENT_FIELDS, eventToForm, formToEvent } from "@/lib/event-fields";
 import { TicketTierEditor } from "@/components/TicketTierEditor";
 import { EventContentEditor } from "@/components/EventContentEditor";
+import { RegistrationQuestions } from "@/components/RegistrationQuestions";
+import { EventCoverUpload } from "@/components/EventCoverUpload";
 
 type Earnings = {
   gross: number;
@@ -83,7 +85,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [events, setEvents] = useState<HostEvent[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { confirm, dialog } = useConfirm();
+  const { dialog } = useConfirm();
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [composeFor, setComposeFor] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -238,51 +240,9 @@ export function HostDashboard({ hostId }: { hostId: string }) {
     setStats((s) => ({ ...s, [eventId]: data as EventStats }));
   };
 
-  type Question = { id: string; label: string; type: string; required: boolean };
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [newQ, setNewQ] = useState({ label: "", type: "text", required: false });
-
-  const loadQuestions = async (eventId: string) => {
-    const { data } = await supabase
-      .from("event_questions")
-      .select("id,label,type,required")
-      .eq("event_id", eventId)
-      .order("sort_order", { ascending: true });
-    setQuestions((data as Question[]) ?? []);
-  };
-
-  const addQuestion = async (eventId: string) => {
-    const label = newQ.label.trim();
-    if (!label) return;
-    const { error } = await supabase.from("event_questions").insert({
-      event_id: eventId,
-      label,
-      type: newQ.type,
-      required: newQ.required,
-      sort_order: questions.length,
-    });
-    if (error) return toast("Couldn't add question. " + error.message, "error");
-    setNewQ({ label: "", type: "text", required: false });
-    await loadQuestions(eventId);
-    toast("Question added.", "success");
-  };
-
-  const removeQuestion = async (eventId: string, id: string) => {
-    const ok = await confirm({
-      title: "Remove this question?",
-      body: "Answers already given by registrants are kept, but nobody will be asked it again.",
-      confirmLabel: "Remove",
-      tone: "danger",
-    });
-    if (!ok) return;
-    await supabase.from("event_questions").delete().eq("id", id);
-    await loadQuestions(eventId);
-  };
-
   const openEdit = async (ev: HostEvent) => {
     if (editFor === ev.id) return setEditFor(null);
     setEditFor(ev.id);
-    loadQuestions(ev.id);
     // The list query only carries the columns it displays, so an edit seeded
     // from it would blank every field it never loaded. Read the row.
     const { data: full } = await supabase
@@ -899,7 +859,7 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                           {/* Every field, from EVENT_FIELDS — add one there
                               and it appears here and is saved, with no change
                               to this component. */}
-                          {EVENT_FIELDS.map((f) => {
+                          {EVENT_FIELDS.filter((f) => !f.hidden).map((f) => {
                             const cls =
                               "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg focus:border-brand focus:outline-none";
                             const set = (v: string) => setEdits({ ...edits, [f.key]: v });
@@ -932,7 +892,11 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                                   </select>
                                 ) : (
                                   <input
-                                    type={f.kind === "date" ? "date" : "text"}
+                                    type={
+                                      f.kind === "date" || f.kind === "time"
+                                        ? f.kind
+                                        : "text"
+                                    }
                                     value={edits[f.key] ?? ""}
                                     onChange={(e) => set(e.target.value)}
                                     className={cls}
@@ -941,77 +905,12 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                               </label>
                             );
                           })}
-                          {/* Custom registration questions */}
-                          <div className="rounded-xl border border-line bg-surface p-4">
-                            <p className="text-sm font-semibold text-fg">
-                              Registration questions
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted">
-                              Extra fields attendees fill in when they register
-                              (dietary needs, company, t-shirt size…).
-                            </p>
+                          <EventCoverUpload
+                            eventId={ev.id}
+                            initialUrl={edits.image_url}
+                          />
 
-                            {questions.length > 0 && (
-                              <ul className="mt-3 space-y-2">
-                                {questions.map((q) => (
-                                  <li
-                                    key={q.id}
-                                    className="flex items-center justify-between gap-3 rounded-lg bg-ink-2 px-3 py-2"
-                                  >
-                                    <span className="min-w-0 text-xs text-fg">
-                                      {q.label}
-                                      <span className="ml-2 text-faint">
-                                        {q.type}
-                                        {q.required ? " · required" : ""}
-                                      </span>
-                                    </span>
-                                    <button
-                                      onClick={() => removeQuestion(ev.id, q.id)}
-                                      className="shrink-0 text-[11px] font-medium text-red-500 hover:underline"
-                                    >
-                                      Remove
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-
-                            <div className="mt-3 flex flex-wrap items-end gap-2">
-                              <input
-                                type="text"
-                                value={newQ.label}
-                                onChange={(e) => setNewQ({ ...newQ, label: e.target.value })}
-                                placeholder="e.g. Dietary requirements"
-                                className="min-w-40 flex-1 rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg placeholder:text-faint focus:border-brand focus:outline-none"
-                              />
-                              <select
-                                value={newQ.type}
-                                onChange={(e) => setNewQ({ ...newQ, type: e.target.value })}
-                                className="rounded-lg border border-line bg-ink px-3 py-2 text-xs text-fg focus:border-brand focus:outline-none"
-                              >
-                                <option value="text">Short text</option>
-                                <option value="textarea">Long text</option>
-                              </select>
-                              <label className="flex items-center gap-1.5 text-xs text-muted">
-                                <input
-                                  type="checkbox"
-                                  checked={newQ.required}
-                                  onChange={(e) =>
-                                    setNewQ({ ...newQ, required: e.target.checked })
-                                  }
-                                  className="accent-[var(--color-brand)]"
-                                />
-                                Required
-                              </label>
-                              <button
-                                onClick={() => addQuestion(ev.id)}
-                                disabled={!newQ.label.trim()}
-                                className="rounded-full border border-line px-3 py-2 text-xs font-medium text-fg hover:border-brand hover:text-brand disabled:opacity-40"
-                              >
-                                Add question
-                              </button>
-                            </div>
-                          </div>
+                          <RegistrationQuestions eventId={ev.id} />
 
                           {/* Agenda, speakers and topics — the same editor
                               the admin console uses. A host may now write to

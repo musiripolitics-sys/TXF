@@ -7,6 +7,9 @@ import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { EventContentEditor } from "@/components/EventContentEditor";
+import { RegistrationQuestions } from "@/components/RegistrationQuestions";
+import { EventCoverUpload } from "@/components/EventCoverUpload";
+import { eventToForm, scheduleColumns } from "@/lib/event-fields";
 
 const SUBMISSION_BASE =
   "id,title,category,date,city,venue,organizer_email,organizer_id,description,status,submitted_at,price_type,price_amount,capacity";
@@ -161,7 +164,10 @@ export function AdminDashboard({
     title: "",
     category: "Meetup" as EventCategory,
     date: "",
-    time: "",
+    end_date: "",
+    start_time: "",
+    end_time: "",
+    timezone: "",
     city: "",
     venue: "",
     address: "",
@@ -221,6 +227,7 @@ export function AdminDashboard({
    * admin could change after publishing.
    */
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingCover, setEditingCover] = useState<string | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   type HostEarning = {
@@ -278,7 +285,10 @@ export function AdminDashboard({
         latitude: "",
         longitude: "",
         date: "",
-        time: "",
+        end_date: "",
+        start_time: "",
+        end_time: "",
+        timezone: "",
         city: "",
         venue: "",
         address: "",
@@ -308,13 +318,21 @@ export function AdminDashboard({
     setBusyId(null);
     if (!ev) return toast("Could not load that event.", "error");
 
+    // The date, end date and the two times are read exactly as the host form
+    // reads them, including parsing a legacy free-text Time into a range.
+    const sched = eventToForm(ev as Record<string, unknown>);
+
     setEditingEventId(ev.id);
+    setEditingCover((ev.image_url as string) ?? null);
     setEditingSlug(ev.slug);
     setEventForm({
       title: ev.title ?? "",
       category: (ev.category ?? "Meetup") as EventCategory,
-      date: ev.date ?? "",
-      time: ev.time ?? "",
+      date: sched.date,
+      end_date: sched.end_date,
+      start_time: sched.start_time,
+      end_time: sched.end_time,
+      timezone: sched.timezone,
       city: ev.city ?? "",
       venue: ev.venue ?? "",
       address: ev.address ?? "",
@@ -700,9 +718,7 @@ export function AdminDashboard({
     const fields = {
         title: eventForm.title,
         category: eventForm.category,
-        date: eventForm.date,
-        date_label: formatDateLabel(eventForm.date),
-        time: eventForm.time,
+        ...scheduleColumns(eventForm),
         city: eventForm.city,
         venue: eventForm.venue,
         address: eventForm.address || `${eventForm.venue}, ${eventForm.city}`,
@@ -1182,7 +1198,7 @@ export function AdminDashboard({
                     ))}
                   </select>
                 </Field>
-                <Field label="Date" required>
+                <Field label="Date" required hint="The first day">
                   <input
                     type="date"
                     required
@@ -1193,14 +1209,36 @@ export function AdminDashboard({
                     className={inputCls}
                   />
                 </Field>
-                <Field label="Time (Label)" required>
+                <Field label="End date" hint="Optional — for a course or a run of days">
                   <input
-                    type="text"
-                    required
-                    placeholder="10:00 AM – 1:00 PM IST"
-                    value={eventForm.time}
+                    type="date"
+                    value={eventForm.end_date}
                     onChange={(e) =>
-                      setEventForm({ ...eventForm, time: e.target.value })
+                      setEventForm({ ...eventForm, end_date: e.target.value })
+                    }
+                    className={inputCls}
+                  />
+                </Field>
+                {/* The Time label is no longer typed. It is written from
+                    these two, along with starts_at and ends_at, by the same
+                    function the host form uses. */}
+                <Field label="Start time" required>
+                  <input
+                    type="time"
+                    required
+                    value={eventForm.start_time}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, start_time: e.target.value })
+                    }
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="End time">
+                  <input
+                    type="time"
+                    value={eventForm.end_time}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, end_time: e.target.value })
                     }
                     className={inputCls}
                   />
@@ -1240,6 +1278,21 @@ export function AdminDashboard({
                   className={inputCls}
                 />
               </Field>
+
+              {/* Registration questions. Only while editing: a question
+                  belongs to an event and there is no event to hang it on
+                  until this form has created one. */}
+              {editingEventId && (
+                <>
+                  <EventCoverUpload
+                    eventId={editingEventId}
+                    initialUrl={editingCover}
+                  />
+                  <div className="rounded-2xl border border-line bg-ink-2 p-4">
+                    <RegistrationQuestions eventId={editingEventId} />
+                  </div>
+                </>
+              )}
 
               {/* Ticket tiers — price and capacity come from these rows. */}
               <div className="rounded-2xl border border-line bg-ink-2 p-4">
@@ -1921,10 +1974,12 @@ const inputCls =
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1932,6 +1987,7 @@ function Field({
       <label className="mb-1.5 block text-sm font-medium text-fg">
         {label}
         {required && <span className="text-brand-soft"> *</span>}
+        {hint && <span className="ml-1.5 font-normal text-faint">{hint}</span>}
       </label>
       {children}
     </div>
