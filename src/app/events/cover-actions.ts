@@ -3,8 +3,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 
-/** Where covers live. Public, because these render on public pages. */
-const BUCKET = "event-covers";
+/**
+ * Where covers live: a prefix inside the project's one public bucket, rather
+ * than a bucket of their own. Public is the requirement — these render on the
+ * events listing to people who are not signed in.
+ *
+ * Note for anything added later: community downloads must NOT go in here.
+ * They are a paid unlock served as short-lived signed URLs, and a public
+ * bucket would make that gate decoration.
+ */
+const BUCKET = "TXF";
+const PREFIX = "event-covers";
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -75,7 +84,7 @@ export async function setEventCover(formData: FormData) {
   // Namespaced by event, and a fresh name every time: the public URL is
   // cached by the CDN, so reusing a path would serve the old picture.
   const ext = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-  const path = `${eventId}/${crypto.randomUUID()}.${ext}`;
+  const path = `${PREFIX}/${eventId}/${crypto.randomUUID()}.${ext}`;
 
   const { error: upErr } = await admin.storage
     .from(BUCKET)
@@ -85,7 +94,7 @@ export async function setEventCover(formData: FormData) {
     console.error("Cover upload:", upErr);
     return {
       error: upErr.message.includes("Bucket not found")
-        ? `The '${BUCKET}' storage bucket doesn't exist yet. Create it (public) in Supabase → Storage.`
+        ? `The '${BUCKET}' storage bucket doesn't exist. Create it (public) in Supabase → Storage.`
         : "Upload failed. Please try again.",
     };
   }
