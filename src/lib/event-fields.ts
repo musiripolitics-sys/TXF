@@ -213,41 +213,75 @@ function timeLabel(start: string, end: string, timeZone: string): string | null 
  * were allowed to disagree before, because only `time` was editable and the
  * timestamps were left wherever they were.
  */
+/**
+ * Every column that the date and the two time boxes between them decide.
+ *
+ * Exported because the admin console does not render this form — it has its
+ * own, older one, and that is exactly how the two drifted: End date and the
+ * structured times were added here and reached hosts only, leaving an admin
+ * with a single free-text Time box and no way to say when a course ends.
+ * The layouts can stay different; the derivation cannot be written twice.
+ */
+export function scheduleColumns(form: {
+  date?: string;
+  end_date?: string;
+  start_time?: string;
+  end_time?: string;
+  timezone?: string;
+}): Record<string, unknown> {
+  const date = (form.date ?? "").trim();
+  const endDate = (form.end_date ?? "").trim();
+  const tz = (form.timezone ?? "").trim() || DEFAULT_TZ;
+  const start = (form.start_time ?? "").trim();
+  const end = (form.end_time ?? "").trim();
+
+  const out: Record<string, unknown> = {
+    date: date || null,
+    end_date: endDate || null,
+    time: timeLabel(start, end, tz),
+    starts_at: instant(date, start, tz),
+  };
+
+  if (date) {
+    out.date_label = new Date(date + "T00:00:00").toLocaleDateString("en-IN", {
+      day: "numeric", month: "short", year: "numeric",
+    });
+  }
+
+  // An end date means a run of days and the last one is when it ends. Without
+  // one, an end before the start is the evening event that finishes after
+  // midnight rather than a mistake.
+  const endDay = endDate || date;
+  out.ends_at = instant(endDay, end, tz);
+  if (
+    typeof out.ends_at === "string" &&
+    typeof out.starts_at === "string" &&
+    out.ends_at <= out.starts_at &&
+    !endDate
+  ) {
+    const next = new Date(endDay + "T00:00:00Z");
+    next.setUTCDate(next.getUTCDate() + 1);
+    out.ends_at = instant(next.toISOString().slice(0, 10), end, tz);
+  }
+
+  return out;
+}
+
+/**
+ * The patch to write back.
+ *
+ * date_label, time, starts_at and ends_at are not fields anybody edits: they
+ * are decided by the date and the two time boxes, so scheduleColumns settles
+ * all six together. `time` is the line a person reads and starts_at/ends_at
+ * are what the structured data and anything scheduling against this event
+ * use; they were allowed to disagree before, because only `time` was editable
+ * and the timestamps were left wherever they happened to be.
+ */
 export function formToEvent(form: Record<string, string>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const f of EVENT_FIELDS) {
     if (f.derived || !f.to) continue;
     patch[f.column ?? f.key] = f.to(form[f.key] ?? "");
   }
-
-  if (form.date) {
-    patch.date_label = new Date(form.date + "T00:00:00").toLocaleDateString("en-IN", {
-      day: "numeric", month: "short", year: "numeric",
-    });
-  }
-
-  const tz = (form.timezone ?? "").trim() || DEFAULT_TZ;
-  const start = (form.start_time ?? "").trim();
-  const end = (form.end_time ?? "").trim();
-
-  patch.time = timeLabel(start, end, tz);
-  patch.starts_at = instant(form.date ?? "", start, tz);
-
-  // An end date means a run of days and the last one is when it ends. Without
-  // one, an end before the start is the evening event that finishes after
-  // midnight rather than a mistake.
-  const endDay = (form.end_date ?? "").trim() || form.date || "";
-  patch.ends_at = instant(endDay, end, tz);
-  if (
-    typeof patch.ends_at === "string" &&
-    typeof patch.starts_at === "string" &&
-    patch.ends_at <= patch.starts_at &&
-    !(form.end_date ?? "").trim()
-  ) {
-    const next = new Date(endDay + "T00:00:00Z");
-    next.setUTCDate(next.getUTCDate() + 1);
-    patch.ends_at = instant(next.toISOString().slice(0, 10), end, tz);
-  }
-
-  return patch;
+  return Object.assign(patch, scheduleColumns(form));
 }
