@@ -7,6 +7,7 @@ import { toast } from "@/components/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { EventContentEditor } from "@/components/EventContentEditor";
+import { RegistrationQuestions } from "@/components/RegistrationQuestions";
 import { eventToForm, scheduleColumns } from "@/lib/event-fields";
 
 const SUBMISSION_BASE =
@@ -1274,6 +1275,15 @@ export function AdminDashboard({
                   className={inputCls}
                 />
               </Field>
+
+              {/* Registration questions. Only while editing: a question
+                  belongs to an event and there is no event to hang it on
+                  until this form has created one. */}
+              {editingEventId && (
+                <div className="rounded-2xl border border-line bg-ink-2 p-4">
+                  <RegistrationQuestions eventId={editingEventId} />
+                </div>
+              )}
 
               {/* Ticket tiers — price and capacity come from these rows. */}
               <div className="rounded-2xl border border-line bg-ink-2 p-4">
