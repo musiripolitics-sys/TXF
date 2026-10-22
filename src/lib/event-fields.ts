@@ -133,6 +133,11 @@ export const EVENT_FIELDS: EventField[] = [
     from: (r) => wallClock(r.ends_at, tzOf(r)) || parseTimeRange(str(r.time))[1] },
   { key: "timezone", label: "Time zone", kind: "text", derived: true, hidden: true,
     from: (r) => tzOf(r) },
+  // Carried so the form can show the current cover. Derived because the
+  // upload action owns this column: it writes the row itself the moment a
+  // file is chosen, and this form must not write a stale value back over it.
+  { key: "image_url", label: "Cover image", kind: "text", derived: true, hidden: true,
+    from: (r) => str(r.image_url) },
   { key: "city", label: "City", kind: "text",
     from: (r) => str(r.city), to: (v) => v.trim() },
   { key: "venue", label: "Venue", kind: "text",

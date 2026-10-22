@@ -10,6 +10,7 @@ import { EVENT_FIELDS, eventToForm, formToEvent } from "@/lib/event-fields";
 import { TicketTierEditor } from "@/components/TicketTierEditor";
 import { EventContentEditor } from "@/components/EventContentEditor";
 import { RegistrationQuestions } from "@/components/RegistrationQuestions";
+import { EventCoverUpload } from "@/components/EventCoverUpload";
 
 type Earnings = {
   gross: number;
@@ -904,6 +905,11 @@ export function HostDashboard({ hostId }: { hostId: string }) {
                               </label>
                             );
                           })}
+                          <EventCoverUpload
+                            eventId={ev.id}
+                            initialUrl={edits.image_url}
+                          />
+
                           <RegistrationQuestions eventId={ev.id} />
 
                           {/* Agenda, speakers and topics — the same editor

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { EventContentEditor } from "@/components/EventContentEditor";
 import { RegistrationQuestions } from "@/components/RegistrationQuestions";
+import { EventCoverUpload } from "@/components/EventCoverUpload";
 import { eventToForm, scheduleColumns } from "@/lib/event-fields";
 
 const SUBMISSION_BASE =
@@ -226,6 +227,7 @@ export function AdminDashboard({
    * admin could change after publishing.
    */
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingCover, setEditingCover] = useState<string | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   type HostEarning = {
@@ -321,6 +323,7 @@ export function AdminDashboard({
     const sched = eventToForm(ev as Record<string, unknown>);
 
     setEditingEventId(ev.id);
+    setEditingCover((ev.image_url as string) ?? null);
     setEditingSlug(ev.slug);
     setEventForm({
       title: ev.title ?? "",
@@ -1280,9 +1283,15 @@ export function AdminDashboard({
                   belongs to an event and there is no event to hang it on
                   until this form has created one. */}
               {editingEventId && (
-                <div className="rounded-2xl border border-line bg-ink-2 p-4">
-                  <RegistrationQuestions eventId={editingEventId} />
-                </div>
+                <>
+                  <EventCoverUpload
+                    eventId={editingEventId}
+                    initialUrl={editingCover}
+                  />
+                  <div className="rounded-2xl border border-line bg-ink-2 p-4">
+                    <RegistrationQuestions eventId={editingEventId} />
+                  </div>
+                </>
               )}
 
               {/* Ticket tiers — price and capacity come from these rows. */}
