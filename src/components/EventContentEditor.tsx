@@ -4,9 +4,39 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "./Toast";
 import { useConfirm } from "./ConfirmDialog";
+import { eventToForm, scheduleColumns } from "@/lib/event-fields";
 
-type AgendaItem = { id?: string; when_label: string; what: string; sort_order: number };
+type AgendaItem = {
+  id?: string;
+  when_label: string;
+  what: string;
+  sort_order: number;
+  /** All three optional: a row is often a time within the event's single day. */
+  on_date: string;
+  start_time: string;
+  end_time: string;
+};
 type Speaker = { id: string; name: string; role: string | null };
+
+/** "Sat 24 Oct · 10:00 AM – 11:30 AM", from whichever parts a row has. */
+function agendaLabel(r: { on_date: string; start_time: string; end_time: string }): string {
+  const parts: string[] = [];
+  if (r.on_date) {
+    const d = new Date(r.on_date + "T00:00:00");
+    if (!Number.isNaN(d.getTime())) {
+      parts.push(
+        d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }),
+      );
+    }
+  }
+  const clock = (t: string) =>
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      .format(new Date(`2000-01-01T${t}:00`));
+  if (r.start_time) {
+    parts.push(r.end_time ? `${clock(r.start_time)} – ${clock(r.end_time)}` : clock(r.start_time));
+  }
+  return parts.join(" · ");
+}
 
 /**
  * Fills in the parts of an event that only exist after it's published.
@@ -42,19 +72,43 @@ export function EventContentEditor({
   const [speakerQuery, setSpeakerQuery] = useState("");
   const [newSpeaker, setNewSpeaker] = useState({ name: "", role: "" });
   const [addingSpeaker, setAddingSpeaker] = useState(false);
+  const [eventRow, setEventRow] = useState<Record<string, unknown>>({});
+  /** Whether migration 0060 is applied. False hides the day and time boxes. */
+  const [hasDates, setHasDates] = useState(true);
+
+  /**
+   * The agenda, with or without the columns 0060 adds.
+   *
+   * Selecting a column that does not exist is a 400, not an empty result, and
+   * this editor replaces the agenda wholesale on save — it deletes every row
+   * and reinserts. An editor that loaded nothing because of a pending
+   * migration and then saved would delete a real agenda and put nothing back.
+   * So the select retries without them and the save is told, the same way
+   * lib/events.ts already handles the discovery columns.
+   */
+  const agendaRows = useCallback(
+    async (id: string) => {
+      const base = "id, when_label, what, sort_order";
+      const full = `${base}, on_date, start_time, end_time`;
+      const read = (cols: string) =>
+        supabase.from("event_agenda").select(cols).eq("event_id", id).order("sort_order");
+
+      const first = await read(full);
+      if (!first.error) return { data: first.data, dated: true };
+      const second = await read(base);
+      return { data: second.data, dated: false };
+    },
+    [supabase],
+  );
 
   const fetchAll = useCallback(async () => {
-    const [{ data: ev }, { data: ag }, { data: sp }, { data: link }] = await Promise.all([
+    const [{ data: ev }, { data: ag, dated }, { data: sp }, { data: link }] = await Promise.all([
       supabase
         .from("events")
-        .select("tags, highlights, refund_policy")
+        .select("tags, highlights, refund_policy, date, end_date, time, starts_at, ends_at, timezone")
         .eq("id", eventId)
         .maybeSingle(),
-      supabase
-        .from("event_agenda")
-        .select("id, when_label, what, sort_order")
-        .eq("event_id", eventId)
-        .order("sort_order"),
+      agendaRows(eventId),
       supabase.from("speakers").select("id, name, role").order("name"),
       supabase.from("event_speakers").select("speaker_id").eq("event_id", eventId),
     ]);
@@ -63,11 +117,22 @@ export function EventContentEditor({
       tags: ((ev?.tags as string[]) ?? []).join(", "),
       highlights: (((ev?.highlights as string[]) ?? []) as string[]).join("\n"),
       refundPolicy: ev?.refund_policy ?? "",
-      agenda: (ag as AgendaItem[]) ?? [],
+      row: (ev ?? {}) as Record<string, unknown>,
+      dated,
+      agenda: ((ag ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        when_label: (r.when_label as string) ?? "",
+        what: (r.what as string) ?? "",
+        sort_order: (r.sort_order as number) ?? 0,
+        on_date: (r.on_date as string) ?? "",
+        // A `time` column comes back as "10:00:00"; the input wants "10:00".
+        start_time: ((r.start_time as string) ?? "").slice(0, 5),
+        end_time: ((r.end_time as string) ?? "").slice(0, 5),
+      })) as AgendaItem[],
       speakers: (sp as Speaker[]) ?? [],
       linked: ((link ?? []) as { speaker_id: string }[]).map((l) => l.speaker_id),
     };
-  }, [supabase, eventId]);
+  }, [supabase, eventId, agendaRows]);
 
   // State is set after the await, and only if this editor is still mounted —
   // no synchronous setState in the effect body, no update after unmount.
@@ -78,6 +143,8 @@ export function EventContentEditor({
       setTags(d.tags);
       setHighlights(d.highlights);
       setRefundPolicy(d.refundPolicy);
+      setEventRow(d.row);
+      setHasDates(d.dated);
       setAgenda(d.agenda);
       setAllSpeakers(d.speakers);
       setLinked(d.linked);
@@ -89,7 +156,10 @@ export function EventContentEditor({
   }, [fetchAll]);
 
   const addRow = () =>
-    setAgenda((a) => [...a, { when_label: "", what: "", sort_order: a.length }]);
+    setAgenda((a) => [
+      ...a,
+      { when_label: "", what: "", sort_order: a.length, on_date: "", start_time: "", end_time: "" },
+    ]);
 
   const move = (i: number, dir: -1 | 1) =>
     setAgenda((a) => {
@@ -140,12 +210,22 @@ export function EventContentEditor({
     setSaving(true);
     try {
       const cleanAgenda = agenda
-        .filter((r) => r.when_label.trim() || r.what.trim())
+        .filter((r) => r.when_label.trim() || r.what.trim() || r.on_date || r.start_time)
         .map((r, i) => ({
           event_id: eventId,
-          when_label: r.when_label.trim(),
+          // The label stays the thing the event page renders, and stays the
+          // host's to write: "Week 1 · Oct 24" says more than a date does.
+          // It is only filled in from the columns when it was left empty.
+          when_label: r.when_label.trim() || agendaLabel(r),
           what: r.what.trim(),
           sort_order: i,
+          ...(hasDates
+            ? {
+                on_date: r.on_date || null,
+                start_time: r.start_time || null,
+                end_time: r.end_time || null,
+              }
+            : {}),
         }));
 
       // Agenda is small and order matters, so replace it wholesale rather
@@ -173,9 +253,35 @@ export function EventContentEditor({
         if (error) throw error;
       }
 
+      /**
+       * A dated agenda is the event's span.
+       *
+       * Two forms writing one column is normally the bug this codebase warns
+       * about, so the rule is narrow and stated in the UI: the agenda owns
+       * date and end_date only while its rows carry dates, and the Edit
+       * details form owns them the rest of the time. It is the alternative
+       * that has already cost something — a course whose agenda said 24 Oct
+       * while its date said 18 Oct was archived before it began.
+       *
+       * The times and the zone come from the event, so starts_at and ends_at
+       * move with the dates instead of being left on the old day.
+       */
+      const dated = hasDates
+        ? cleanAgenda.filter((r) => r.on_date).map((r) => r.on_date as string).sort()
+        : [];
+      const span =
+        dated.length > 0
+          ? scheduleColumns({
+              ...eventToForm(eventRow),
+              date: dated[0],
+              end_date: dated.length > 1 ? dated[dated.length - 1] : "",
+            })
+          : {};
+
       const { error: evErr } = await supabase
         .from("events")
         .update({
+          ...span,
           tags: Array.from(
             new Set(tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)),
           ),
@@ -185,7 +291,14 @@ export function EventContentEditor({
         .eq("id", eventId);
       if (evErr) throw evErr;
 
-      toast("Event content saved.", "success");
+      toast(
+        dated.length > 0
+          ? `Saved. The event now runs ${dated[0]}${
+              dated.length > 1 ? ` to ${dated[dated.length - 1]}` : ""
+            }, from its agenda.`
+          : "Event content saved.",
+        "success",
+      );
       onClose();
     } catch (e) {
       console.error("Save event content:", e);
@@ -256,28 +369,55 @@ export function EventContentEditor({
                 </p>
               ) : (
                 <div className="mt-2 flex flex-col gap-2">
-                  {agenda.map((row, i) => (
+                  {agenda.map((row, i) => {
+                    const set = (patch: Partial<AgendaItem>) =>
+                      setAgenda((a) => a.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+                    return (
                     <div key={i} className="flex items-start gap-2">
-                      <input
-                        value={row.when_label}
-                        onChange={(e) =>
-                          setAgenda((a) =>
-                            a.map((r, k) => (k === i ? { ...r, when_label: e.target.value } : r)),
-                          )
-                        }
-                        placeholder="7:00 PM"
-                        className={`${field} w-28 shrink-0`}
-                      />
-                      <input
-                        value={row.what}
-                        onChange={(e) =>
-                          setAgenda((a) =>
-                            a.map((r, k) => (k === i ? { ...r, what: e.target.value } : r)),
-                          )
-                        }
-                        placeholder="Opening talk — what it covers"
-                        className={field}
-                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <input
+                          value={row.what}
+                          onChange={(e) => set({ what: e.target.value })}
+                          placeholder="Opening talk — what it covers"
+                          className={field}
+                        />
+                        {/* Day and times, so the schedule is data rather than
+                            a sentence. All three may be left blank. */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hasDates && (
+                          <>
+                          <input
+                            type="date"
+                            value={row.on_date}
+                            onChange={(e) => set({ on_date: e.target.value })}
+                            aria-label="Day"
+                            className={`${field} w-36 shrink-0 text-xs`}
+                          />
+                          <input
+                            type="time"
+                            value={row.start_time}
+                            onChange={(e) => set({ start_time: e.target.value })}
+                            aria-label="Starts"
+                            className={`${field} w-28 shrink-0 text-xs`}
+                          />
+                          <input
+                            type="time"
+                            value={row.end_time}
+                            onChange={(e) => set({ end_time: e.target.value })}
+                            aria-label="Ends"
+                            className={`${field} w-28 shrink-0 text-xs`}
+                          />
+                          </>
+                          )}
+                          <input
+                            value={row.when_label}
+                            onChange={(e) => set({ when_label: e.target.value })}
+                            placeholder={agendaLabel(row) || "Label — e.g. Week 1"}
+                            aria-label="Label shown on the event page"
+                            className={`${field} min-w-32 flex-1 text-xs`}
+                          />
+                        </div>
+                      </div>
                       <div className="flex shrink-0 items-center gap-1 pt-1">
                         <button
                           onClick={() => move(i, -1)}
@@ -304,9 +444,16 @@ export function EventContentEditor({
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
+              <p className="mt-2 text-xs text-faint">
+                The label is what the event page shows. Leave it blank and it
+                is written from the day and times beside it. Once any row has a
+                day, the event&apos;s own start and end dates follow the
+                agenda — the first dated row to the last.
+              </p>
             </section>
 
             {/* Speakers */}

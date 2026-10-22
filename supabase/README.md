@@ -7,7 +7,7 @@ Two steps, in this order. Neither is optional.
 ```
 schema.sql                   -- the public site: events, tickets, members,
                              -- payments, community, credits, chapters
-migrations/0007 … 0059       -- everything since, in filename order
+migrations/0007 … 0060       -- everything since, in filename order
 ```
 
 `schema.sql` is the **base**, not the whole database. It is applied once to a
@@ -142,6 +142,29 @@ the page degrades to what it showed before:
 
 The events themselves are read straight from `events` under RLS, so the
 upcoming grid and the "Previously" list work either way.
+
+## Agenda dates — one-time setup
+`migrations/0060_an_agenda_row_knows_when_it_is.sql` adds `on_date`,
+`start_time` and `end_time` to `event_agenda`, plus an `agenda_span()`
+function. It makes a multi-day schedule readable to the application instead of
+being prose in `when_label` — which is how a four-week course came to have an
+agenda starting 24 Oct and an event date of 18 Oct, and got archived before it
+began.
+
+All three columns are nullable and nothing is backfilled, so existing rows are
+untouched. The content editor selects them and **retries without them** when
+they are absent, and hides the day and time boxes in that case — necessary
+rather than polite, because that editor replaces the agenda wholesale on save,
+so an editor that silently loaded nothing would delete a real agenda.
+
+| Missing | Behaviour |
+|---|---|
+| `on_date` / `start_time` / `end_time` | Agenda is label + description, exactly as before |
+| `agenda_span()` | Nothing calls it yet; it is there for the drift check |
+
+Once applied, a dated agenda becomes the event's span: saving the agenda sets
+the event's `date` and `end_date` from its first and last dated row, and
+`starts_at`/`ends_at` move with them.
 
 ## Email
 ```
