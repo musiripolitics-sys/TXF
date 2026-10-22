@@ -166,6 +166,30 @@ Once applied, a dated agenda becomes the event's span: saving the agenda sets
 the event's `date` and `end_date` from its first and last dated row, and
 `starts_at`/`ends_at` move with them.
 
+## Event covers — one-time setup
+`events.image_url` has existed since 0001 and no form ever wrote it, so every
+event fell back to its category gradient. Both consoles can now set a cover,
+which needs a bucket.
+
+**A PUBLIC bucket named `TXF`.** Covers go in it under an `event-covers/`
+prefix, so the bucket stays usable for other things. Public is the
+requirement: these render on the events listing and on each event's page, to
+people who are not signed in.
+
+⚠️ Community downloads must **not** share this bucket. They are a paid unlock
+served as 60-second signed URLs, and a public bucket makes that gate
+decoration. They need their own PRIVATE `community` bucket, which does not
+exist yet either — see "Community credits" above.
+
+Until the bucket exists, choosing a file reports exactly that and writes
+nothing. The upload runs with the service key and checks ownership itself —
+an admin, or that event's host — because storage has no row policies to lean
+on.
+
+`next.config.ts` allows the project's Supabase hostname for `next/image`,
+read from `NEXT_PUBLIC_SUPABASE_URL`. If that variable is missing at build
+time, covers do not render anywhere.
+
 ## Email
 ```
 npm run check:smtp                 # verify credentials, send nothing
