@@ -38,10 +38,18 @@ export function Hero() {
         <div className="grid items-center gap-8 lg:gap-12 lg:grid-cols-[1.05fr_1fr]">
           {/* ── Copy ── */}
           <div className="max-w-xl">
-            <span className="animate-float-up inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted backdrop-blur">
-              <span className="h-1.5 w-1.5 rounded-full bg-host" />
-              Built by the community · We Connect
-            </span>
+            <Link
+              href="/events/how-to-work-with-ai-7bqn"
+              className="animate-float-up group inline-flex items-center gap-2 rounded-full border border-brand/30 bg-surface/80 hover:bg-surface px-4 py-1.5 text-xs font-medium text-fg shadow-sm backdrop-blur transition-all"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
+              </span>
+              <span className="font-semibold text-brand">Featured Event:</span>
+              <span className="text-muted group-hover:text-fg transition-colors">How to Work with AI</span>
+              <span className="text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg">→</span>
+            </Link>
 
             <h1 className="animate-float-up mt-5 font-display text-4xl font-bold leading-[1.05] tracking-tight text-fg sm:text-5xl lg:text-6xl text-balance">
               India&rsquo;s tech community,{" "}

@@ -13,6 +13,18 @@ declare
   events_json jsonb := $json$
   [
     {
+      "slug":"how-to-work-with-ai-7bqn","title":"How to Work with AI","category":"Workshop",
+      "date":"2026-11-15","date_label":"Nov 15, 2026","time":"6:00 PM – 8:00 PM IST",
+      "city":"Online","venue":"Live Workshop","address":"Online — link emailed on registration",
+      "price_type":"Free","price_label":"Free","price_amount":0,"capacity":250,"spots_left":85,
+      "image_url":"/events/workshop.jpg",
+      "blurb":"Master modern AI workflows, prompt engineering, and autonomous agents in practice.",
+      "about":"A hands-on, practical session designed to take you from casual prompting to building workflows and systems with AI. We'll explore coding copilots, autonomous agents, prompt-driven development, and real-world engineering workflows. Bring your questions and current projects.",
+      "speakers":[
+        {"name":"Techxfluence Team","role":"AI & Community Leads","initials":"TX"}
+      ]
+    },
+    {
       "slug":"ai-meetup-chennai","title":"AI Meetup Chennai","category":"Meetup",
       "date":"2026-07-12","date_label":"Jul 12, 2026","time":"10:00 AM – 1:00 PM IST",
       "city":"Chennai","venue":"IIT Madras Research Park","address":"Kanagam Road, Taramani, Chennai 600113",
